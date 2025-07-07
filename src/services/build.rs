@@ -32,9 +32,9 @@ const UPDATE_SECS: u64 = 60 * 60;
 const REDIS_KEY: &str = "discord-bot:build-items";
 const MAX_BUILDS: usize = 5;
 
-type ItemEntry = (String, String); // (original, lowercase)
-static ITEMS: Lazy<RwLock<Vec<ItemEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
-static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+pub(crate) type ItemEntry = (String, String); // (original, lowercase)
+pub(crate) static ITEMS: Lazy<RwLock<Vec<ItemEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
+pub(crate) static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 #[derive(Deserialize)]
 struct Item {
@@ -45,13 +45,13 @@ struct Item {
 }
 
 #[derive(Deserialize)]
-struct BuildAuthor {
+pub(crate) struct BuildAuthor {
     username: String,
     url: String,
 }
 
 #[derive(Deserialize)]
-struct BuildData {
+pub(crate) struct BuildData {
     title: String,
     url: String,
     formas: u32,
@@ -292,5 +292,17 @@ impl BuildService {
                 Ok(vec![Self::build_error_embed(guild)?])
             }
         }
+    }
+
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub(crate) fn sanitize_item_name_test(s: &str) -> String {
+        Self::sanitize_item_name(s)
+    }
+
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub(crate) fn set_items(items: Vec<ItemEntry>) {
+        *ITEMS.write().expect("ITEMS lock poisoned") = items;
     }
 }
