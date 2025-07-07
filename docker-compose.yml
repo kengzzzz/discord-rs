@@ -1,0 +1,88 @@
+services:
+  discord-bot:
+    container_name: discord-bot
+    build:
+      context: .
+      dockerfile: Dockerfile.develop
+    volumes:
+      - ./:/usr/src/discord-bot
+      - bot-cargo-registry:/usr/local/cargo/registry
+      - bot-cargo-git:/usr/local/cargo/git
+      - bot-target:/usr/src/discord-bot/target
+    env_file:
+      - .env.develop
+    command: sh -c "cargo watch -x 'run'"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://discord-bot:8080/healthz" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - redis-cluster
+      - mongo-cluster
+    depends_on:
+      ready_checker:
+        condition: service_completed_successfully
+
+  ready_checker:
+    extends:
+      file: docker-compose.db.yml
+      service: ready_checker
+
+  mongo-keygen:
+    extends:
+      file: docker-compose.db.yml
+      service: mongo-keygen
+
+  mongo1:
+    networks:
+      - mongo-cluster
+    extends:
+      file: docker-compose.db.yml
+      service: mongo1
+
+  mongo2:
+    networks:
+      - mongo-cluster
+    extends:
+      file: docker-compose.db.yml
+      service: mongo2
+
+  mongo3:
+    networks:
+      - mongo-cluster
+    extends:
+      file: docker-compose.db.yml
+      service: mongo3
+
+  mongo-init:
+    networks:
+      - mongo-cluster
+    extends:
+      file: docker-compose.db.yml
+      service: mongo-init
+
+  redis:
+    networks:
+      - redis-cluster
+    extends:
+      file: docker-compose.db.yml
+      service: redis
+
+networks:
+  redis-cluster:
+    driver: bridge
+  mongo-cluster:
+    driver: bridge
+
+volumes:
+  bot-cargo-registry:
+  bot-cargo-git:
+  bot-target:
+  mongo1_db:
+  mongo2_db:
+  mongo3_db:
+  redis-data:
+  mongo-keyfile:

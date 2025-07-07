@@ -1,0 +1,29 @@
+FROM rust:alpine AS builder
+
+RUN apk add --no-cache \
+    pkgconf \
+    openssl-dev \
+    openssl-libs-static \
+    build-base \
+    musl-dev
+WORKDIR /usr/src/discord-bot
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main(){}" > src/main.rs \
+    && cargo build --release \
+    && rm -rf target/release/deps
+COPY src ./src
+RUN cargo build --release
+
+FROM alpine:latest AS runtime
+
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY --from=builder /usr/src/discord-bot/target/release/discord-bot .
+RUN addgroup -S app && adduser -S app -G app
+USER app
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s \
+    CMD wget -qO- http://discord-bot:8080/healthz || exit 1
+
+ENTRYPOINT ["./discord-bot"]

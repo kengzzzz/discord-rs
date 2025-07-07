@@ -1,0 +1,25 @@
+name: Rust CI - Test & Clippy
+
+on: [push, pull_request]
+
+jobs:
+  test-and-clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Rust toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: stable
+          components: clippy
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Run Clippy lints
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo clippy --all-targets --all-features -- -D warnings
