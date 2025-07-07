@@ -71,6 +71,11 @@ fn notify_umbra_loop(
 }
 
 impl NotificationService {
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub fn next_monday_duration_test() -> Duration {
+        next_monday_duration()
+    }
     async fn init_for_channel(ch: Channel) -> Vec<JoinHandle<()>> {
         let mut handles = Vec::new();
         let channel_id = Id::new(ch.channel_id);

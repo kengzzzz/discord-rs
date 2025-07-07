@@ -1,14 +1,34 @@
 use google_ai_rs::{Client, Content, Part};
+#[cfg(test)]
+use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::collections::HashMap;
 use tokio::sync::OnceCell;
+#[cfg(test)]
+use tokio::sync::RwLock;
 use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
-use crate::{
-    configs::{CACHE_PREFIX, google::GOOGLE_CONFIGS},
-    dbs::redis::{redis_delete, redis_get, redis_set},
-};
+#[cfg(not(test))]
+use crate::configs::CACHE_PREFIX;
+use crate::configs::google::GOOGLE_CONFIGS;
+#[cfg(not(test))]
+use crate::dbs::redis::{redis_delete, redis_get, redis_set};
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
+#[cfg(test)]
+static HISTORY_STORE: Lazy<RwLock<HashMap<u64, Vec<ChatEntry>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+#[cfg(test)]
+static PROMPT_STORE: Lazy<RwLock<HashMap<u64, String>>> = Lazy::new(|| RwLock::new(HashMap::new()));
+#[cfg(test)]
+static GENERATE_OVERRIDE: SyncOnceCell<
+    Box<dyn Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync>,
+> = SyncOnceCell::new();
+#[cfg(test)]
+#[allow(clippy::type_complexity)]
+static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Send + Sync>> =
+    SyncOnceCell::new();
 
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
@@ -32,11 +52,33 @@ const SUMMARY_MODELS: &[&str] = &[
 ];
 
 #[derive(Serialize, Deserialize, Clone)]
-struct ChatEntry {
+pub(crate) struct ChatEntry {
     role: String,
     text: String,
     #[serde(default)]
     attachments: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn new_entry(role: &str, text: &str) -> ChatEntry {
+    ChatEntry {
+        role: role.to_string(),
+        text: text.to_string(),
+        attachments: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn entry_role(e: &ChatEntry) -> &str {
+    &e.role
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn entry_text(e: &ChatEntry) -> &str {
+    &e.text
 }
 
 fn extract_text(response: google_ai_rs::genai::Response) -> String {
@@ -53,6 +95,11 @@ fn extract_text(response: google_ai_rs::genai::Response) -> String {
 }
 
 async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
+    #[cfg(test)]
+    if let Some(f) = SUMMARIZE_OVERRIDE.get() {
+        return Ok(f(history));
+    }
+
     let client = AiService::client().await?;
     let contents: Vec<Content> = history
         .iter()
@@ -86,37 +133,82 @@ impl AiService {
             .await
     }
 
+    #[cfg(not(test))]
     async fn history_key(user: Id<UserMarker>) -> String {
         format!("{CACHE_PREFIX}:ai:history:{}", user.get())
     }
 
+    #[cfg(not(test))]
     async fn prompt_key(user: Id<UserMarker>) -> String {
         format!("{CACHE_PREFIX}:ai:prompt:{}", user.get())
     }
 
     async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
-        let key = Self::history_key(user).await;
-        redis_get::<Vec<ChatEntry>>(&key).await.unwrap_or_default()
+        #[cfg(test)]
+        {
+            return HISTORY_STORE
+                .read()
+                .await
+                .get(&user.get())
+                .cloned()
+                .unwrap_or_default();
+        }
+        #[cfg(not(test))]
+        {
+            let key = Self::history_key(user).await;
+            redis_get::<Vec<ChatEntry>>(&key).await.unwrap_or_default()
+        }
     }
 
-    async fn store_history(user: Id<UserMarker>, hist: &Vec<ChatEntry>) {
-        let key = Self::history_key(user).await;
-        redis_set(&key, hist).await;
+    async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
+        #[cfg(test)]
+        {
+            HISTORY_STORE
+                .write()
+                .await
+                .insert(user.get(), hist.to_vec());
+        }
+        #[cfg(not(test))]
+        {
+            let key = Self::history_key(user).await;
+            redis_set(&key, &hist.to_vec()).await;
+        }
     }
 
     async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
-        let key = Self::prompt_key(user).await;
-        redis_get::<String>(&key).await
+        #[cfg(test)]
+        {
+            return PROMPT_STORE.read().await.get(&user.get()).cloned();
+        }
+        #[cfg(not(test))]
+        {
+            let key = Self::prompt_key(user).await;
+            redis_get::<String>(&key).await
+        }
     }
 
     pub async fn clear_history(user: Id<UserMarker>) {
-        let key = Self::history_key(user).await;
-        redis_delete(&key).await;
+        #[cfg(test)]
+        {
+            HISTORY_STORE.write().await.remove(&user.get());
+        }
+        #[cfg(not(test))]
+        {
+            let key = Self::history_key(user).await;
+            redis_delete(&key).await;
+        }
     }
 
     pub async fn set_prompt(user: Id<UserMarker>, prompt: String) {
-        let key = Self::prompt_key(user).await;
-        redis_set(&key, &prompt).await;
+        #[cfg(test)]
+        {
+            PROMPT_STORE.write().await.insert(user.get(), prompt);
+        }
+        #[cfg(not(test))]
+        {
+            let key = Self::prompt_key(user).await;
+            redis_set(&key, &prompt).await;
+        }
     }
 
     pub async fn handle_interaction(
@@ -125,8 +217,6 @@ impl AiService {
         message: &str,
         attachment: Option<Attachment>,
     ) -> anyhow::Result<String> {
-        let client = Self::client().await?;
-
         let mut history = Self::load_history(user_id).await;
 
         if history.len() > MAX_HISTORY {
@@ -184,17 +274,30 @@ impl AiService {
 
         contents.push(Content::from(parts));
 
-        let mut response = None;
-        for name in MODELS {
-            let m = client
-                .generative_model(name)
-                .with_system_instruction(system.clone());
-            match m.generate_content(contents.clone()).await {
-                Ok(r) => {
-                    response = Some(r);
-                    break;
+        let mut response = {
+            #[cfg(test)]
+            {
+                GENERATE_OVERRIDE.get().map(|f| f(contents.clone()))
+            }
+            #[cfg(not(test))]
+            {
+                None
+            }
+        };
+
+        if response.is_none() {
+            let client = Self::client().await?;
+            for name in MODELS {
+                let m = client
+                    .generative_model(name)
+                    .with_system_instruction(system.clone());
+                match m.generate_content(contents.clone()).await {
+                    Ok(r) => {
+                        response = Some(r);
+                        break;
+                    }
+                    Err(e) => tracing::warn!(model = %name, error = %e, "model failed"),
                 }
-                Err(e) => tracing::warn!(model = %name, error = %e, "model failed"),
             }
         }
         let response = response.ok_or_else(|| anyhow::anyhow!("all models failed"))?;
@@ -216,4 +319,45 @@ impl AiService {
 
         Ok(text)
     }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn set_generate_override<F>(f: F)
+where
+    F: Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync + 'static,
+{
+    let _ = GENERATE_OVERRIDE.set(Box::new(f));
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn set_summarize_override<F>(f: F)
+where
+    F: Fn(&[ChatEntry]) -> String + Send + Sync + 'static,
+{
+    let _ = SUMMARIZE_OVERRIDE.set(Box::new(f));
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn load_history_test(user: Id<UserMarker>) -> Vec<ChatEntry> {
+    HISTORY_STORE
+        .read()
+        .await
+        .get(&user.get())
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn set_history_test(user: Id<UserMarker>, hist: Vec<ChatEntry>) {
+    HISTORY_STORE.write().await.insert(user.get(), hist);
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn get_prompt_test(user: Id<UserMarker>) -> Option<String> {
+    PROMPT_STORE.read().await.get(&user.get()).cloned()
 }

@@ -1,4 +1,6 @@
 use chrono::Utc;
+#[cfg(test)]
+use once_cell::sync::OnceCell;
 use reqwest::Client;
 use serde::Deserialize;
 use twilight_cache_inmemory::Reference;
@@ -12,6 +14,9 @@ use crate::utils::embed::footer_with_icon;
 use crate::configs::Reaction;
 
 const BASE_URL: &str = "https://api.warframestat.us/pc";
+
+#[cfg(test)]
+static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 const COLOR: u32 = 0xF1C40F;
 const URL: &str = "https://github.com/kengzzzz/discord-bot";
 
@@ -44,7 +49,21 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
     client: &Client,
     path: &str,
 ) -> anyhow::Result<T> {
-    let url = format!("{BASE_URL}/{path}");
+    let base = {
+        #[cfg(test)]
+        {
+            if let Some(url) = BASE_URL_OVERRIDE.get() {
+                url.as_str()
+            } else {
+                BASE_URL
+            }
+        }
+        #[cfg(not(test))]
+        {
+            BASE_URL
+        }
+    };
+    let url = format!("{base}/{path}");
     Ok(client.get(url).send().await?.json::<T>().await?)
 }
 
@@ -186,4 +205,28 @@ pub async fn status_embed(
 
     let embed = builder.footer(footer).build();
     Ok((embed, is_umbra))
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn set_base_url(url: &str) {
+    let _ = BASE_URL_OVERRIDE.set(url.to_string());
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn title_case_test(s: &str) -> String {
+    title_case(s)
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn format_time_test(s: &str) -> String {
+    format_time(s)
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn steel_path_field_test(client: &Client) -> anyhow::Result<(EmbedField, bool)> {
+    steel_path_field(client).await
 }
