@@ -85,10 +85,10 @@ impl AdminRoleCommand {
             }
         };
 
-        if let Some(guild_ref) = CACHE.guild(guild_id) {
+        if let (Some(guild_ref), Some(role_ref)) = (CACHE.guild(guild_id), CACHE.role(role_id)) {
             let embed = embed::set_role_embed(
                 &guild_ref,
-                &self.role_name,
+                &role_ref.resource().name,
                 role_id.get(),
                 self.role_type.value(),
                 &author.name,
