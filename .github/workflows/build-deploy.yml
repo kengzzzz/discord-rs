@@ -89,6 +89,9 @@ jobs:
           cache-to:   type=gha,mode=max
       - name: Recreate container
         run: |
+          scp -i ${{ secrets.SSH_KEY }} \
+          ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.ENV_PATH }} \
+          .env
           docker stop discord-bot || true
           docker rm   discord-bot || true
           docker run -d \
