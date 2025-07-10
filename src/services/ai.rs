@@ -1,9 +1,13 @@
+use anyhow::Context;
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use google_ai_rs::{Client, Content, Part};
 #[cfg(test)]
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
+use reqwest::{Body, header::CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::HashMap;
+use std::str::FromStr;
 use tokio::sync::OnceCell;
 #[cfg(test)]
 use tokio::sync::RwLock;
@@ -11,9 +15,9 @@ use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
 #[cfg(not(test))]
 use crate::configs::CACHE_PREFIX;
-use crate::configs::google::GOOGLE_CONFIGS;
 #[cfg(not(test))]
 use crate::dbs::redis::{redis_delete, redis_get, redis_set};
+use crate::{configs::google::GOOGLE_CONFIGS, services::http::HttpService};
 
 static CLIENT: OnceCell<Client> = OnceCell::const_new();
 #[cfg(test)]
@@ -32,6 +36,8 @@ static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Sen
 
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
+
+const INLINE_LIMIT: u64 = 20 * 1024 * 1024;
 
 const MODELS: &[&str] = &[
     "gemini-2.5-flash",
@@ -183,7 +189,23 @@ impl AiService {
         #[cfg(not(test))]
         {
             let key = Self::prompt_key(user).await;
-            redis_get::<String>(&key).await
+            if let Some(prompt) = redis_get::<String>(&key).await {
+                return Some(prompt);
+            }
+
+            use crate::dbs::mongo::mongodb::MongoDB;
+            use mongodb::bson::doc;
+
+            if let Ok(Some(record)) = MongoDB::get()
+                .ai_prompts
+                .find_one(doc! {"user_id": user.get() as i64})
+                .await
+            {
+                redis_set(&key, &record.prompt).await;
+                return Some(record.prompt);
+            }
+
+            None
         }
     }
 
@@ -206,8 +228,34 @@ impl AiService {
         }
         #[cfg(not(test))]
         {
-            let key = Self::prompt_key(user).await;
-            redis_set(&key, &prompt).await;
+            use crate::dbs::mongo::{ai_prompt::AiPrompt, mongodb::MongoDB};
+            use mongodb::bson::{doc, to_bson};
+
+            if let Ok(bson) = to_bson(&AiPrompt {
+                id: None,
+                user_id: user.get(),
+                prompt: prompt.clone(),
+            }) {
+                let _ = MongoDB::get()
+                    .ai_prompts
+                    .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
+                    .upsert(true)
+                    .await;
+            }
+        }
+    }
+
+    pub async fn purge_prompt_cache(user_id: u64) {
+        #[cfg(test)]
+        {
+            PROMPT_STORE.write().await.remove(&user_id);
+        }
+        #[cfg(not(test))]
+        {
+            use crate::configs::CACHE_PREFIX;
+            use crate::dbs::redis::redis_delete;
+            let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
+            redis_delete(&key).await;
         }
     }
 
@@ -222,7 +270,7 @@ impl AiService {
         if history.len() > MAX_HISTORY {
             if let Ok(summary) = summarize(&history).await {
                 let start = history.len().saturating_sub(KEEP_RECENT);
-                let mut new_history = Vec::with_capacity(KEEP_RECENT + 1);
+                let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
                 new_history.push(ChatEntry {
                     role: "system".to_string(),
                     text: format!("Summary so far: {summary}"),
@@ -259,15 +307,36 @@ impl AiService {
         let mut parts = vec![Part::text(message)];
         let mut attachment_urls = Vec::new();
         if let Some(a) = attachment {
-            if let Some(ct) = a.content_type.as_deref() {
-                if a.size > 20 * 1024 * 1024 {
-                    parts.push(Part::file_data(ct, &a.url));
-                    attachment_urls.push(a.url.clone());
-                } else if let Ok(resp) = reqwest::get(&a.url).await {
-                    if let Ok(bytes) = resp.bytes().await {
-                        parts.push(Part::blob(ct, bytes.to_vec()));
-                        attachment_urls.push(a.url.clone());
+            if let (Some(ct), Ok(resp)) =
+                (a.content_type.as_deref(), HttpService::get(&a.url).await)
+            {
+                if a.size > INLINE_LIMIT {
+                    let stream = Body::wrap_stream(resp.bytes_stream());
+                    let upload_url = reqwest::Url::parse_with_params(
+                        "https://generativelanguage.googleapis.com/upload/v1beta/files",
+                        &[("uploadType", "media")],
+                    )?;
+                    let mut headers = HeaderMap::new();
+                    headers.append(
+                        HeaderName::from_str("X-Goog-Api-Key")?,
+                        HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
+                    );
+                    if let Some(content_type) = &a.content_type {
+                        headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
                     }
+                    let resp = HttpService::post(upload_url)
+                        .headers(headers)
+                        .body(stream)
+                        .send()
+                        .await?
+                        .error_for_status()?;
+                    let json: serde_json::Value = resp.json().await?;
+                    let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
+                    parts.push(Part::file_data(ct, uri));
+                    attachment_urls.push(uri.to_string());
+                } else if let Ok(bytes) = resp.bytes().await {
+                    parts.push(Part::blob(ct, bytes.to_vec()));
+                    attachment_urls.push(a.url.clone());
                 }
             }
         }
@@ -347,7 +416,7 @@ pub(crate) async fn load_history_test(user: Id<UserMarker>) -> Vec<ChatEntry> {
         .await
         .get(&user.get())
         .cloned()
-        .unwrap_or_default()
+        .unwrap_or(Vec::with_capacity(MAX_HISTORY + 1))
 }
 
 #[cfg(test)]

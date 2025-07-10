@@ -1,5 +1,3 @@
-use std::mem;
-
 use anyhow::Context;
 use mongodb::bson::doc;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
@@ -54,8 +52,6 @@ impl AdminRoleCommand {
         let role_id: Id<RoleMarker> = self.role_name.parse()?;
         let self_assignable = self.self_assignable.unwrap_or_default();
 
-        let mut interaction = interaction;
-        let channel = mem::take(&mut interaction.channel).context("no channel on interaction")?;
         let author = interaction.author().context("failed to parse author")?;
 
         let db = MongoDB::get();
@@ -89,13 +85,11 @@ impl AdminRoleCommand {
             }
         };
 
-        let channel_name = channel.name.context("failed to parse channel name")?;
-
         if let Some(guild_ref) = CACHE.guild(guild_id) {
             let embed = embed::set_role_embed(
                 &guild_ref,
-                &channel_name,
-                channel.id.get(),
+                &self.role_name,
+                role_id.get(),
                 self.role_type.value(),
                 &author.name,
             )?;

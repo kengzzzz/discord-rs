@@ -8,7 +8,6 @@ use std::{
 };
 
 use once_cell::sync::Lazy;
-use reqwest::Client;
 use serde::Deserialize;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
@@ -19,6 +18,7 @@ use twilight_util::builder::embed::EmbedBuilder;
 
 use crate::{
     dbs::redis::{redis_get, redis_set},
+    services::http::HttpService,
     utils::embed::footer_with_icon,
 };
 
@@ -104,8 +104,7 @@ async fn load_from_redis() -> Option<Vec<ItemEntry>> {
 }
 
 async fn update_items() -> anyhow::Result<()> {
-    let client = Client::new();
-    let resp = client.get(ITEMS_URL).send().await?.error_for_status()?;
+    let resp = HttpService::get(ITEMS_URL).await?;
     let fetched: Vec<Item> = resp.json().await?;
     let mut set = HashSet::new();
     let mut names = Vec::new();
@@ -197,14 +196,13 @@ impl BuildService {
     }
 
     async fn fetch_builds(item: &str) -> anyhow::Result<Vec<BuildData>> {
-        let client = Client::new();
         let mut url =
             format!("{API_URL}?item_name={item}&author_id=10027&limit={MAX_BUILDS}&sort_by=Score");
-        let resp = client.get(&url).send().await?.error_for_status()?;
+        let resp = HttpService::get(&url).await?;
         let mut data: BuildList = resp.json().await?;
         if data.results.is_empty() {
             url = format!("{API_URL}?item_name={item}&limit={MAX_BUILDS}&sort_by=Score");
-            let resp = client.get(&url).send().await?.error_for_status()?;
+            let resp = HttpService::get(&url).await?;
             data = resp.json().await?;
         }
         Ok(data.results)

@@ -10,18 +10,10 @@ services:
       - bot-cargo-git:/usr/local/cargo/git
       - bot-target:/usr/src/discord-bot/target
     env_file:
-      - .env.develop
+      - .env
     command: sh -c "cargo watch -x 'run'"
     ports:
       - "8080:8080"
-    healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://discord-bot:8080/healthz" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - redis-cluster
-      - mongo-cluster
     depends_on:
       ready_checker:
         condition: service_completed_successfully
@@ -37,45 +29,34 @@ services:
       service: mongo-keygen
 
   mongo1:
-    networks:
-      - mongo-cluster
     extends:
       file: docker-compose.db.yml
       service: mongo1
 
   mongo2:
-    networks:
-      - mongo-cluster
     extends:
       file: docker-compose.db.yml
       service: mongo2
 
   mongo3:
-    networks:
-      - mongo-cluster
     extends:
       file: docker-compose.db.yml
       service: mongo3
 
   mongo-init:
-    networks:
-      - mongo-cluster
     extends:
       file: docker-compose.db.yml
       service: mongo-init
 
   redis:
-    networks:
-      - redis-cluster
     extends:
       file: docker-compose.db.yml
       service: redis
 
 networks:
-  redis-cluster:
-    driver: bridge
-  mongo-cluster:
-    driver: bridge
+  default:
+    name: discord-bot-network
+    external: true
 
 volumes:
   bot-cargo-registry:

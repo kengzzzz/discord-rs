@@ -17,9 +17,6 @@ RUN cargo build --release && rm -rf target/release/deps
 
 COPY src ./src
 RUN cargo build --release
-
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s \
-    CMD wget -qO- http://discord-bot:8080/healthz || exit 1
 
 ENTRYPOINT ["sh", "-c", "cargo watch -x run"]

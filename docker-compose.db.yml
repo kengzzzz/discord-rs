@@ -41,8 +41,6 @@ services:
     volumes:
       - mongo1_db:/data/db
       - mongo-keyfile:/auth:ro
-    networks:
-      - mongo-cluster
     environment:
       - MONGO_INITDB_ROOT_USERNAME=homestead
       - MONGO_INITDB_ROOT_PASSWORD=secret
@@ -72,8 +70,6 @@ services:
     volumes:
       - mongo2_db:/data/db
       - mongo-keyfile:/auth:ro
-    networks:
-      - mongo-cluster
     environment:
       - MONGO_INITDB_ROOT_USERNAME=homestead
       - MONGO_INITDB_ROOT_PASSWORD=secret
@@ -103,8 +99,6 @@ services:
     volumes:
       - mongo3_db:/data/db
       - mongo-keyfile:/auth:ro
-    networks:
-      - mongo-cluster
     environment:
       - MONGO_INITDB_ROOT_USERNAME=homestead
       - MONGO_INITDB_ROOT_PASSWORD=secret
@@ -132,8 +126,6 @@ services:
     volumes:
       - ./scripts/rs-init.js:/scripts/rs-init.js:ro
       - mongo-keyfile:/auth:ro
-    networks:
-      - mongo-cluster
 
   redis:
     image: redis:alpine
@@ -149,14 +141,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - redis-cluster
 
 networks:
-  redis-cluster:
-    driver: bridge
-  mongo-cluster:
-    driver: bridge
+  default:
+    name: discord-bot-network
+    external: true
 
 volumes:
   mongo1_db:

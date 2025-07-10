@@ -1,0 +1,100 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare
+        uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked --all-features -- --nocapture
+
+      - name: Audit dependencies
+        uses: actions-rust-lang/audit@v1
+        with:
+          ignore: RUSTSEC-2023-0071
+
+  approval:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      status: ${{ steps.approve.outputs.approval-status }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: trstringer/manual-approval@v1
+        id: approve
+        with:
+          secret: ${{ github.token }}
+          approvers: ${{ github.repository_owner }}
+          minimum-approvals: 1
+          additional-approved-words: approved,lgtm
+      - name: Assign issue to repo owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue edit ${{ steps.approve.outputs.issue-number }} --add-assignee ${{ github.repository_owner }}
+
+  build:
+    needs: approval
+    if: needs.approval.outputs.status == 'approved'
+    runs-on: [self-hosted, linux, ARM64]
+    concurrency:
+      group: discord-bot-deploy
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Connect to VPN
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TAILNET_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILNET_SECRET }}
+          tags: tag:ci
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          builder: bot-builder
+          driver: docker-container
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.production
+          platforms: linux/arm64
+          tags: |
+            discord-bot:latest
+            discord-bot:${{ github.sha }}
+          load: true
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+      - name: Recreate container
+        run: |
+          docker stop discord-bot || true
+          docker rm   discord-bot || true
+          docker run -d \
+            --restart unless-stopped \
+            --env-file .env \
+            --name discord-bot \
+            --network discord-bot-network \
+            -p 8080:8080 \
+            discord-bot:latest
