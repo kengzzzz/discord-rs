@@ -53,9 +53,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh issue edit ${{ steps.approve.outputs.issue-number }} --add-assignee ${{ github.repository_owner }}
 
-  build:
+  build-deploy:
     needs: approval
     if: needs.approval.outputs.status == 'approved'
+    environment: production
     runs-on: [self-hosted, linux, ARM64]
     concurrency:
       group: discord-bot-deploy
@@ -72,9 +73,6 @@ jobs:
           tags: tag:ci
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          builder: bot-builder
-          driver: docker-container
       - name: Build image
         uses: docker/build-push-action@v6
         with:
