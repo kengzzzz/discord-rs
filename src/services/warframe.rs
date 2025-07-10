@@ -18,7 +18,7 @@ const BASE_URL: &str = "https://api.warframestat.us/pc";
 #[cfg(test)]
 static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 const COLOR: u32 = 0xF1C40F;
-const URL: &str = "https://github.com/kengzzzz/discord-bot";
+const URL: &str = "https://github.com/kengzzzz/discord-rs";
 
 #[derive(Deserialize)]
 struct NewsItem {
