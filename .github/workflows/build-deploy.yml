@@ -85,16 +85,29 @@ jobs:
           load: true
           cache-from: type=gha
           cache-to:   type=gha,mode=max
-      - name: Recreate container
+
+      - name: Prepare key
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
+          set +x
           echo "::add-mask::$SSH_KEY"
-          { set +x; } 2>/dev/null
-          echo ${{ secrets.SSH_KEY }} > id_rsa
+          echo "$SSH_KEY" > id_rsa  
           chmod 600 id_rsa
+
+      - name: Use scp
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          ENV_PATH:   ${{ secrets.ENV_PATH }}
+        run: |
+          set -x
           scp -i id_rsa  \
-          ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.ENV_PATH }} \
-          .env
+            "$DEPLOY_USER@$DEPLOY_HOST:$ENV_PATH" .env
           shred -u id_rsa || rm -f id_rsa
+
+      - name: Recreate container
+        run: |          
           docker stop discord-bot || true
           docker rm   discord-bot || true
           docker run -d \
@@ -104,4 +117,3 @@ jobs:
             --network discord-bot-network \
             -p 8080:8080 \
             discord-bot:latest
-          { set -x; } 2>/dev/null
