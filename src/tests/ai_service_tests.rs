@@ -40,7 +40,7 @@ async fn test_prompt_and_history() {
     AiService::clear_history(user).await;
     AiService::set_prompt(user, "hi".to_string()).await;
 
-    let text = AiService::handle_interaction(user, "Tester", "hello", None)
+    let text = AiService::handle_interaction(user, "Tester", "hello", Vec::new())
         .await
         .unwrap();
     assert_eq!(text, "ok");
@@ -64,7 +64,7 @@ async fn test_summary_rotation() {
         .collect();
     ai::set_history_test(user, history).await;
 
-    let _ = AiService::handle_interaction(user, "Tester", "msg", None).await;
+    let _ = AiService::handle_interaction(user, "Tester", "msg", Vec::new()).await;
     let hist = ai::load_history_test(user).await;
     assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
     assert_eq!(ai::entry_role(&hist[0]), "system");
