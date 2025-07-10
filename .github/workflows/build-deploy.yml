@@ -86,13 +86,20 @@ jobs:
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
+      - name: Populate known_hosts
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
       - name: Prepare key
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           set +x
           echo "::add-mask::$SSH_KEY"
-          echo "$SSH_KEY" > id_rsa  
+          echo "$SSH_KEY" | base64 --decode > id_rsa  
           chmod 600 id_rsa
 
       - name: Use scp
