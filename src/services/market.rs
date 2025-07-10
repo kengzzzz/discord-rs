@@ -8,7 +8,6 @@ use std::{
 };
 
 use once_cell::sync::Lazy;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
@@ -29,6 +28,7 @@ use twilight_util::builder::{
 use crate::{
     configs::discord::{CACHE, HTTP},
     dbs::redis::{redis_get, redis_set},
+    services::http::HttpService,
     utils::embed::footer_with_icon,
 };
 
@@ -142,8 +142,7 @@ async fn load_from_redis() -> Option<Vec<ItemEntry>> {
 }
 
 async fn update_items() -> anyhow::Result<()> {
-    let client = Client::new();
-    let resp = client.get(ITEMS_URL).send().await?.error_for_status()?;
+    let resp = HttpService::get(ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
     let mut stored = Vec::new();
     let mut items = Vec::new();
@@ -243,12 +242,8 @@ impl MarketService {
     }
 
     async fn fetch_orders(url: &str) -> anyhow::Result<Vec<Order>> {
-        let client = Client::new();
-        let resp = client
-            .get(format!("https://api.warframe.market/v1/items/{url}/orders"))
-            .send()
-            .await?
-            .error_for_status()?;
+        let resp =
+            HttpService::get(format!("https://api.warframe.market/v1/items/{url}/orders")).await?;
         let data: OrdersResponse = resp.json().await?;
         Ok(data.payload.orders)
     }

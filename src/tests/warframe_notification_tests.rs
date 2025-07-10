@@ -1,6 +1,5 @@
 use httpmock::Method::GET;
 use httpmock::MockServer;
-use reqwest::Client;
 use serde_json::json;
 
 use crate::services::{notification::NotificationService, warframe};
@@ -30,8 +29,7 @@ async fn test_steel_path_umbra() {
         })
         .await;
 
-    let client = Client::new();
-    let (field, is_umbra) = warframe::steel_path_field_test(&client).await.unwrap();
+    let (field, is_umbra) = warframe::steel_path_field_test().await.unwrap();
     assert!(is_umbra);
     assert_eq!(
         field.name,

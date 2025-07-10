@@ -1,4 +1,4 @@
-use mongodb::bson::doc;
+use mongodb::bson::{doc, to_bson};
 use std::slice;
 
 use twilight_http::request::channel::reaction::RequestReactionType;
@@ -11,7 +11,10 @@ use crate::{
     },
     dbs::{
         mongo::{
-            channel::ChannelEnum, mongodb::MongoDB, role::RoleEnum, role_message::RoleMessage,
+            channel::ChannelEnum,
+            message::{Message, MessageEnum},
+            mongodb::MongoDB,
+            role::RoleEnum,
         },
         redis::{redis_delete, redis_get, redis_set},
     },
@@ -22,7 +25,7 @@ use crate::{
 pub struct RoleMessageService;
 
 impl RoleMessageService {
-    pub async fn get(guild_id: u64) -> Option<RoleMessage> {
+    pub async fn get(guild_id: u64) -> Option<Message> {
         let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
 
         if let Some(msg) = redis_get(&redis_key).await {
@@ -30,8 +33,10 @@ impl RoleMessageService {
         }
 
         if let Ok(Some(msg)) = MongoDB::get()
-            .role_messages
-            .find_one(doc! {"guild_id": guild_id as i64})
+            .messages
+            .find_one(
+                doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
+            )
             .await
         {
             redis_set(&redis_key, &msg).await;
@@ -43,10 +48,10 @@ impl RoleMessageService {
 
     pub async fn set(guild_id: u64, channel_id: u64, message_id: u64) {
         let _ = MongoDB::get()
-            .role_messages
+            .messages
             .update_one(
-                doc! {"guild_id": guild_id as i64},
-                doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64}},
+                doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
+                doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()}},
             ).upsert(true)
             .await;
     }

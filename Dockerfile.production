@@ -1,29 +1,46 @@
-FROM rust:alpine AS builder
+# syntax=docker/dockerfile:1.4
+FROM alpine:edge AS muslssl
+RUN apk add --no-cache openssl-dev openssl-libs-static
 
-RUN apk add --no-cache \
-    pkgconf \
-    openssl-dev \
-    openssl-libs-static \
-    build-base \
-    musl-dev
-WORKDIR /usr/src/discord-bot
+FROM lukemathwalker/cargo-chef:latest-rust-slim-trixie AS base
+WORKDIR /app
+
+FROM base AS planner
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs \
-    && cargo build --release \
-    && rm -rf target/release/deps
+RUN mkdir src && echo "fn main() { println!(\"hello\"); }" > src/main.rs
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM base AS deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    musl musl-dev musl-tools pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+RUN rustup target add aarch64-unknown-linux-musl
+
+COPY --from=muslssl /usr /opt/musl/usr
+
+ENV PKG_CONFIG_ALLOW_CROSS=1 \
+    PKG_CONFIG_SYSROOT_DIR=/opt/musl \
+    PKG_CONFIG_LIBDIR=/opt/musl/usr/lib/pkgconfig \
+    OPENSSL_STATIC=1 
+
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/tmp/target \
+    cargo chef cook --release \
+      --target aarch64-unknown-linux-musl \
+      --recipe-path recipe.json
+
+FROM deps AS builder
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/tmp/target \
+    cargo build --release --target aarch64-unknown-linux-musl
 
 FROM alpine:latest AS runtime
-
-RUN apk add --no-cache ca-certificates
 WORKDIR /app
-COPY --from=builder /usr/src/discord-bot/target/release/discord-bot .
-RUN addgroup -S app && adduser -S app -G app
-USER app
-
+COPY --from=builder /app/target/aarch64-unknown-linux-musl/release/discord-bot /app/discord-bot
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s \
-    CMD wget -qO- http://discord-bot:8080/healthz || exit 1
-
 ENTRYPOINT ["./discord-bot"]

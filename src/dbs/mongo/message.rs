@@ -1,12 +1,20 @@
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageEnum {
+    Role,
+    Status,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RoleMessage {
+pub struct Message {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
 
     pub guild_id: u64,
     pub channel_id: u64,
     pub message_id: u64,
+    pub message_type: MessageEnum,
 }

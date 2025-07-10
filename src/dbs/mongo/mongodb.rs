@@ -14,11 +14,15 @@ use tokio::time::{self, Duration};
 use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
     dbs::mongo::{
-        channel::Channel, quarantine::Quarantine, role::Role, role_message::RoleMessage,
-        status_message::StatusMessage, watcher::spawn_watcher,
+        ai_prompt::AiPrompt,
+        channel::Channel,
+        message::{Message, MessageEnum},
+        quarantine::Quarantine,
+        role::Role,
+        watcher::spawn_watcher,
     },
     services::{
-        channel::ChannelService, health::HealthService, role::RoleService,
+        ai::AiService, channel::ChannelService, health::HealthService, role::RoleService,
         role_message::RoleMessageService, spam::SpamService, status_message::StatusMessageService,
     },
 };
@@ -28,8 +32,8 @@ pub struct MongoDB {
     pub channels: Collection<Channel>,
     pub roles: Collection<Role>,
     pub quarantines: Collection<Quarantine>,
-    pub role_messages: Collection<RoleMessage>,
-    pub status_messages: Collection<StatusMessage>,
+    pub messages: Collection<Message>,
+    pub ai_prompts: Collection<AiPrompt>,
 }
 
 static MONGO_DB: OnceCell<Arc<MongoDB>> = OnceCell::const_new();
@@ -66,8 +70,8 @@ impl MongoDB {
         let _ = database.create_collection("channels").await;
         let _ = database.create_collection("roles").await;
         let _ = database.create_collection("quarantines").await;
-        let _ = database.create_collection("role_messages").await;
-        let _ = database.create_collection("status_messages").await;
+        let _ = database.create_collection("messages").await;
+        let _ = database.create_collection("ai_prompts").await;
 
         if !APP_CONFIG.is_atlas() {
             let _ = database
@@ -90,13 +94,13 @@ impl MongoDB {
                 .await;
             let _ = database
                 .run_command(doc! {
-                    "collMod": "role_messages",
+                    "collMod": "messages",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
                 .await;
             let _ = database
                 .run_command(doc! {
-                    "collMod": "status_messages",
+                    "collMod": "ai_prompts",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
                 .await;
@@ -105,8 +109,8 @@ impl MongoDB {
         let channels = database.collection::<Channel>("channels");
         let roles = database.collection::<Role>("roles");
         let quarantines = database.collection::<Quarantine>("quarantines");
-        let role_messages = database.collection::<RoleMessage>("role_messages");
-        let status_messages = database.collection::<StatusMessage>("status_messages");
+        let messages = database.collection::<Message>("messages");
+        let ai_prompts = database.collection::<AiPrompt>("ai_prompts");
 
         let idx1 = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "channel_type": 1 })
@@ -132,24 +136,24 @@ impl MongoDB {
         let _ = quarantines.create_index(idx).await;
 
         let idx = IndexModel::builder()
-            .keys(doc! { "guild_id": 1 })
+            .keys(doc! { "guild_id": 1, "message_type": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = role_messages.create_index(idx).await;
+        let _ = messages.create_index(idx).await;
 
         let idx = IndexModel::builder()
-            .keys(doc! { "guild_id": 1 })
+            .keys(doc! { "user_id": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = status_messages.create_index(idx).await;
+        let _ = ai_prompts.create_index(idx).await;
 
         let repo = Arc::new(Self {
             client,
             channels,
             roles,
             quarantines,
-            role_messages,
-            status_messages,
+            messages,
+            ai_prompts,
         });
 
         let options = ChangeStreamOptions::builder()
@@ -215,32 +219,35 @@ impl MongoDB {
             },
         )
         .await?;
-        spawn_watcher(
-            repo.role_messages.clone(),
-            options.clone(),
-            |evt| async move {
-                match evt.operation_type {
-                    OperationType::Insert
-                    | OperationType::Update
-                    | OperationType::Replace
-                    | OperationType::Delete => {
-                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                            RoleMessageService::purge_cache(doc.guild_id).await;
-                        }
-                    }
-                    _ => {}
-                }
-            },
-        )
-        .await?;
-        spawn_watcher(repo.status_messages.clone(), options, |evt| async move {
+        spawn_watcher(repo.messages.clone(), options.clone(), |evt| async move {
             match evt.operation_type {
                 OperationType::Insert
                 | OperationType::Update
                 | OperationType::Replace
                 | OperationType::Delete => {
                     if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                        StatusMessageService::purge_cache(doc.guild_id).await;
+                        match doc.message_type {
+                            MessageEnum::Role => {
+                                RoleMessageService::purge_cache(doc.guild_id).await
+                            }
+                            MessageEnum::Status => {
+                                StatusMessageService::purge_cache(doc.guild_id).await
+                            }
+                        };
+                    }
+                }
+                _ => {}
+            }
+        })
+        .await?;
+        spawn_watcher(repo.ai_prompts.clone(), options, |evt| async move {
+            match evt.operation_type {
+                OperationType::Insert
+                | OperationType::Update
+                | OperationType::Replace
+                | OperationType::Delete => {
+                    if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                        AiService::purge_prompt_cache(doc.user_id).await;
                     }
                 }
                 _ => {}

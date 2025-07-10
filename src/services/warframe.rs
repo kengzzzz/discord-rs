@@ -1,7 +1,6 @@
 use chrono::Utc;
 #[cfg(test)]
 use once_cell::sync::OnceCell;
-use reqwest::Client;
 use serde::Deserialize;
 use twilight_cache_inmemory::Reference;
 use twilight_cache_inmemory::model::CachedGuild;
@@ -9,6 +8,7 @@ use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
+use crate::services::http::HttpService;
 use crate::utils::embed::footer_with_icon;
 
 use crate::configs::Reaction;
@@ -18,7 +18,7 @@ const BASE_URL: &str = "https://api.warframestat.us/pc";
 #[cfg(test)]
 static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 const COLOR: u32 = 0xF1C40F;
-const URL: &str = "https://github.com/kengzzzz/discord-bot";
+const URL: &str = "https://github.com/kengzzzz/discord-rs";
 
 #[derive(Deserialize)]
 struct NewsItem {
@@ -45,10 +45,7 @@ struct SteelPathData {
     activation: Option<String>,
 }
 
-async fn fetch_json<T: for<'de> Deserialize<'de>>(
-    client: &Client,
-    path: &str,
-) -> anyhow::Result<T> {
+async fn fetch_json<T: for<'de> Deserialize<'de>>(path: &str) -> anyhow::Result<T> {
     let base = {
         #[cfg(test)]
         {
@@ -64,7 +61,7 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
         }
     };
     let url = format!("{base}/{path}");
-    Ok(client.get(url).send().await?.json::<T>().await?)
+    Ok(HttpService::get(url).await?.json::<T>().await?)
 }
 
 fn format_time(s: &str) -> String {
@@ -94,8 +91,8 @@ fn title_case(s: &str) -> String {
     out
 }
 
-async fn image_link(client: &Client) -> anyhow::Result<Option<String>> {
-    match fetch_json::<Vec<NewsItem>>(client, "news").await {
+async fn image_link() -> anyhow::Result<Option<String>> {
+    match fetch_json::<Vec<NewsItem>>("news").await {
         Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
@@ -104,8 +101,8 @@ async fn image_link(client: &Client) -> anyhow::Result<Option<String>> {
     }
 }
 
-async fn cycle_field(client: &Client, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
-    let data = fetch_json::<Cycle>(client, endpoint).await?;
+async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
+    let data = fetch_json::<Cycle>(endpoint).await?;
     let field = EmbedFieldBuilder::new(
         format!(
             "{}{}{}",
@@ -120,8 +117,8 @@ async fn cycle_field(client: &Client, endpoint: &str, name: &str) -> anyhow::Res
     Ok(field)
 }
 
-async fn steel_path_field(client: &Client) -> anyhow::Result<(EmbedField, bool)> {
-    let data = fetch_json::<SteelPathData>(client, "steelPath").await?;
+async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
+    let data = fetch_json::<SteelPathData>("steelPath").await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {
@@ -160,15 +157,13 @@ async fn steel_path_field(client: &Client) -> anyhow::Result<(EmbedField, bool)>
 pub async fn status_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> anyhow::Result<(Embed, bool)> {
-    let client = Client::new();
-
-    let image_fut = image_link(&client);
-    let steel_fut = steel_path_field(&client);
-    let earth_fut = cycle_field(&client, "earthCycle", "Earth");
-    let cetus_fut = cycle_field(&client, "cetusCycle", "Cetus");
-    let vallis_fut = cycle_field(&client, "vallisCycle", "Vallis");
-    let cambion_fut = cycle_field(&client, "cambionCycle", "Cambion");
-    let zariman_fut = cycle_field(&client, "zarimanCycle", "Zariman");
+    let image_fut = image_link();
+    let steel_fut = steel_path_field();
+    let earth_fut = cycle_field("earthCycle", "Earth");
+    let cetus_fut = cycle_field("cetusCycle", "Cetus");
+    let vallis_fut = cycle_field("vallisCycle", "Vallis");
+    let cambion_fut = cycle_field("cambionCycle", "Cambion");
+    let zariman_fut = cycle_field("zarimanCycle", "Zariman");
 
     let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(
         image_fut,
@@ -227,6 +222,6 @@ pub(crate) fn format_time_test(s: &str) -> String {
 
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) async fn steel_path_field_test(client: &Client) -> anyhow::Result<(EmbedField, bool)> {
-    steel_path_field(client).await
+pub(crate) async fn steel_path_field_test() -> anyhow::Result<(EmbedField, bool)> {
+    steel_path_field().await
 }

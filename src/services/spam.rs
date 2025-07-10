@@ -17,7 +17,7 @@ use crate::{
         mongo::{mongodb::MongoDB, quarantine::Quarantine, role::RoleEnum},
         redis::{redis_delete, redis_get, redis_set, redis_set_ex},
     },
-    services::{broadcast::BroadcastService, role::RoleService},
+    services::{broadcast::BroadcastService, http::HttpService, role::RoleService},
 };
 
 pub struct SpamService;
@@ -215,21 +215,11 @@ impl SpamService {
         let mut hasher = Sha256::new();
         hasher.update(message.content.as_bytes());
         for a in &message.attachments {
-            match reqwest::get(&a.url).await {
+            match HttpService::get(&a.url).await {
                 Ok(resp) => {
                     let mut stream = resp.bytes_stream();
-                    let mut errored = false;
-                    while let Some(chunk) = stream.next().await {
-                        match chunk {
-                            Ok(bytes) => hasher.update(&bytes),
-                            Err(_) => {
-                                errored = true;
-                                break;
-                            }
-                        }
-                    }
-                    if errored {
-                        hasher.update(a.url.as_bytes());
+                    while let Some(Ok(bytes)) = stream.next().await {
+                        hasher.update(&bytes);
                     }
                 }
                 Err(_) => hasher.update(a.url.as_bytes()),

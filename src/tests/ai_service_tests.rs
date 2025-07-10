@@ -70,3 +70,15 @@ async fn test_summary_rotation() {
     assert_eq!(ai::entry_role(&hist[0]), "system");
     assert!(ai::entry_text(&hist[0]).contains("SUM"));
 }
+
+#[tokio::test]
+async fn test_purge_prompt_cache() {
+    let user = Id::<UserMarker>::new(3);
+    AiService::set_prompt(user, "hello".to_string()).await;
+    let prompt = ai::get_prompt_test(user).await;
+    assert_eq!(prompt, Some("hello".to_string()));
+
+    AiService::purge_prompt_cache(user.get()).await;
+    let prompt = ai::get_prompt_test(user).await;
+    assert!(prompt.is_none());
+}

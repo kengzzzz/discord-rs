@@ -1,11 +1,11 @@
 [package]
 name = "discord-bot"
-version = "2.0.0"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-deadpool-redis = "0.21"
+deadpool-redis = "0.22"
 mongodb = "3.2"
 once_cell = "1.21"
 regex = "1.11"
