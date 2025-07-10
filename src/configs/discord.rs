@@ -26,7 +26,8 @@ pub static CACHE: Lazy<Arc<DefaultInMemoryCache>> = Lazy::new(|| {
                 | ResourceType::CHANNEL
                 | ResourceType::MESSAGE
                 | ResourceType::ROLE
-                | ResourceType::MEMBER,
+                | ResourceType::MEMBER
+                | ResourceType::USER_CURRENT,
         )
         .build();
     Arc::new(cache)

@@ -82,13 +82,10 @@ impl AiCommand {
                 }
                 AiCommand::Talk(c) => {
                     let user = interaction.author().context("no author")?;
-                    let reply = AiService::handle_interaction(
-                        user.id,
-                        &user.name,
-                        &c.message,
-                        c.attachment.clone(),
-                    )
-                    .await?;
+                    let attachments = c.attachment.clone().into_iter().collect();
+                    let reply =
+                        AiService::handle_interaction(user.id, &user.name, &c.message, attachments)
+                            .await?;
                     let embeds = embed::ai_embeds(&reply)?;
                     HTTP.interaction(interaction.application_id)
                         .update_response(&interaction.token)

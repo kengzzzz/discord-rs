@@ -263,7 +263,7 @@ impl AiService {
         user_id: Id<UserMarker>,
         user_name: &str,
         message: &str,
-        attachment: Option<Attachment>,
+        attachments: Vec<Attachment>,
     ) -> anyhow::Result<String> {
         let mut history = Self::load_history(user_id).await;
 
@@ -306,7 +306,7 @@ impl AiService {
 
         let mut parts = vec![Part::text(message)];
         let mut attachment_urls = Vec::new();
-        if let Some(a) = attachment {
+        for a in attachments {
             if let (Some(ct), Ok(resp)) =
                 (a.content_type.as_deref(), HttpService::get(&a.url).await)
             {

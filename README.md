@@ -9,14 +9,14 @@ This repository contains a simple Discord bot written in Rust.
 
 ## Setup
 
-1. Copy `.env.example` to `.env.develop` for development or `.env.production` for production.
+1. Copy `.env.example` to `.env`.
 2. Fill in the environment variables in the created file. Set `APP_ENV=production` in the production file.
 
 ### Environment Variables
 
 - The following variables are used by the bot (see `.env.example`):
 
-- `APP_ENV` – Name of the environment. Set to `production` to enable change stream watchers.
+- `APP_ENV` – Name of the environment. Set to `production` to skip database setup commands.
 - `DISCORD_TOKEN` – Discord bot token.
 - `GOOGLE_API_KEY` – Google GenAI API key.
 - `AI_BASE_PROMPT` – Base system prompt for the AI.
@@ -40,15 +40,15 @@ This repository contains a simple Discord bot written in Rust.
 ### MongoDB Pre/Post Images
 
 Change stream watchers require pre and post images to be enabled on these
-collections: `channels`, `roles`, `quarantines`, `role_messages` and
-`status_messages`. Enable them with:
+collections: `channels`, `roles`, `quarantines`, `messages` and
+`ai_prompts`. Enable them with:
 
 ```javascript
 db.runCommand({ collMod: "channels", changeStreamPreAndPostImages: { enabled: true } })
 db.runCommand({ collMod: "roles", changeStreamPreAndPostImages: { enabled: true } })
 db.runCommand({ collMod: "quarantines", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "role_messages", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "status_messages", changeStreamPreAndPostImages: { enabled: true } })
+db.runCommand({ collMod: "messages", changeStreamPreAndPostImages: { enabled: true } })
+db.runCommand({ collMod: "ai_prompts", changeStreamPreAndPostImages: { enabled: true } })
 ```
 
 ## Development
@@ -71,7 +71,7 @@ To build a production image and run it:
 docker build -f Dockerfile.production -t discord-bot .
 
 # run using the production environment file
-docker run --env-file .env.production discord-bot
+docker run --env-file .env discord-bot
 ```
 
 Alternatively you can build and run the binary directly with the Rust toolchain:

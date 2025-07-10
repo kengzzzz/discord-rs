@@ -1,5 +1,5 @@
 use twilight_model::{
-    channel::{Message, message::MessageType},
+    channel::{Attachment, Message, message::MessageType},
     id::Id,
 };
 
@@ -7,15 +7,42 @@ use crate::{
     configs::discord::{CACHE, HTTP},
     dbs::mongo::{channel::ChannelEnum, role::RoleEnum},
     services::{
-        broadcast::BroadcastService, channel::ChannelService, role::RoleService, spam::SpamService,
+        ai::AiService, broadcast::BroadcastService, channel::ChannelService, role::RoleService,
+        spam::SpamService,
     },
     utils::embed,
 };
 
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn build_ai_input(content: &str, referenced: Option<&str>) -> String {
+    let trimmed = content.trim();
+    if let Some(r) = referenced {
+        if r.is_empty() {
+            return trimmed.to_string();
+        }
+        format!("Replying to: {r}\n{trimmed}")
+    } else {
+        trimmed.to_string()
+    }
+}
+
+#[cfg_attr(test, allow(dead_code))]
+const MAX_ATTACHMENTS: usize = 5;
+
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
+    let mut list = message.attachments.clone();
+    if let Some(ref_msg) = &message.referenced_message {
+        list.extend(ref_msg.attachments.clone());
+    }
+    list.truncate(MAX_ATTACHMENTS);
+    list
+}
+
 pub async fn handle(message: Message) {
     if message.author.bot
         || message.author.system.unwrap_or(false)
-        || message.kind != MessageType::Regular
+        || (message.kind != MessageType::Regular && message.kind != MessageType::Reply)
     {
         return;
     }
@@ -67,12 +94,39 @@ pub async fn handle(message: Message) {
     }
 
     for channel in ChannelService::get(message.channel_id.get()).await {
-        match channel.channel_type {
-            ChannelEnum::Broadcast => {
-                BroadcastService::handle(&message).await;
+        if channel.channel_type == ChannelEnum::Broadcast {
+            BroadcastService::handle(&message).await;
+        }
+    }
+
+    if let Some(user) = &CACHE.current_user() {
+        let bot_id = user.id;
+        if message.mentions.iter().any(|m| m.id == bot_id) {
+            let mention1 = format!("<@{}>", bot_id.get());
+            let mention2 = format!("<@!{}>", bot_id.get());
+            let mut content = message.content.replace(&mention1, "");
+            content = content.replace(&mention2, "");
+            let ref_text = message
+                .referenced_message
+                .as_deref()
+                .map(|m| m.content.as_str());
+            let input = build_ai_input(&content, ref_text);
+            let attachments = collect_attachments(&message);
+            if let Ok(reply) = AiService::handle_interaction(
+                message.author.id,
+                &message.author.name,
+                &input,
+                attachments,
+            )
+            .await
+            {
+                if let Ok(embeds) = embed::ai_embeds(&reply) {
+                    let _ = HTTP
+                        .create_message(message.channel_id)
+                        .embeds(&embeds)
+                        .await;
+                }
             }
-            ChannelEnum::Quarantine => {}
-            _ => {}
         }
     }
 }
