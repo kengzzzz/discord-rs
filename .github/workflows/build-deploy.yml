@@ -87,9 +87,14 @@ jobs:
           cache-to:   type=gha,mode=max
       - name: Recreate container
         run: |
-          scp -i ${{ secrets.SSH_KEY }} \
+          echo "::add-mask::$SSH_KEY"
+          { set +x; } 2>/dev/null
+          echo ${{ secrets.SSH_KEY }} > id_rsa
+          chmod 600 id_rsa
+          scp -i id_rsa  \
           ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.ENV_PATH }} \
           .env
+          shred -u id_rsa || rm -f id_rsa
           docker stop discord-bot || true
           docker rm   discord-bot || true
           docker run -d \
@@ -99,3 +104,4 @@ jobs:
             --network discord-bot-network \
             -p 8080:8080 \
             discord-bot:latest
+          { set -x; } 2>/dev/null
