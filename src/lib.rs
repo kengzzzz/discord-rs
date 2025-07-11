@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod configs;
+pub mod context;
 pub mod dbs;
 pub mod events;
 pub mod macros;

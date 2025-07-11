@@ -290,8 +290,4 @@ impl MongoDB {
     pub fn client(&self) -> &Client {
         &self.client
     }
-
-    pub fn is_initialized() -> bool {
-        MONGO_DB.get().is_some()
-    }
 }

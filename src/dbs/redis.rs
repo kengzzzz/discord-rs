@@ -5,11 +5,13 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::configs::redis::REDIS_CONFIGS;
 
-pub static REDIS_POOL: Lazy<Pool> = Lazy::new(|| {
+pub static REDIS_POOL: Lazy<Pool> = Lazy::new(new_pool);
+
+pub fn new_pool() -> Pool {
     let cfg = Config::from_url(REDIS_CONFIGS.redis_url.clone());
     cfg.create_pool(Some(Runtime::Tokio1))
         .expect("create redis pool")
-});
+}
 
 pub async fn redis_get<T>(key: &str) -> Option<T>
 where
