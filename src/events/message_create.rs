@@ -46,7 +46,7 @@ pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
 fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
     let re = BOT_MENTION_RE.get_or_init(|| {
         let id = id.get();
-        let pattern = format!(r"<@!?(?:{})>", id);
+        let pattern = format!(r"<@!?(?:{id})>");
         Regex::new(&pattern).expect("failed to compile bot mention regex")
     });
 
