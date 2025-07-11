@@ -12,4 +12,3 @@ pub mod role_message;
 pub mod spam;
 pub mod status;
 pub mod status_message;
-pub mod warframe;

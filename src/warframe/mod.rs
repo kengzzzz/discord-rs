@@ -1,68 +1,18 @@
+pub mod api;
+
 use chrono::Utc;
-#[cfg(test)]
-use once_cell::sync::OnceCell;
-use serde::Deserialize;
 use twilight_cache_inmemory::Reference;
 use twilight_cache_inmemory::model::CachedGuild;
 use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
-use crate::services::http::HttpService;
 use crate::utils::embed::footer_with_icon;
 
 use crate::configs::Reaction;
 
-const BASE_URL: &str = "https://api.warframestat.us/pc";
-
-#[cfg(test)]
-static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 const COLOR: u32 = 0xF1C40F;
 const URL: &str = "https://github.com/kengzzzz/discord-rs";
-
-#[derive(Deserialize)]
-struct NewsItem {
-    #[serde(rename = "imageLink")]
-    image_link: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct Cycle {
-    state: String,
-    expiry: String,
-}
-
-#[derive(Deserialize)]
-struct SteelPathReward {
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct SteelPathData {
-    #[serde(rename = "currentReward")]
-    current_reward: Option<SteelPathReward>,
-    expiry: String,
-    activation: Option<String>,
-}
-
-async fn fetch_json<T: for<'de> Deserialize<'de>>(path: &str) -> anyhow::Result<T> {
-    let base = {
-        #[cfg(test)]
-        {
-            if let Some(url) = BASE_URL_OVERRIDE.get() {
-                url.as_str()
-            } else {
-                BASE_URL
-            }
-        }
-        #[cfg(not(test))]
-        {
-            BASE_URL
-        }
-    };
-    let url = format!("{base}/{path}");
-    Ok(HttpService::get(url).await?.json::<T>().await?)
-}
 
 fn format_time(s: &str) -> String {
     if let Ok(t) = chrono::DateTime::parse_from_rfc3339(s) {
@@ -92,7 +42,7 @@ fn title_case(s: &str) -> String {
 }
 
 async fn image_link() -> anyhow::Result<Option<String>> {
-    match fetch_json::<Vec<NewsItem>>("news").await {
+    match api::news().await {
         Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
@@ -102,7 +52,7 @@ async fn image_link() -> anyhow::Result<Option<String>> {
 }
 
 async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
-    let data = fetch_json::<Cycle>(endpoint).await?;
+    let data = api::cycle(endpoint).await?;
     let field = EmbedFieldBuilder::new(
         format!(
             "{}{}{}",
@@ -118,7 +68,7 @@ async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
 }
 
 async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
-    let data = fetch_json::<SteelPathData>("steelPath").await?;
+    let data = api::steel_path().await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {
@@ -205,7 +155,7 @@ pub async fn status_embed(
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) fn set_base_url(url: &str) {
-    let _ = BASE_URL_OVERRIDE.set(url.to_string());
+    api::set_base_url(url);
 }
 
 #[cfg(test)]

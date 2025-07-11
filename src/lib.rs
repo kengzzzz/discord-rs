@@ -5,6 +5,7 @@ pub mod events;
 pub mod macros;
 pub mod services;
 pub mod utils;
+pub mod warframe;
 
 #[cfg(test)]
 mod tests;

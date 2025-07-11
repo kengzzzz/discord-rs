@@ -2,7 +2,7 @@ use httpmock::Method::GET;
 use httpmock::MockServer;
 use serde_json::json;
 
-use crate::services::{notification::NotificationService, warframe};
+use crate::{services::notification::NotificationService, warframe};
 
 #[tokio::test]
 async fn test_title_and_time() {
