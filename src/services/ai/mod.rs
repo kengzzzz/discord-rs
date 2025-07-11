@@ -1,30 +1,20 @@
 use anyhow::Context;
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
-use google_ai_rs::{Client, Content, Part};
+use google_ai_rs::{Content, Part};
 #[cfg(test)]
-use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
+use once_cell::sync::OnceCell as SyncOnceCell;
 use reqwest::{Body, header::CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
-use std::collections::HashMap;
 use std::str::FromStr;
-use tokio::sync::OnceCell;
-#[cfg(test)]
-use tokio::sync::RwLock;
 use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
-#[cfg(not(test))]
-use crate::configs::CACHE_PREFIX;
-#[cfg(not(test))]
-use crate::dbs::redis::{redis_delete, redis_get, redis_set};
+use self::client::{MODELS, extract_text};
+use self::history as hist;
 use crate::{configs::google::GOOGLE_CONFIGS, services::http::HttpService};
 
-static CLIENT: OnceCell<Client> = OnceCell::const_new();
-#[cfg(test)]
-static HISTORY_STORE: Lazy<RwLock<HashMap<u64, Vec<ChatEntry>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-#[cfg(test)]
-static PROMPT_STORE: Lazy<RwLock<HashMap<u64, String>>> = Lazy::new(|| RwLock::new(HashMap::new()));
+mod client;
+mod history;
+
 #[cfg(test)]
 static GENERATE_OVERRIDE: SyncOnceCell<
     Box<dyn Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync>,
@@ -38,24 +28,6 @@ const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
 
 const INLINE_LIMIT: u64 = 20 * 1024 * 1024;
-
-const MODELS: &[&str] = &[
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-preview-tts",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-preview-image-generation",
-    "gemini-2.0-flash-lite",
-];
-
-const SUMMARY_MODELS: &[&str] = &[
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-preview-tts",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-];
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ChatEntry {
@@ -87,176 +59,31 @@ pub(crate) fn entry_text(e: &ChatEntry) -> &str {
     &e.text
 }
 
-fn extract_text(response: google_ai_rs::genai::Response) -> String {
-    response
-        .candidates
-        .first()
-        .and_then(|c| c.content.as_ref())
-        .and_then(|c| c.parts.first())
-        .and_then(|p| match &p.data {
-            Some(google_ai_rs::proto::part::Data::Text(t)) => Some(t.clone()),
-            _ => None,
-        })
-        .unwrap_or_default()
-}
-
-async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
-    #[cfg(test)]
-    if let Some(f) = SUMMARIZE_OVERRIDE.get() {
-        return Ok(f(history));
-    }
-
-    let client = AiService::client().await?;
-    let contents: Vec<Content> = history
-        .iter()
-        .map(|c| Content::from((c.text.as_str(),)))
-        .collect();
-    let system = "Summarize the conversation so far in a concise form.".to_string();
-
-    for name in SUMMARY_MODELS {
-        let model = client
-            .generative_model(name)
-            .with_system_instruction(system.clone());
-        match model.generate_content(contents.clone()).await {
-            Ok(resp) => return Ok(extract_text(resp)),
-            Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
-        }
-    }
-
-    Err(anyhow::anyhow!("all models failed to summarize"))
-}
-
 pub struct AiService;
 
 impl AiService {
-    async fn client() -> anyhow::Result<&'static Client> {
-        CLIENT
-            .get_or_try_init(|| async {
-                Client::new(google_ai_rs::Auth::ApiKey(GOOGLE_CONFIGS.api_key.clone()))
-                    .await
-                    .map_err(anyhow::Error::msg)
-            })
-            .await
-    }
-
-    #[cfg(not(test))]
-    async fn history_key(user: Id<UserMarker>) -> String {
-        format!("{CACHE_PREFIX}:ai:history:{}", user.get())
-    }
-
-    #[cfg(not(test))]
-    async fn prompt_key(user: Id<UserMarker>) -> String {
-        format!("{CACHE_PREFIX}:ai:prompt:{}", user.get())
-    }
-
-    async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
-        #[cfg(test)]
-        {
-            return HISTORY_STORE
-                .read()
-                .await
-                .get(&user.get())
-                .cloned()
-                .unwrap_or_default();
-        }
-        #[cfg(not(test))]
-        {
-            let key = Self::history_key(user).await;
-            redis_get::<Vec<ChatEntry>>(&key).await.unwrap_or_default()
-        }
-    }
-
-    async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
-        #[cfg(test)]
-        {
-            HISTORY_STORE
-                .write()
-                .await
-                .insert(user.get(), hist.to_vec());
-        }
-        #[cfg(not(test))]
-        {
-            let key = Self::history_key(user).await;
-            redis_set(&key, &hist.to_vec()).await;
-        }
-    }
-
-    async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
-        #[cfg(test)]
-        {
-            return PROMPT_STORE.read().await.get(&user.get()).cloned();
-        }
-        #[cfg(not(test))]
-        {
-            let key = Self::prompt_key(user).await;
-            if let Some(prompt) = redis_get::<String>(&key).await {
-                return Some(prompt);
-            }
-
-            use crate::dbs::mongo::mongodb::MongoDB;
-            use mongodb::bson::doc;
-
-            if let Ok(Some(record)) = MongoDB::get()
-                .ai_prompts
-                .find_one(doc! {"user_id": user.get() as i64})
-                .await
-            {
-                redis_set(&key, &record.prompt).await;
-                return Some(record.prompt);
-            }
-
-            None
-        }
-    }
-
     pub async fn clear_history(user: Id<UserMarker>) {
-        #[cfg(test)]
-        {
-            HISTORY_STORE.write().await.remove(&user.get());
-        }
-        #[cfg(not(test))]
-        {
-            let key = Self::history_key(user).await;
-            redis_delete(&key).await;
-        }
+        hist::clear_history(user).await;
     }
 
     pub async fn set_prompt(user: Id<UserMarker>, prompt: String) {
-        #[cfg(test)]
-        {
-            PROMPT_STORE.write().await.insert(user.get(), prompt);
-        }
-        #[cfg(not(test))]
-        {
-            use crate::dbs::mongo::{ai_prompt::AiPrompt, mongodb::MongoDB};
-            use mongodb::bson::{doc, to_bson};
-
-            if let Ok(bson) = to_bson(&AiPrompt {
-                id: None,
-                user_id: user.get(),
-                prompt: prompt.clone(),
-            }) {
-                let _ = MongoDB::get()
-                    .ai_prompts
-                    .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
-                    .upsert(true)
-                    .await;
-            }
-        }
+        hist::set_prompt(user, prompt).await;
     }
 
     pub async fn purge_prompt_cache(user_id: u64) {
-        #[cfg(test)]
-        {
-            PROMPT_STORE.write().await.remove(&user_id);
-        }
-        #[cfg(not(test))]
-        {
-            use crate::configs::CACHE_PREFIX;
-            use crate::dbs::redis::redis_delete;
-            let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
-            redis_delete(&key).await;
-        }
+        hist::purge_prompt_cache(user_id).await;
+    }
+
+    async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
+        hist::load_history(user).await
+    }
+
+    async fn store_history(user: Id<UserMarker>, histv: &[ChatEntry]) {
+        hist::store_history(user, histv).await;
+    }
+
+    async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
+        hist::get_prompt(user).await
     }
 
     pub async fn handle_interaction(
@@ -268,7 +95,7 @@ impl AiService {
         let mut history = Self::load_history(user_id).await;
 
         if history.len() > MAX_HISTORY {
-            if let Ok(summary) = summarize(&history).await {
+            if let Ok(summary) = client::summarize(&history).await {
                 let start = history.len().saturating_sub(KEEP_RECENT);
                 let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
                 new_history.push(ChatEntry {
@@ -355,7 +182,7 @@ impl AiService {
         };
 
         if response.is_none() {
-            let client = Self::client().await?;
+            let client = client::client().await?;
             for name in MODELS {
                 let m = client
                     .generative_model(name)
@@ -411,22 +238,17 @@ where
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) async fn load_history_test(user: Id<UserMarker>) -> Vec<ChatEntry> {
-    HISTORY_STORE
-        .read()
-        .await
-        .get(&user.get())
-        .cloned()
-        .unwrap_or(Vec::with_capacity(MAX_HISTORY + 1))
+    hist::load_history_test(user).await
 }
 
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) async fn set_history_test(user: Id<UserMarker>, hist: Vec<ChatEntry>) {
-    HISTORY_STORE.write().await.insert(user.get(), hist);
+pub(crate) async fn set_history_test(user: Id<UserMarker>, histv: Vec<ChatEntry>) {
+    hist::set_history_test(user, histv).await;
 }
 
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) async fn get_prompt_test(user: Id<UserMarker>) -> Option<String> {
-    PROMPT_STORE.read().await.get(&user.get()).cloned()
+    hist::get_prompt_test(user).await
 }
