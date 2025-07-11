@@ -18,10 +18,13 @@ use twilight_model::{
 use twilight_util::builder::embed::EmbedBuilder;
 
 use crate::{
+    context::Context,
     dbs::redis::{redis_get, redis_set},
     services::{http::HttpService, shutdown},
     utils::embed::footer_with_icon,
 };
+use reqwest::Client;
+use std::sync::Arc;
 
 const ITEMS_URL: &str =
     "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/All.json";
@@ -104,8 +107,8 @@ async fn load_from_redis() -> Option<Vec<ItemEntry>> {
     None
 }
 
-async fn update_items() -> anyhow::Result<()> {
-    let resp = HttpService::get(ITEMS_URL).await?;
+async fn update_items(client: &Client) -> anyhow::Result<()> {
+    let resp = HttpService::get(client, ITEMS_URL).await?;
     let fetched: Vec<Item> = resp.json().await?;
     let mut set = HashSet::new();
     let mut names = Vec::new();
@@ -136,7 +139,7 @@ async fn update_items() -> anyhow::Result<()> {
 pub struct BuildService;
 
 impl BuildService {
-    pub async fn init() {
+    pub async fn init(ctx: Arc<Context>) {
         if let Some(data) = load_from_redis().await {
             *ITEMS.write().expect("ITEMS lock poisoned") = data;
             LAST_UPDATE.store(
@@ -146,19 +149,19 @@ impl BuildService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = update_items().await {
+        } else if let Err(e) = update_items(ctx.reqwest.as_ref()).await {
             tracing::warn!(error = %e, "failed to update build items");
         }
     }
 
-    pub fn spawn() -> JoinHandle<()> {
+    pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
         tokio::spawn(async move {
             let token = shutdown::get_token();
             loop {
                 tokio::select! {
                     _ = token.cancelled() => break,
                     _ = tokio::time::sleep(Duration::from_secs(UPDATE_SECS)) => {
-                        if let Err(e) = update_items().await {
+                        if let Err(e) = update_items(ctx.reqwest.as_ref()).await {
                             tracing::warn!(error = %e, "failed to update build items");
                         }
                     }
@@ -178,23 +181,23 @@ impl BuildService {
             .collect()
     }
 
-    async fn maybe_refresh() {
+    async fn maybe_refresh(client: &Client) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS {
-            if let Err(e) = update_items().await {
+            if let Err(e) = update_items(client).await {
                 tracing::warn!(error = %e, "failed to update build items");
             }
         }
     }
 
-    pub async fn search_with_update(prefix: &str) -> Vec<String> {
+    pub async fn search_with_update(client: &Client, prefix: &str) -> Vec<String> {
         let mut results = Self::search(prefix);
         if results.is_empty() {
-            Self::maybe_refresh().await;
+            Self::maybe_refresh(client).await;
             results = Self::search(prefix);
         }
         results
@@ -204,14 +207,14 @@ impl BuildService {
         s.to_lowercase().replace(' ', "-").replace('&', "%26")
     }
 
-    async fn fetch_builds(item: &str) -> anyhow::Result<Vec<BuildData>> {
+    async fn fetch_builds(client: &Client, item: &str) -> anyhow::Result<Vec<BuildData>> {
         let mut url =
             format!("{API_URL}?item_name={item}&author_id=10027&limit={MAX_BUILDS}&sort_by=Score");
-        let resp = HttpService::get(&url).await?;
+        let resp = HttpService::get(client, &url).await?;
         let mut data: BuildList = resp.json().await?;
         if data.results.is_empty() {
             url = format!("{API_URL}?item_name={item}&limit={MAX_BUILDS}&sort_by=Score");
-            let resp = HttpService::get(&url).await?;
+            let resp = HttpService::get(client, &url).await?;
             data = resp.json().await?;
         }
         Ok(data.results)
@@ -278,11 +281,12 @@ impl BuildService {
     }
 
     pub async fn build_embeds(
+        client: &Client,
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         item: &str,
     ) -> anyhow::Result<Vec<Embed>> {
         let target = Self::sanitize_item_name(item);
-        match Self::fetch_builds(&target).await {
+        match Self::fetch_builds(client, &target).await {
             Ok(builds) => {
                 if builds.is_empty() {
                     Ok(vec![Self::build_not_found_embed(guild)?])

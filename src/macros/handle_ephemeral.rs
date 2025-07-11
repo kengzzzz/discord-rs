@@ -1,10 +1,10 @@
 #[macro_export]
 macro_rules! handle_ephemeral {
-    ($interaction:ident, $name:literal, $body:block) => {{
+    ($http:expr, $interaction:ident, $name:literal, $body:block) => {{
         use tracing::Instrument;
         async move {
-            if let Err(e) = $crate::guild_command!($interaction, true, {
-                $crate::defer_interaction!($crate::configs::discord::HTTP, &$interaction, true).await?;
+            if let Err(e) = $crate::guild_command!($http, $interaction, true, {
+                $crate::defer_interaction!($http, &$interaction, true).await?;
                 $body
                 Ok::<_, anyhow::Error>(())
             })

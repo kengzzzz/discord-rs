@@ -34,7 +34,10 @@ pub struct SteelPathData {
     pub activation: Option<String>,
 }
 
-async fn fetch_json<T: for<'de> Deserialize<'de>>(path: &str) -> anyhow::Result<T> {
+async fn fetch_json<T: for<'de> Deserialize<'de>>(
+    client: &reqwest::Client,
+    path: &str,
+) -> anyhow::Result<T> {
     let base = {
         #[cfg(test)]
         {
@@ -50,19 +53,19 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(path: &str) -> anyhow::Result<
         }
     };
     let url = format!("{base}/{path}");
-    Ok(HttpService::get(url).await?.json::<T>().await?)
+    Ok(HttpService::get(client, url).await?.json::<T>().await?)
 }
 
-pub async fn news() -> anyhow::Result<Vec<NewsItem>> {
-    fetch_json("news").await
+pub async fn news(client: &reqwest::Client) -> anyhow::Result<Vec<NewsItem>> {
+    fetch_json(client, "news").await
 }
 
-pub async fn cycle(endpoint: &str) -> anyhow::Result<Cycle> {
-    fetch_json(endpoint).await
+pub async fn cycle(client: &reqwest::Client, endpoint: &str) -> anyhow::Result<Cycle> {
+    fetch_json(client, endpoint).await
 }
 
-pub async fn steel_path() -> anyhow::Result<SteelPathData> {
-    fetch_json("steelPath").await
+pub async fn steel_path(client: &reqwest::Client) -> anyhow::Result<SteelPathData> {
+    fetch_json(client, "steelPath").await
 }
 
 #[cfg(test)]

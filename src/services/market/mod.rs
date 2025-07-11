@@ -31,10 +31,8 @@ use twilight_util::builder::{
     embed::{EmbedBuilder, EmbedFieldBuilder},
 };
 
-use crate::{
-    configs::discord::{CACHE, HTTP},
-    utils::embed::footer_with_icon,
-};
+use crate::{context::Context, utils::embed::footer_with_icon};
+use std::sync::Arc;
 
 pub use session::MarketSession;
 const COLOR: u32 = 0xF1C40F;
@@ -90,7 +88,7 @@ impl MarketKind {
 pub struct MarketService;
 
 impl MarketService {
-    pub async fn init() {
+    pub async fn init(ctx: Arc<Context>) {
         if let Some(data) = client::load_from_redis(REDIS_KEY).await {
             *ITEMS.write().expect("ITEMS lock poisoned") = data;
             LAST_UPDATE.store(
@@ -100,13 +98,23 @@ impl MarketService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = client::update_items(REDIS_KEY, &ITEMS, &LAST_UPDATE).await {
+        } else if let Err(e) =
+            client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+        {
             tracing::warn!(error = %e, "failed to update market items");
         }
+        let ctx_clone = ctx.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(UPDATE_SECS)).await;
-                if let Err(e) = client::update_items(REDIS_KEY, &ITEMS, &LAST_UPDATE).await {
+                if let Err(e) = client::update_items(
+                    ctx_clone.reqwest.as_ref(),
+                    REDIS_KEY,
+                    &ITEMS,
+                    &LAST_UPDATE,
+                )
+                .await
+                {
                     tracing::warn!(error = %e, "failed to update market items");
                 }
             }
@@ -124,23 +132,25 @@ impl MarketService {
             .collect()
     }
 
-    async fn maybe_refresh() {
+    async fn maybe_refresh(ctx: Arc<Context>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS {
-            if let Err(e) = client::update_items(REDIS_KEY, &ITEMS, &LAST_UPDATE).await {
+            if let Err(e) =
+                client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+            {
                 tracing::warn!(error = %e, "failed to update market items");
             }
         }
     }
 
-    pub async fn search_with_update(prefix: &str) -> Vec<String> {
+    pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
         let mut results = Self::search(prefix);
         if results.is_empty() {
-            Self::maybe_refresh().await;
+            Self::maybe_refresh(ctx.clone()).await;
             results = Self::search(prefix);
         }
         results
@@ -257,13 +267,14 @@ impl MarketService {
     }
 
     pub async fn create_session(
+        ctx: Arc<Context>,
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Option<MarketSession>> {
         let Some(url) = Self::find_url(item) else {
             return Ok(None);
         };
-        match client::fetch_orders_map(&url, &kind).await {
+        match client::fetch_orders_map(ctx.reqwest.as_ref(), &url, &kind).await {
             Ok((orders, max_rank)) => {
                 if orders.is_empty() {
                     return Ok(None);
@@ -361,8 +372,10 @@ impl MarketService {
             .insert(message_id, session);
     }
 
-    async fn refresh(session: &mut MarketSession) {
-        if let Ok((orders, max)) = client::fetch_orders_map(&session.url, &session.kind).await {
+    async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
+        if let Ok((orders, max)) =
+            client::fetch_orders_map(ctx.reqwest.as_ref(), &session.url, &session.kind).await
+        {
             if !orders.is_empty() {
                 session.orders = orders;
                 session.max_rank = max;
@@ -372,7 +385,11 @@ impl MarketService {
         }
     }
 
-    pub async fn handle_component(interaction: Interaction, data: MessageComponentInteractionData) {
+    pub async fn handle_component(
+        ctx: Arc<Context>,
+        interaction: Interaction,
+        data: MessageComponentInteractionData,
+    ) {
         let Some(message) = interaction.message else {
             return;
         };
@@ -407,19 +424,19 @@ impl MarketService {
                 }
             }
             "market_refresh" => {
-                Self::refresh(&mut session).await;
+                Self::refresh(ctx.clone(), &mut session).await;
             }
             _ => {}
         }
 
-        if let Some(guild_ref) = interaction.guild_id.and_then(|id| CACHE.guild(id)) {
+        if let Some(guild_ref) = interaction.guild_id.and_then(|id| ctx.cache.guild(id)) {
             if let Ok(embed) = Self::embed_for_session(&guild_ref, &session) {
                 let components = Self::components(&session);
                 let data = InteractionResponseDataBuilder::new()
                     .embeds([embed])
                     .components(components.clone())
                     .build();
-                let http = HTTP.clone();
+                let http = ctx.http.clone();
                 let _ = http
                     .interaction(interaction.application_id)
                     .create_response(
@@ -438,6 +455,7 @@ impl MarketService {
     }
 
     pub async fn market_embed(
+        ctx: Arc<Context>,
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         item: &str,
         kind: MarketKind,
@@ -445,7 +463,7 @@ impl MarketService {
         let Some(url) = Self::find_url(item) else {
             return Self::not_found_embed(guild);
         };
-        match client::fetch_orders(&url).await {
+        match client::fetch_orders(ctx.reqwest.as_ref(), &url).await {
             Ok(orders) => {
                 let mut by_rank: BTreeMap<u8, Vec<session::OrderInfo>> = BTreeMap::new();
                 for o in orders {

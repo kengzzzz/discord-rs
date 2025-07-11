@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use deadpool_redis::{Config, Pool, Runtime, redis::cmd};
 use once_cell::sync::Lazy;
 use serde::{Serialize, de::DeserializeOwned};

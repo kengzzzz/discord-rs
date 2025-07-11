@@ -35,12 +35,13 @@ fn mock_response(text: &str) -> Response {
 #[tokio::test]
 async fn test_prompt_and_history() {
     let user = Id::<UserMarker>::new(1);
+    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
     ai::set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(user).await;
-    AiService::set_prompt(user, "hi".to_string()).await;
+    AiService::set_prompt(ctx.clone(), user, "hi".to_string()).await;
 
-    let text = AiService::handle_interaction(user, "Tester", "hello", Vec::new())
+    let text = AiService::handle_interaction(ctx.clone(), user, "Tester", "hello", Vec::new())
         .await
         .unwrap();
     assert_eq!(text, "ok");
@@ -56,6 +57,7 @@ async fn test_prompt_and_history() {
 #[tokio::test]
 async fn test_summary_rotation() {
     let user = Id::<UserMarker>::new(2);
+    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
     ai::set_generate_override(|_| mock_response("ok"));
     ai::set_summarize_override(|_| "SUM".to_string());
 
@@ -64,7 +66,7 @@ async fn test_summary_rotation() {
         .collect();
     ai::set_history_test(user, history).await;
 
-    let _ = AiService::handle_interaction(user, "Tester", "msg", Vec::new()).await;
+    let _ = AiService::handle_interaction(ctx.clone(), user, "Tester", "msg", Vec::new()).await;
     let hist = ai::load_history_test(user).await;
     assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
     assert_eq!(ai::entry_role(&hist[0]), "system");
@@ -74,7 +76,8 @@ async fn test_summary_rotation() {
 #[tokio::test]
 async fn test_purge_prompt_cache() {
     let user = Id::<UserMarker>::new(3);
-    AiService::set_prompt(user, "hello".to_string()).await;
+    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    AiService::set_prompt(ctx.clone(), user, "hello".to_string()).await;
     let prompt = ai::get_prompt_test(user).await;
     assert_eq!(prompt, Some("hello".to_string()));
 

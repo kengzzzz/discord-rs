@@ -12,13 +12,14 @@ use twilight_model::{
 };
 
 use crate::{
-    configs::discord::{CACHE, HTTP},
+    context::Context,
     dbs::{
-        mongo::{mongodb::MongoDB, quarantine::Quarantine, role::RoleEnum},
+        mongo::{quarantine::Quarantine, role::RoleEnum},
         redis::{redis_delete, redis_get, redis_set, redis_set_ex},
     },
     services::{broadcast::BroadcastService, http::HttpService, role::RoleService},
 };
+use std::sync::Arc;
 
 pub struct SpamService;
 
@@ -33,13 +34,14 @@ struct SpamRecord {
 }
 
 impl SpamService {
-    pub async fn is_quarantined(guild_id: u64, user_id: u64) -> bool {
+    pub async fn is_quarantined(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> bool {
         let key = format!("spam:quarantine:{guild_id}:{user_id}");
         if redis_get::<String>(&key).await.is_some() {
             return true;
         }
 
-        let res = MongoDB::get()
+        let res = ctx
+            .mongo
             .quarantines
             .find_one(doc! {"guild_id": guild_id as i64, "user_id": user_id as i64})
             .await
@@ -51,7 +53,12 @@ impl SpamService {
         res.is_some()
     }
 
-    pub async fn verify(guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, token: &str) -> bool {
+    pub async fn verify(
+        ctx: Arc<Context>,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        token: &str,
+    ) -> bool {
         let key = format!("spam:quarantine:{}:{}", guild_id.get(), user_id.get());
 
         if let Some(stored) = redis_get::<String>(&key).await {
@@ -60,8 +67,8 @@ impl SpamService {
             }
         }
 
-        let db = MongoDB::get();
-        if let Ok(Some(record)) = db
+        if let Ok(Some(record)) = ctx
+            .mongo
             .quarantines
             .find_one(doc! {
                 "guild_id": guild_id.get() as i64,
@@ -71,19 +78,22 @@ impl SpamService {
             .await
         {
             if let Some(role) =
-                RoleService::get_by_type(guild_id.get(), &RoleEnum::Quarantine).await
+                RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
             {
-                let _ = HTTP
+                let _ = ctx
+                    .http
                     .remove_guild_member_role(guild_id, user_id, Id::new(role.role_id))
                     .await;
             }
             for id in record.roles.iter() {
-                let _ = HTTP
+                let _ = ctx
+                    .http
                     .add_guild_member_role(guild_id, user_id, Id::new(*id))
                     .await;
             }
 
-            let _ = db
+            let _ = ctx
+                .mongo
                 .quarantines
                 .delete_one(doc! {
                     "guild_id": guild_id.get() as i64,
@@ -97,14 +107,14 @@ impl SpamService {
         false
     }
 
-    pub async fn get_token(guild_id: u64, user_id: u64) -> Option<String> {
+    pub async fn get_token(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> Option<String> {
         let key = format!("spam:quarantine:{guild_id}:{user_id}");
         if let Some(token) = redis_get::<String>(&key).await {
             return Some(token);
         }
 
-        let db = MongoDB::get();
-        let token = db
+        let token = ctx
+            .mongo
             .quarantines
             .find_one(doc! {"guild_id": guild_id as i64, "user_id": user_id as i64})
             .await
@@ -123,19 +133,24 @@ impl SpamService {
     }
 
     pub async fn quarantine_member(
+        ctx: Arc<Context>,
         guild_id: Id<GuildMarker>,
         user_id: Id<UserMarker>,
         token: &str,
     ) {
-        if let Some(member_ref) = CACHE.member(guild_id, user_id) {
+        if let Some(member_ref) = ctx.cache.member(guild_id, user_id) {
             let roles = member_ref.roles();
             for r in roles {
-                let _ = HTTP.remove_guild_member_role(guild_id, user_id, *r).await;
+                let _ = ctx
+                    .http
+                    .remove_guild_member_role(guild_id, user_id, *r)
+                    .await;
             }
             if let Some(role) =
-                RoleService::get_by_type(guild_id.get(), &RoleEnum::Quarantine).await
+                RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
             {
-                let _ = HTTP
+                let _ = ctx
+                    .http
                     .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
                     .await;
             }
@@ -147,7 +162,8 @@ impl SpamService {
                 roles: roles.iter().map(|r| r.get()).collect(),
             };
             if let Ok(bson) = to_bson(&record) {
-                let _ = MongoDB::get()
+                let _ = ctx
+                    .mongo
                     .quarantines
                     .update_one(
                         doc! {"guild_id": record.guild_id as i64, "user_id": record.user_id as i64},
@@ -159,8 +175,12 @@ impl SpamService {
         }
     }
 
-    pub async fn log_message(guild_id: u64, message: &Message) -> Option<String> {
-        let hash = Self::hash_message(message).await;
+    pub async fn log_message(
+        ctx: Arc<Context>,
+        guild_id: u64,
+        message: &Message,
+    ) -> Option<String> {
+        let hash = Self::hash_message(ctx.reqwest.as_ref(), message).await;
         let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
         let now = Utc::now().timestamp();
         let mut record = redis_get::<SpamRecord>(&key).await.unwrap_or(SpamRecord {
@@ -189,10 +209,11 @@ impl SpamService {
 
         if record.histories.len() >= SPAM_LIMIT {
             let to_delete = record.histories.clone();
-            BroadcastService::delete_replicas(&to_delete).await;
+            BroadcastService::delete_replicas(ctx.clone(), &to_delete).await;
+            let http = ctx.http.clone();
             tokio::spawn(async move {
                 for (c_id, m_id) in to_delete {
-                    let _ = HTTP.delete_message(Id::new(c_id), Id::new(m_id)).await;
+                    let _ = http.delete_message(Id::new(c_id), Id::new(m_id)).await;
                 }
             });
             let token = format!("{:06}", fastrand::u32(0..1_000_000));
@@ -211,11 +232,11 @@ impl SpamService {
         redis_delete(&quarantine_key).await;
     }
 
-    async fn hash_message(message: &Message) -> String {
+    async fn hash_message(client: &reqwest::Client, message: &Message) -> String {
         let mut hasher = Sha256::new();
         hasher.update(message.content.as_bytes());
         for a in &message.attachments {
-            match HttpService::get(&a.url).await {
+            match HttpService::get(client, &a.url).await {
                 Ok(resp) => {
                     let mut stream = resp.bytes_stream();
                     while let Some(Ok(bytes)) = stream.next().await {

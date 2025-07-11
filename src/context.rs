@@ -55,4 +55,15 @@ impl Context {
             reqwest,
         })
     }
+
+    #[cfg(test)]
+    pub async fn test() -> Self {
+        Self {
+            http: Arc::new(Client::new(String::new())),
+            cache: Arc::new(DefaultInMemoryCache::builder().build()),
+            redis: new_pool(),
+            mongo: MongoDB::empty().await,
+            reqwest: Arc::new(ReqwestClient::new()),
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as AnyhowContext;
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use google_ai_rs::{Content, Part};
 #[cfg(test)]
@@ -10,7 +10,8 @@ use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
 use self::client::{MODELS, extract_text};
 use self::history as hist;
-use crate::{configs::google::GOOGLE_CONFIGS, services::http::HttpService};
+use crate::{configs::google::GOOGLE_CONFIGS, context::Context, services::http::HttpService};
+use std::sync::Arc;
 
 mod client;
 mod history;
@@ -66,8 +67,8 @@ impl AiService {
         hist::clear_history(user).await;
     }
 
-    pub async fn set_prompt(user: Id<UserMarker>, prompt: String) {
-        hist::set_prompt(user, prompt).await;
+    pub async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
+        hist::set_prompt(ctx, user, prompt).await;
     }
 
     pub async fn purge_prompt_cache(user_id: u64) {
@@ -82,11 +83,12 @@ impl AiService {
         hist::store_history(user, histv).await;
     }
 
-    async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
-        hist::get_prompt(user).await
+    async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
+        hist::get_prompt(ctx, user).await
     }
 
     pub async fn handle_interaction(
+        ctx: Arc<Context>,
         user_id: Id<UserMarker>,
         user_name: &str,
         message: &str,
@@ -108,7 +110,7 @@ impl AiService {
             }
         }
 
-        let prompt = Self::get_prompt(user_id).await;
+        let prompt = Self::get_prompt(ctx.clone(), user_id).await;
 
         let mut system = format!(
             "{}\nYou are chatting with {user_name}",
@@ -134,9 +136,10 @@ impl AiService {
         let mut parts = vec![Part::text(message)];
         let mut attachment_urls = Vec::new();
         for a in attachments {
-            if let (Some(ct), Ok(resp)) =
-                (a.content_type.as_deref(), HttpService::get(&a.url).await)
-            {
+            if let (Some(ct), Ok(resp)) = (
+                a.content_type.as_deref(),
+                HttpService::get(ctx.reqwest.as_ref(), &a.url).await,
+            ) {
                 if a.size > INLINE_LIMIT {
                     let stream = Body::wrap_stream(resp.bytes_stream());
                     let upload_url = reqwest::Url::parse_with_params(
@@ -151,7 +154,7 @@ impl AiService {
                     if let Some(content_type) = &a.content_type {
                         headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
                     }
-                    let resp = HttpService::post(upload_url)
+                    let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
                         .headers(headers)
                         .body(stream)
                         .send()

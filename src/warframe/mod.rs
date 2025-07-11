@@ -7,7 +7,9 @@ use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
+use crate::context::Context;
 use crate::utils::embed::footer_with_icon;
+use std::sync::Arc;
 
 use crate::configs::Reaction;
 
@@ -41,8 +43,8 @@ fn title_case(s: &str) -> String {
     out
 }
 
-async fn image_link() -> anyhow::Result<Option<String>> {
-    match api::news().await {
+async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
+    match api::news(ctx.reqwest.as_ref()).await {
         Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
@@ -51,8 +53,8 @@ async fn image_link() -> anyhow::Result<Option<String>> {
     }
 }
 
-async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
-    let data = api::cycle(endpoint).await?;
+async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
+    let data = api::cycle(ctx.reqwest.as_ref(), endpoint).await?;
     let field = EmbedFieldBuilder::new(
         format!(
             "{}{}{}",
@@ -67,8 +69,8 @@ async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
     Ok(field)
 }
 
-async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
-    let data = api::steel_path().await?;
+async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
+    let data = api::steel_path(ctx.reqwest.as_ref()).await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {
@@ -105,15 +107,16 @@ async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
 }
 
 pub async fn status_embed(
+    ctx: Arc<Context>,
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> anyhow::Result<(Embed, bool)> {
-    let image_fut = image_link();
-    let steel_fut = steel_path_field();
-    let earth_fut = cycle_field("earthCycle", "Earth");
-    let cetus_fut = cycle_field("cetusCycle", "Cetus");
-    let vallis_fut = cycle_field("vallisCycle", "Vallis");
-    let cambion_fut = cycle_field("cambionCycle", "Cambion");
-    let zariman_fut = cycle_field("zarimanCycle", "Zariman");
+    let image_fut = image_link(ctx.clone());
+    let steel_fut = steel_path_field(ctx.clone());
+    let earth_fut = cycle_field(ctx.clone(), "earthCycle", "Earth");
+    let cetus_fut = cycle_field(ctx.clone(), "cetusCycle", "Cetus");
+    let vallis_fut = cycle_field(ctx.clone(), "vallisCycle", "Vallis");
+    let cambion_fut = cycle_field(ctx.clone(), "cambionCycle", "Cambion");
+    let zariman_fut = cycle_field(ctx.clone(), "zarimanCycle", "Zariman");
 
     let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(
         image_fut,
@@ -173,5 +176,5 @@ pub(crate) fn format_time_test(s: &str) -> String {
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) async fn steel_path_field_test() -> anyhow::Result<(EmbedField, bool)> {
-    steel_path_field().await
+    steel_path_field(Arc::new(crate::context::Context::test().await)).await
 }

@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::{
     application::{
@@ -13,9 +13,10 @@ use twilight_model::{
 
 use crate::{
     commands::admin::{channel::AdminChannelCommand, role::AdminRoleCommand},
-    configs::discord::{CACHE, HTTP},
+    context::Context,
     handle_ephemeral,
 };
+use std::sync::Arc;
 
 pub mod channel;
 pub mod role;
@@ -61,19 +62,19 @@ fn extract_focused(cmd: &CommandData) -> Option<(&str, &str)> {
 }
 
 impl AdminCommand {
-    pub async fn handle(interaction: Interaction, data: CommandData) {
-        handle_ephemeral!(interaction, "AdminCommand", {
+    pub async fn handle(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
+        handle_ephemeral!(ctx.http, interaction, "AdminCommand", {
             let command = AdminCommand::from_interaction(data.into())
                 .context("failed to parse command data")?;
 
             match command {
-                AdminCommand::Channel(command) => command.run(interaction).await,
-                AdminCommand::Role(command) => command.run(interaction).await,
+                AdminCommand::Channel(command) => command.run(ctx.clone(), interaction).await,
+                AdminCommand::Role(command) => command.run(ctx.clone(), interaction).await,
             }?;
         });
     }
 
-    pub async fn autocomplete(interaction: Interaction, data: CommandData) {
+    pub async fn autocomplete(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         if let Err(e) = async {
             let focused = extract_focused(&data).context("parse focused field failed")?;
             let guild_id = interaction.guild_id.context("parse guild_id failed")?;
@@ -83,12 +84,12 @@ impl AdminCommand {
             let prefix = focused.1.to_lowercase();
 
             if focused.0 == "role_name" {
-                if let Some(role_ids) = CACHE.guild_roles(guild_id) {
+                if let Some(role_ids) = ctx.cache.guild_roles(guild_id) {
                     choices.extend(
                         role_ids
                             .iter()
                             .filter_map(|role_id| {
-                                CACHE.role(*role_id).and_then(|role| {
+                                ctx.cache.role(*role_id).and_then(|role| {
                                     if role.name.to_lowercase().contains(&prefix) {
                                         Some(CommandOptionChoice {
                                             name: role.name.clone(),
@@ -115,7 +116,8 @@ impl AdminCommand {
                 }),
             };
 
-            HTTP.interaction(interaction.application_id)
+            ctx.http
+                .interaction(interaction.application_id)
                 .create_response(interaction.id, &interaction.token, &response)
                 .await?;
 

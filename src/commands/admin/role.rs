@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use mongodb::bson::doc;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::{
@@ -7,11 +7,12 @@ use twilight_model::{
 };
 
 use crate::{
-    configs::discord::{CACHE, HTTP},
-    dbs::mongo::{mongodb::MongoDB, role::RoleEnum},
+    context::Context,
+    dbs::mongo::role::RoleEnum,
     services::{notification::NotificationService, role_message::RoleMessageService},
     utils::embed,
 };
+use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "role", desc_localizations = "admin_role_desc")]
@@ -46,7 +47,7 @@ fn role_assign_arg_desc() -> DescLocalizations {
 }
 
 impl AdminRoleCommand {
-    pub async fn run(&self, interaction: Interaction) -> anyhow::Result<()> {
+    pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
         let guild_id = interaction.guild_id.context("failed to parse guild_id")?;
         let role_type = self.role_type.value();
         let role_id: Id<RoleMarker> = self.role_name.parse()?;
@@ -54,7 +55,7 @@ impl AdminRoleCommand {
 
         let author = interaction.author().context("failed to parse author")?;
 
-        let db = MongoDB::get();
+        let db = ctx.mongo.clone();
 
         match self.role_type {
             RoleEnum::None => {
@@ -85,7 +86,9 @@ impl AdminRoleCommand {
             }
         };
 
-        if let (Some(guild_ref), Some(role_ref)) = (CACHE.guild(guild_id), CACHE.role(role_id)) {
+        if let (Some(guild_ref), Some(role_ref)) =
+            (ctx.cache.guild(guild_id), ctx.cache.role(role_id))
+        {
             let embed = embed::set_role_embed(
                 &guild_ref,
                 &role_ref.resource().name,
@@ -93,14 +96,15 @@ impl AdminRoleCommand {
                 self.role_type.value(),
                 &author.name,
             )?;
-            HTTP.interaction(interaction.application_id)
+            ctx.http
+                .interaction(interaction.application_id)
                 .update_response(&interaction.token)
                 .embeds(Some(&[embed]))
                 .await?;
         }
 
-        RoleMessageService::ensure_message(guild_id).await;
-        NotificationService::reload_guild(guild_id.get()).await;
+        RoleMessageService::ensure_message(ctx.clone(), guild_id).await;
+        NotificationService::reload_guild(ctx, guild_id.get()).await;
 
         Ok(())
     }

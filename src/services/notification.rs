@@ -8,13 +8,15 @@ use tokio_util::sync::CancellationToken;
 use twilight_model::id::Id;
 
 use crate::{
-    configs::{discord::HTTP, notifications::NOTIFICATIONS},
+    configs::notifications::NOTIFICATIONS,
+    context::Context,
     dbs::mongo::{
         channel::{Channel, ChannelEnum},
         role::RoleEnum,
     },
     services::{channel::ChannelService, role::RoleService, shutdown, status::StatusService},
 };
+use std::sync::Arc;
 
 pub struct NotificationService;
 
@@ -33,6 +35,7 @@ fn next_monday_duration() -> Duration {
 }
 
 fn notify_loop(
+    http: Arc<twilight_http::Client>,
     channel_id: Id<twilight_model::id::marker::ChannelMarker>,
     role_id: u64,
     message: &str,
@@ -46,7 +49,7 @@ fn notify_loop(
             tokio::select! {
                 _ = token.cancelled() => break,
                 _ = tokio::time::sleep(delay) => {
-                    let _ = HTTP
+                    let _ = http
                         .create_message(channel_id)
                         .content(&format!("{msg} <@&{role_id}>"))
                         .await;
@@ -57,6 +60,7 @@ fn notify_loop(
 }
 
 fn notify_umbra_loop(
+    http: Arc<twilight_http::Client>,
     channel_id: Id<twilight_model::id::marker::ChannelMarker>,
     role_id: u64,
     token: CancellationToken,
@@ -69,7 +73,7 @@ fn notify_umbra_loop(
                 _ = tokio::time::sleep(Duration::from_secs(10)) => {
                     let now_state = StatusService::is_umbra_forma();
                     if now_state && !last {
-                        let _ = HTTP
+                        let _ = http
                             .create_message(channel_id)
                             .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
                             .await;
@@ -87,11 +91,18 @@ impl NotificationService {
     pub fn next_monday_duration_test() -> Duration {
         next_monday_duration()
     }
-    async fn init_for_channel(ch: Channel, token: CancellationToken) -> Vec<JoinHandle<()>> {
+    async fn init_for_channel(
+        ctx: Arc<Context>,
+        ch: Channel,
+        token: CancellationToken,
+    ) -> Vec<JoinHandle<()>> {
         let mut handles = Vec::new();
         let channel_id = Id::new(ch.channel_id);
-        if let Some(role) = RoleService::get_by_type(ch.guild_id, &RoleEnum::Helminth).await {
+        if let Some(role) =
+            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::Helminth).await
+        {
             handles.push(notify_loop(
+                ctx.http.clone(),
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.helminth,
@@ -99,8 +110,11 @@ impl NotificationService {
                 token.clone(),
             ));
         }
-        if let Some(role) = RoleService::get_by_type(ch.guild_id, &RoleEnum::RivenSilver).await {
+        if let Some(role) =
+            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::RivenSilver).await
+        {
             handles.push(notify_loop(
+                ctx.http.clone(),
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.riven_sliver,
@@ -108,35 +122,54 @@ impl NotificationService {
                 token.clone(),
             ));
         }
-        if let Some(role) = RoleService::get_by_type(ch.guild_id, &RoleEnum::UmbralForma).await {
-            handles.push(notify_umbra_loop(channel_id, role.role_id, token.clone()));
+        if let Some(role) =
+            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::UmbralForma).await
+        {
+            handles.push(notify_umbra_loop(
+                ctx.http.clone(),
+                channel_id,
+                role.role_id,
+                token.clone(),
+            ));
         }
         handles
     }
 
-    async fn init_all(token: CancellationToken) -> HashMap<u64, Vec<JoinHandle<()>>> {
+    async fn init_all(
+        ctx: Arc<Context>,
+        token: CancellationToken,
+    ) -> HashMap<u64, Vec<JoinHandle<()>>> {
         let mut map = HashMap::new();
-        let channels = ChannelService::list_by_type(&ChannelEnum::Notification).await;
+        let channels = ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Notification).await;
         for ch in channels {
-            map.insert(ch.guild_id, Self::init_for_channel(ch, token.clone()).await);
+            map.insert(
+                ch.guild_id,
+                Self::init_for_channel(ctx.clone(), ch, token.clone()).await,
+            );
         }
         map
     }
 
-    async fn init_guild(guild_id: u64, token: CancellationToken) -> Vec<JoinHandle<()>> {
-        if let Some(ch) = ChannelService::get_by_type(guild_id, &ChannelEnum::Notification).await {
-            Self::init_for_channel(ch, token).await
+    async fn init_guild(
+        ctx: Arc<Context>,
+        guild_id: u64,
+        token: CancellationToken,
+    ) -> Vec<JoinHandle<()>> {
+        if let Some(ch) =
+            ChannelService::get_by_type(ctx.clone(), guild_id, &ChannelEnum::Notification).await
+        {
+            Self::init_for_channel(ctx, ch, token).await
         } else {
             Vec::new()
         }
     }
 
-    pub fn spawn() -> JoinHandle<()> {
+    pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
         use crate::services::shutdown;
 
         tokio::spawn(async move {
             let token = shutdown::get_token();
-            let map = Self::init_all(token.clone()).await;
+            let map = Self::init_all(ctx.clone(), token.clone()).await;
             *HANDLES.write().await = map;
 
             token.cancelled().await;
@@ -150,9 +183,9 @@ impl NotificationService {
         })
     }
 
-    pub async fn reload() {
+    pub async fn reload(ctx: Arc<Context>) {
         let token = shutdown::get_token();
-        let map = Self::init_all(token.clone()).await;
+        let map = Self::init_all(ctx, token.clone()).await;
         let mut guard = HANDLES.write().await;
         for (_, hs) in guard.drain() {
             for h in hs {
@@ -162,9 +195,9 @@ impl NotificationService {
         *guard = map;
     }
 
-    pub async fn reload_guild(guild_id: u64) {
+    pub async fn reload_guild(ctx: Arc<Context>, guild_id: u64) {
         let token = shutdown::get_token();
-        let new_handles = Self::init_guild(guild_id, token.clone()).await;
+        let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
         let mut guard = HANDLES.write().await;
         if let Some(old) = guard.remove(&guild_id) {
             for h in old {

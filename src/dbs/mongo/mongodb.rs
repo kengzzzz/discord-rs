@@ -8,7 +8,6 @@ use mongodb::{
     },
 };
 use std::sync::Arc;
-use tokio::sync::OnceCell;
 use tokio::time::{self, Duration};
 
 use crate::{
@@ -35,8 +34,6 @@ pub struct MongoDB {
     pub messages: Collection<Message>,
     pub ai_prompts: Collection<AiPrompt>,
 }
-
-static MONGO_DB: OnceCell<Arc<MongoDB>> = OnceCell::const_new();
 
 impl MongoDB {
     pub async fn init() -> anyhow::Result<Arc<Self>> {
@@ -255,12 +252,6 @@ impl MongoDB {
         })
         .await?;
 
-        MONGO_DB
-            .set(repo.clone())
-            .map_err(|_| anyhow::anyhow!("MongoDB already initialized"))?;
-
-        HealthService::set_mongo(true);
-
         let weak = Arc::downgrade(&repo);
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(30));
@@ -283,8 +274,20 @@ impl MongoDB {
         Ok(repo)
     }
 
-    pub fn get() -> Arc<Self> {
-        Arc::clone(MONGO_DB.get().expect("MongoDB not initialized."))
+    #[cfg(test)]
+    pub async fn empty() -> Arc<Self> {
+        let client = Client::with_uri_str("mongodb://localhost:27017")
+            .await
+            .unwrap();
+        let db = client.database("test");
+        Arc::new(Self {
+            client,
+            channels: db.collection("channels"),
+            roles: db.collection("roles"),
+            quarantines: db.collection("quarantines"),
+            messages: db.collection("messages"),
+            ai_prompts: db.collection("ai_prompts"),
+        })
     }
 
     pub fn client(&self) -> &Client {

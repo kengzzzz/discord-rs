@@ -5,6 +5,8 @@ use crate::{
     services::http::HttpService,
 };
 
+use reqwest::Client;
+
 use super::{ItemEntry, MarketKind, StoredEntry};
 
 const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
@@ -68,11 +70,12 @@ pub(super) async fn load_from_redis(key: &str) -> Option<Vec<ItemEntry>> {
 }
 
 pub(super) async fn update_items(
+    client: &Client,
     key: &str,
     items: &once_cell::sync::Lazy<std::sync::RwLock<Vec<ItemEntry>>>,
     last_update: &once_cell::sync::Lazy<std::sync::atomic::AtomicU64>,
 ) -> anyhow::Result<()> {
-    let resp = HttpService::get(ITEMS_URL).await?;
+    let resp = HttpService::get(client, ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
     let mut stored = Vec::new();
     let mut new_items = Vec::new();
@@ -101,21 +104,25 @@ pub(super) async fn update_items(
     Ok(())
 }
 
-pub(super) async fn fetch_orders(url: &str) -> anyhow::Result<Vec<Order>> {
-    let resp =
-        HttpService::get(format!("https://api.warframe.market/v1/items/{url}/orders")).await?;
+pub(super) async fn fetch_orders(client: &Client, url: &str) -> anyhow::Result<Vec<Order>> {
+    let resp = HttpService::get(
+        client,
+        format!("https://api.warframe.market/v1/items/{url}/orders"),
+    )
+    .await?;
     let data: OrdersResponse = resp.json().await?;
     Ok(data.payload.orders)
 }
 
 pub(super) async fn fetch_orders_map(
+    client: &Client,
     url: &str,
     kind: &MarketKind,
 ) -> anyhow::Result<(
     std::collections::BTreeMap<u8, Vec<super::session::OrderInfo>>,
     Option<u8>,
 )> {
-    let orders = fetch_orders(url).await?;
+    let orders = fetch_orders(client, url).await?;
     let mut by_rank: std::collections::BTreeMap<u8, Vec<super::session::OrderInfo>> =
         std::collections::BTreeMap::new();
     let mut max_rank: Option<u8> = None;

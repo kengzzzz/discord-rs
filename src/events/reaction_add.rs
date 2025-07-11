@@ -1,13 +1,14 @@
 use twilight_model::{gateway::payload::incoming::ReactionAdd, id::Id};
 
 use crate::{
-    configs::discord::HTTP,
+    context::Context,
     dbs::mongo::channel::ChannelEnum,
     services::{channel::ChannelService, role::RoleService, role_message::RoleMessageService},
     utils::reaction::emoji_to_role_enum,
 };
+use std::sync::Arc;
 
-pub async fn handle(event: ReactionAdd) {
+pub async fn handle(ctx: Arc<Context>, event: ReactionAdd) {
     let Some(guild_id) = event.guild_id else {
         return;
     };
@@ -20,7 +21,7 @@ pub async fn handle(event: ReactionAdd) {
         return;
     }
 
-    let channels = ChannelService::get(event.channel_id.get()).await;
+    let channels = ChannelService::get(ctx.clone(), event.channel_id.get()).await;
     if !channels
         .iter()
         .any(|ch| ch.channel_type == ChannelEnum::UpdateRole)
@@ -28,7 +29,7 @@ pub async fn handle(event: ReactionAdd) {
         return;
     }
 
-    if let Some(record) = RoleMessageService::get(guild_id.get()).await {
+    if let Some(record) = RoleMessageService::get(ctx.clone(), guild_id.get()).await {
         if record.message_id != event.message_id.get() {
             return;
         }
@@ -39,9 +40,10 @@ pub async fn handle(event: ReactionAdd) {
     let Some(role_type) = emoji_to_role_enum(&event.emoji) else {
         return;
     };
-    if let Some(role) = RoleService::get_by_type(guild_id.get(), &role_type).await {
+    if let Some(role) = RoleService::get_by_type(ctx.clone(), guild_id.get(), &role_type).await {
         if role.self_assignable {
-            let _ = HTTP
+            let _ = ctx
+                .http
                 .add_guild_member_role(guild_id, event.user_id, Id::new(role.role_id))
                 .await;
         }

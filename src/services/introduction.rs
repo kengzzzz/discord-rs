@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::Context as _;
 use mongodb::bson::doc;
 use twilight_model::{
     application::interaction::{Interaction, modal::ModalInteractionData},
@@ -11,10 +11,9 @@ use twilight_model::{
 };
 
 use crate::{
-    configs::discord::{CACHE, HTTP},
+    context::Context,
     dbs::mongo::{
         channel::{Channel, ChannelEnum},
-        mongodb::MongoDB,
         role::RoleEnum,
     },
     defer_interaction, guild_command, send_with_fallback,
@@ -72,13 +71,14 @@ fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
 }
 
 async fn handle_valid_intro(
+    ctx: Arc<Context>,
     user_id: Id<UserMarker>,
     guild_id: Id<GuildMarker>,
     intro_channel: &Channel,
     details: &IntroDetails,
     member_tag: &str,
 ) -> anyhow::Result<()> {
-    let db = MongoDB::get();
+    let db = ctx.mongo.clone();
 
     let roles = tokio::try_join!(
         db.roles.find_one(doc! {
@@ -92,24 +92,26 @@ async fn handle_valid_intro(
     )?;
 
     if let Some(role_to_remove) = roles.0 {
-        HTTP.remove_guild_member_role(guild_id, user_id, Id::new(role_to_remove.role_id))
+        ctx.http
+            .remove_guild_member_role(guild_id, user_id, Id::new(role_to_remove.role_id))
             .await?;
     }
     if let Some(role_to_add) = roles.1 {
-        HTTP.add_guild_member_role(guild_id, user_id, Id::new(role_to_add.role_id))
+        ctx.http
+            .add_guild_member_role(guild_id, user_id, Id::new(role_to_add.role_id))
             .await?;
     }
 
-    if let Some(guild_ref) = CACHE.guild(guild_id) {
+    if let Some(guild_ref) = ctx.cache.guild(guild_id) {
         let intro_embed = embed::intro_details_embed(&guild_ref, member_tag, details)?;
-        let http = Arc::clone(&HTTP);
+        let http = ctx.http.clone();
         send_with_fallback!(http, user_id, Id::new(intro_channel.channel_id), |msg| {
             let welcome = embed::welcome_embed(&guild_ref, member_tag, &details.name)?;
             msg.embeds(&[welcome]).await?;
             Ok::<_, anyhow::Error>(())
         });
-
-        HTTP.create_message(Id::new(intro_channel.channel_id))
+        ctx.http
+            .create_message(Id::new(intro_channel.channel_id))
             .embeds(&[intro_embed])
             .await?;
     }
@@ -118,18 +120,27 @@ async fn handle_valid_intro(
 }
 
 impl IntroductionService {
-    pub async fn handle_modal(interaction: Interaction, data: ModalInteractionData) {
-        if let Err(e) = guild_command!(interaction, true, {
-            defer_interaction!(HTTP, &interaction, true).await?;
+    pub async fn handle_modal(
+        ctx: Arc<Context>,
+        interaction: Interaction,
+        data: ModalInteractionData,
+    ) {
+        if let Err(e) = guild_command!(ctx.http, interaction, true, {
+            defer_interaction!(ctx.http, &interaction, true).await?;
             let guild_id = interaction.guild_id.context("no guild id")?;
-            let guild_ref = CACHE.guild(guild_id).context("no guild")?;
+            let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
             let user = interaction.author().context("no author")?;
 
-            let Some(intro_channel) =
-                ChannelService::get_by_type(guild_id.get(), &ChannelEnum::Introduction).await
+            let Some(intro_channel) = ChannelService::get_by_type(
+                ctx.clone(),
+                guild_id.get(),
+                &ChannelEnum::Introduction,
+            )
+            .await
             else {
                 if let Ok(embed) = embed::intro_unavailable_embed(&guild_ref) {
-                    HTTP.interaction(interaction.application_id)
+                    ctx.http
+                        .interaction(interaction.application_id)
                         .update_response(&interaction.token)
                         .embeds(Some(&[embed]))
                         .await?;
@@ -139,16 +150,26 @@ impl IntroductionService {
 
             let Some(details) = parse_modal(&data) else {
                 let embed = embed::intro_error_embed()?;
-                HTTP.interaction(interaction.application_id)
+                ctx.http
+                    .interaction(interaction.application_id)
                     .update_response(&interaction.token)
                     .embeds(Some(&[embed]))
                     .await?;
                 return Ok(());
             };
 
-            handle_valid_intro(user.id, guild_id, &intro_channel, &details, &user.name).await?;
+            handle_valid_intro(
+                ctx.clone(),
+                user.id,
+                guild_id,
+                &intro_channel,
+                &details,
+                &user.name,
+            )
+            .await?;
             let embed = embed::intro_success_embed(&guild_ref)?;
-            HTTP.interaction(interaction.application_id)
+            ctx.http
+                .interaction(interaction.application_id)
                 .update_response(&interaction.token)
                 .embeds(Some(&[embed]))
                 .await?;
@@ -159,7 +180,8 @@ impl IntroductionService {
         {
             tracing::error!(error = %e, "failed to handle intro modal");
             if let Ok(embed) = embed::intro_error_embed() {
-                let _ = HTTP
+                let _ = ctx
+                    .http
                     .interaction(interaction.application_id)
                     .update_response(&interaction.token)
                     .embeds(Some(&[embed]))

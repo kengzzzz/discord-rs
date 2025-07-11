@@ -10,8 +10,10 @@ use tokio::sync::RwLock;
 
 #[cfg(not(test))]
 use crate::configs::CACHE_PREFIX;
+use crate::context::Context;
 #[cfg(not(test))]
 use crate::dbs::redis::{redis_delete, redis_get, redis_set};
+use std::sync::Arc;
 
 #[cfg(test)]
 static HISTORY_STORE: Lazy<RwLock<HashMap<u64, Vec<ChatEntry>>>> =
@@ -61,9 +63,10 @@ pub(super) async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
     }
 }
 
-pub(super) async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
+pub(super) async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
     #[cfg(test)]
     {
+        let _ = ctx; // silence unused
         return PROMPT_STORE.read().await.get(&user.get()).cloned();
     }
     #[cfg(not(test))]
@@ -73,10 +76,10 @@ pub(super) async fn get_prompt(user: Id<UserMarker>) -> Option<String> {
             return Some(prompt);
         }
 
-        use crate::dbs::mongo::mongodb::MongoDB;
         use mongodb::bson::doc;
 
-        if let Ok(Some(record)) = MongoDB::get()
+        if let Ok(Some(record)) = ctx
+            .mongo
             .ai_prompts
             .find_one(doc! {"user_id": user.get() as i64})
             .await
@@ -101,14 +104,15 @@ pub(super) async fn clear_history(user: Id<UserMarker>) {
     }
 }
 
-pub(super) async fn set_prompt(user: Id<UserMarker>, prompt: String) {
+pub(super) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
     #[cfg(test)]
     {
+        let _ = &ctx;
         PROMPT_STORE.write().await.insert(user.get(), prompt);
     }
     #[cfg(not(test))]
     {
-        use crate::dbs::mongo::{ai_prompt::AiPrompt, mongodb::MongoDB};
+        use crate::dbs::mongo::ai_prompt::AiPrompt;
         use mongodb::bson::{doc, to_bson};
 
         if let Ok(bson) = to_bson(&AiPrompt {
@@ -116,7 +120,8 @@ pub(super) async fn set_prompt(user: Id<UserMarker>, prompt: String) {
             user_id: user.get(),
             prompt: prompt.clone(),
         }) {
-            let _ = MongoDB::get()
+            let _ = ctx
+                .mongo
                 .ai_prompts
                 .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
                 .upsert(true)
