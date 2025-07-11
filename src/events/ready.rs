@@ -16,6 +16,7 @@ pub async fn handle(event: Ready) {
     }
     StatusService::spawn();
     BuildService::init().await;
+    BuildService::spawn();
     MarketService::init().await;
     NotificationService::spawn();
 

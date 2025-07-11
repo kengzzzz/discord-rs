@@ -9,6 +9,7 @@ use std::{
 
 use once_cell::sync::Lazy;
 use serde::Deserialize;
+use tokio::task::JoinHandle;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
     channel::message::Embed,
@@ -18,7 +19,7 @@ use twilight_util::builder::embed::EmbedBuilder;
 
 use crate::{
     dbs::redis::{redis_get, redis_set},
-    services::http::HttpService,
+    services::{http::HttpService, shutdown},
     utils::embed::footer_with_icon,
 };
 
@@ -148,14 +149,22 @@ impl BuildService {
         } else if let Err(e) = update_items().await {
             tracing::warn!(error = %e, "failed to update build items");
         }
-        tokio::spawn(async {
+    }
+
+    pub fn spawn() -> JoinHandle<()> {
+        tokio::spawn(async move {
+            let token = shutdown::get_token();
             loop {
-                tokio::time::sleep(Duration::from_secs(UPDATE_SECS)).await;
-                if let Err(e) = update_items().await {
-                    tracing::warn!(error = %e, "failed to update build items");
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    _ = tokio::time::sleep(Duration::from_secs(UPDATE_SECS)) => {
+                        if let Err(e) = update_items().await {
+                            tracing::warn!(error = %e, "failed to update build items");
+                        }
+                    }
                 }
             }
-        });
+        })
     }
 
     pub fn search(prefix: &str) -> Vec<String> {

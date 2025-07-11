@@ -9,6 +9,7 @@ pub mod market;
 pub mod notification;
 pub mod role;
 pub mod role_message;
+pub mod shutdown;
 pub mod spam;
 pub mod status;
 pub mod status_message;

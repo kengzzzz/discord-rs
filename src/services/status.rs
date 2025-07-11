@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use tokio::task::JoinHandle;
 use twilight_cache_inmemory::Reference;
 use twilight_cache_inmemory::model::CachedGuild;
 use twilight_model::id::Id;
@@ -95,14 +96,21 @@ impl StatusService {
         }
     }
 
-    pub fn spawn() {
-        tokio::spawn(async {
+    pub fn spawn() -> JoinHandle<()> {
+        use crate::services::shutdown;
+
+        tokio::spawn(async move {
+            let token = shutdown::get_token();
             Self::update_all().await;
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
-                interval.tick().await;
-                Self::update_all().await;
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    _ = interval.tick() => {
+                        Self::update_all().await;
+                    }
+                }
             }
-        });
+        })
     }
 }

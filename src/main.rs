@@ -8,10 +8,9 @@ use discord_bot::{
         interaction_create, member_add, member_remove, message_create, message_delete,
         reaction_add, reaction_remove, ready,
     },
-    services::health::HealthService,
+    services::{health::HealthService, shutdown},
 };
-use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 use twilight_gateway::{Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt as _};
 use twilight_interactions::command::CreateCommand;
 use twilight_model::guild::Permissions;
@@ -32,18 +31,19 @@ async fn main() -> anyhow::Result<()> {
             | Intents::MESSAGE_CONTENT,
     );
 
-    let shutdown_notify = Arc::new(Notify::new());
-    let shutdown_clone = shutdown_notify.clone();
+    let shutdown_token = CancellationToken::new();
+    shutdown::set_token(shutdown_token.clone());
+    let shutdown_clone = shutdown_token.clone();
     HealthService::spawn(async move {
-        shutdown_clone.notified().await;
+        shutdown_clone.cancelled().await;
     });
 
-    let notify_clone = shutdown_notify.clone();
+    let token_clone = shutdown_token.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("failed to install CTRL+C handler");
-        notify_clone.notify_waiters();
+        token_clone.cancel();
     });
 
     let mut admin_commands = AdminCommand::create_command();
@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         tokio::select! {
-            _ = shutdown_notify.notified() => {
+             _ = shutdown_token.cancelled() => {
                 break;
             }
             item = shard.next_event(EventTypeFlags::all()) => {

@@ -1,10 +1,12 @@
 use once_cell::sync::Lazy;
 use reqwest::{Client, Error, IntoUrl, RequestBuilder, Response};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 static HTTP_CLIENT: Lazy<Arc<Client>> = Lazy::new(|| {
     let client = Client::builder()
         .pool_max_idle_per_host(10)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
         .build()
         .expect("Failed to build Client");
     Arc::new(client)

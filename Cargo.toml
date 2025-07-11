@@ -29,6 +29,7 @@ sha2 = "0.10"
 hex = "0.4"
 google-ai-rs = { version = "0.1", features = ["serde"] }
 axum = "0.8"
+tokio-util = "0.7"
 
 [dev-dependencies]
 httpmock = "0.7"
