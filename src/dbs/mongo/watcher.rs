@@ -8,6 +8,7 @@ use mongodb::{
 };
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 use crate::dbs::redis::{redis_get, redis_set};
 
@@ -15,6 +16,7 @@ pub async fn spawn_watcher<T, F, Fut>(
     coll: Collection<T>,
     options: ChangeStreamOptions,
     mut handler: F,
+    token: CancellationToken,
 ) -> anyhow::Result<()>
 where
     T: DeserializeOwned + Unpin + Send + Sync + 'static,
@@ -23,7 +25,7 @@ where
 {
     let redis_key = format!("changestream:resume:{}", coll.name());
     tokio::spawn(async move {
-        loop {
+        while !token.is_cancelled() {
             let mut builder = coll.watch().with_options(options.clone());
             if let Some(token_str) = redis_get::<String>(&redis_key).await {
                 match serde_json::from_str::<ResumeToken>(&token_str) {
@@ -38,12 +40,20 @@ where
                 Ok(stream) => stream,
                 Err(e) => {
                     tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
-                    sleep(Duration::from_secs(5)).await;
+                    tokio::select! {
+                        _ = token.cancelled() => break,
+                        _ = sleep(Duration::from_secs(5)) => {}
+                    }
                     continue;
                 }
             };
 
-            while let Some(evt_res) = stream.next().await {
+            while !token.is_cancelled() {
+                let evt_res = tokio::select! {
+                    _ = token.cancelled() => None,
+                    evt = stream.next() => evt,
+                };
+                let Some(evt_res) = evt_res else { break };
                 match evt_res {
                     Ok(evt) => {
                         let resume_token = evt.id.clone();
@@ -64,7 +74,10 @@ where
                 }
             }
 
-            sleep(Duration::from_secs(5)).await;
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = sleep(Duration::from_secs(5)) => {}
+            }
         }
     });
     Ok(())

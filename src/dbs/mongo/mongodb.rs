@@ -22,7 +22,8 @@ use crate::{
     },
     services::{
         ai::AiService, channel::ChannelService, health::HealthService, role::RoleService,
-        role_message::RoleMessageService, spam::SpamService, status_message::StatusMessageService,
+        role_message::RoleMessageService, shutdown, spam::SpamService,
+        status_message::StatusMessageService,
     },
 };
 
@@ -158,45 +159,58 @@ impl MongoDB {
             .full_document_before_change(Some(FullDocumentBeforeChangeType::Required))
             .build();
 
-        spawn_watcher(repo.channels.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document {
-                        ChannelService::purge_cache(doc.channel_id).await;
-                        ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type).await;
-                        ChannelService::purge_list_cache(&doc.channel_type).await;
+        let token = shutdown::get_token();
+        spawn_watcher(
+            repo.channels.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document {
+                            ChannelService::purge_cache(doc.channel_id).await;
+                            ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type)
+                                .await;
+                            ChannelService::purge_list_cache(&doc.channel_type).await;
+                        }
+                        if let Some(doc) = evt.full_document_before_change {
+                            ChannelService::purge_cache(doc.channel_id).await;
+                            ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type)
+                                .await;
+                            ChannelService::purge_list_cache(&doc.channel_type).await;
+                        }
                     }
-                    if let Some(doc) = evt.full_document_before_change {
-                        ChannelService::purge_cache(doc.channel_id).await;
-                        ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type).await;
-                        ChannelService::purge_list_cache(&doc.channel_type).await;
-                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
-        spawn_watcher(repo.roles.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document {
-                        RoleService::purge_cache(doc.role_id).await;
-                        RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+        spawn_watcher(
+            repo.roles.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document {
+                            RoleService::purge_cache(doc.role_id).await;
+                            RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+                        }
+                        if let Some(doc) = evt.full_document_before_change {
+                            RoleService::purge_cache(doc.role_id).await;
+                            RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+                        }
                     }
-                    if let Some(doc) = evt.full_document_before_change {
-                        RoleService::purge_cache(doc.role_id).await;
-                        RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
-                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
         spawn_watcher(
             repo.quarantines.clone(),
@@ -214,49 +228,64 @@ impl MongoDB {
                     _ => {}
                 }
             },
+            token.clone(),
         )
         .await?;
-        spawn_watcher(repo.messages.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                        match doc.message_type {
-                            MessageEnum::Role => {
-                                RoleMessageService::purge_cache(doc.guild_id).await
-                            }
-                            MessageEnum::Status => {
-                                StatusMessageService::purge_cache(doc.guild_id).await
-                            }
-                        };
+        spawn_watcher(
+            repo.messages.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                            match doc.message_type {
+                                MessageEnum::Role => {
+                                    RoleMessageService::purge_cache(doc.guild_id).await
+                                }
+                                MessageEnum::Status => {
+                                    StatusMessageService::purge_cache(doc.guild_id).await
+                                }
+                            };
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
-        spawn_watcher(repo.ai_prompts.clone(), options, |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                        AiService::purge_prompt_cache(doc.user_id).await;
+        spawn_watcher(
+            repo.ai_prompts.clone(),
+            options,
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                            AiService::purge_prompt_cache(doc.user_id).await;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
 
         let weak = Arc::downgrade(&repo);
         tokio::spawn(async move {
+            let token = shutdown::get_token();
             let mut interval = time::interval(Duration::from_secs(30));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 if let Some(db) = weak.upgrade() {
                     let ok = db
                         .client()
