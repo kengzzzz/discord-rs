@@ -16,7 +16,7 @@ use crate::configs::Reaction;
 const COLOR: u32 = 0xF1C40F;
 const URL: &str = "https://github.com/kengzzzz/discord-rs";
 
-fn format_time(s: &str) -> String {
+pub(crate) fn format_time(s: &str) -> String {
     if let Ok(t) = chrono::DateTime::parse_from_rfc3339(s) {
         format!("<t:{}:R>", t.timestamp())
     } else {
@@ -24,7 +24,7 @@ fn format_time(s: &str) -> String {
     }
 }
 
-fn title_case(s: &str) -> String {
+pub(crate) fn title_case(s: &str) -> String {
     let mut out = String::new();
     for (i, part) in s.split_whitespace().enumerate() {
         if i > 0 {
@@ -69,7 +69,7 @@ async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::R
     Ok(field)
 }
 
-async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
+pub(crate) async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
     let data = api::steel_path(ctx.reqwest.as_ref()).await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
@@ -153,28 +153,4 @@ pub async fn status_embed(
 
     let embed = builder.footer(footer).build();
     Ok((embed, is_umbra))
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_base_url(url: &str) {
-    api::set_base_url(url);
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn title_case_test(s: &str) -> String {
-    title_case(s)
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn format_time_test(s: &str) -> String {
-    format_time(s)
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn steel_path_field_test() -> anyhow::Result<(EmbedField, bool)> {
-    steel_path_field(Arc::new(crate::context::Context::test().await)).await
 }

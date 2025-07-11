@@ -203,7 +203,7 @@ impl BuildService {
         results
     }
 
-    fn sanitize_item_name(s: &str) -> String {
+    pub(crate) fn sanitize_item_name(s: &str) -> String {
         s.to_lowercase().replace(' ', "-").replace('&', "%26")
     }
 
@@ -303,12 +303,6 @@ impl BuildService {
                 Ok(vec![Self::build_error_embed(guild)?])
             }
         }
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn sanitize_item_name_test(s: &str) -> String {
-        Self::sanitize_item_name(s)
     }
 
     #[cfg(test)]

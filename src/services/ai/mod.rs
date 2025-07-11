@@ -14,7 +14,7 @@ use crate::{configs::google::GOOGLE_CONFIGS, context::Context, services::http::H
 use std::sync::Arc;
 
 mod client;
-mod history;
+pub(crate) mod history;
 
 #[cfg(test)]
 static GENERATE_OVERRIDE: SyncOnceCell<
@@ -32,32 +32,10 @@ const INLINE_LIMIT: u64 = 20 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ChatEntry {
-    role: String,
-    text: String,
+    pub role: String,
+    pub text: String,
     #[serde(default)]
-    attachments: Vec<String>,
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn new_entry(role: &str, text: &str) -> ChatEntry {
-    ChatEntry {
-        role: role.to_string(),
-        text: text.to_string(),
-        attachments: Vec::new(),
-    }
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn entry_role(e: &ChatEntry) -> &str {
-    &e.role
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn entry_text(e: &ChatEntry) -> &str {
-    &e.text
+    pub attachments: Vec<String>,
 }
 
 pub struct AiService;
@@ -236,22 +214,4 @@ where
     F: Fn(&[ChatEntry]) -> String + Send + Sync + 'static,
 {
     let _ = SUMMARIZE_OVERRIDE.set(Box::new(f));
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn load_history_test(user: Id<UserMarker>) -> Vec<ChatEntry> {
-    hist::load_history_test(user).await
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn set_history_test(user: Id<UserMarker>, histv: Vec<ChatEntry>) {
-    hist::set_history_test(user, histv).await;
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn get_prompt_test(user: Id<UserMarker>) -> Option<String> {
-    hist::get_prompt_test(user).await
 }

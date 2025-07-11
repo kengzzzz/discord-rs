@@ -31,7 +31,7 @@ async fn prompt_key(user: Id<UserMarker>) -> String {
     format!("{CACHE_PREFIX}:ai:prompt:{}", user.get())
 }
 
-pub(super) async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
+pub(crate) async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
     #[cfg(test)]
     {
         return HISTORY_STORE
@@ -48,7 +48,7 @@ pub(super) async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
     }
 }
 
-pub(super) async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
+pub(crate) async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
     #[cfg(test)]
     {
         HISTORY_STORE
@@ -63,7 +63,7 @@ pub(super) async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
     }
 }
 
-pub(super) async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
+pub(crate) async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
     #[cfg(test)]
     {
         let _ = ctx; // silence unused
@@ -92,7 +92,7 @@ pub(super) async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Optio
     }
 }
 
-pub(super) async fn clear_history(user: Id<UserMarker>) {
+pub(crate) async fn clear_history(user: Id<UserMarker>) {
     #[cfg(test)]
     {
         HISTORY_STORE.write().await.remove(&user.get());
@@ -104,7 +104,7 @@ pub(super) async fn clear_history(user: Id<UserMarker>) {
     }
 }
 
-pub(super) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
+pub(crate) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
     #[cfg(test)]
     {
         let _ = &ctx;
@@ -130,7 +130,7 @@ pub(super) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: 
     }
 }
 
-pub(super) async fn purge_prompt_cache(user_id: u64) {
+pub(crate) async fn purge_prompt_cache(user_id: u64) {
     #[cfg(test)]
     {
         PROMPT_STORE.write().await.remove(&user_id);
@@ -140,24 +140,4 @@ pub(super) async fn purge_prompt_cache(user_id: u64) {
         let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
         redis_delete(&key).await;
     }
-}
-
-#[cfg(test)]
-pub(super) async fn load_history_test(user: Id<UserMarker>) -> Vec<ChatEntry> {
-    HISTORY_STORE
-        .read()
-        .await
-        .get(&user.get())
-        .cloned()
-        .unwrap_or(Vec::with_capacity(21))
-}
-
-#[cfg(test)]
-pub(super) async fn set_history_test(user: Id<UserMarker>, hist: Vec<ChatEntry>) {
-    HISTORY_STORE.write().await.insert(user.get(), hist);
-}
-
-#[cfg(test)]
-pub(super) async fn get_prompt_test(user: Id<UserMarker>) -> Option<String> {
-    PROMPT_STORE.read().await.get(&user.get()).cloned()
 }

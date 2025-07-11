@@ -7,7 +7,7 @@ async fn test_build_sanitize_and_search() {
         ("Serration".to_string(), "serration".to_string()),
     ]);
 
-    let sanitized = BuildService::sanitize_item_name_test("Soma Prime & Burst");
+    let sanitized = BuildService::sanitize_item_name("Soma Prime & Burst");
     assert_eq!(sanitized, "soma-prime-%26-burst");
 
     let results = BuildService::search("se");

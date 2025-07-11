@@ -30,7 +30,7 @@ pub struct IntroDetails {
     pub clan: Option<String>,
 }
 
-fn value_of<'a>(data: &'a ModalInteractionData, id: &str) -> Option<&'a str> {
+pub(crate) fn value_of<'a>(data: &'a ModalInteractionData, id: &str) -> Option<&'a str> {
     for row in &data.components {
         for comp in &row.components {
             if comp.custom_id == id {
@@ -41,7 +41,7 @@ fn value_of<'a>(data: &'a ModalInteractionData, id: &str) -> Option<&'a str> {
     None
 }
 
-fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
+pub(crate) fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
     let name = value_of(data, "name")?.trim().to_owned();
     if name.is_empty() {
         return None;

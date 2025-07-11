@@ -23,7 +23,7 @@ pub struct NotificationService;
 static HANDLES: Lazy<RwLock<HashMap<u64, Vec<JoinHandle<()>>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-fn next_monday_duration() -> Duration {
+pub(crate) fn next_monday_duration() -> Duration {
     let now = Utc::now();
     let weekday = now.weekday().number_from_monday();
     let days = if weekday == 1 { 7 } else { 8 - weekday } as i64;
@@ -86,11 +86,6 @@ fn notify_umbra_loop(
 }
 
 impl NotificationService {
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub fn next_monday_duration_test() -> Duration {
-        next_monday_duration()
-    }
     async fn init_for_channel(
         ctx: Arc<Context>,
         ch: Channel,

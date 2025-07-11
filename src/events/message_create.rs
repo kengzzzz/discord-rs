@@ -44,7 +44,7 @@ pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
     list
 }
 
-fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
+pub(crate) fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
     let re = BOT_MENTION_RE.get_or_init(|| {
         let id = id.get();
         let pattern = format!(r"<@!?(?:{id})>");
