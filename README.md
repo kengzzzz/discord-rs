@@ -82,3 +82,7 @@ cargo build --release
 ```
 
 Make sure the required environment variables are available in your shell when running the binary directly.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
