@@ -3,6 +3,8 @@ mod build_market_tests;
 mod health_service_tests;
 mod intro_service_tests;
 mod message_create_tests;
+mod mock_db;
 mod mock_http;
 mod utils_macros_tests;
 mod warframe_notification_tests;
+mod watcher_session_tests;

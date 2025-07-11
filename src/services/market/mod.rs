@@ -34,7 +34,7 @@ use twilight_util::builder::{
 use crate::{context::Context, utils::embed::footer_with_icon};
 use std::sync::Arc;
 
-pub use session::MarketSession;
+pub use session::{MarketSession, OrderInfo};
 const COLOR: u32 = 0xF1C40F;
 const REDIS_KEY: &str = "discord-bot:market-items";
 const UPDATE_SECS: u64 = 60 * 60;
