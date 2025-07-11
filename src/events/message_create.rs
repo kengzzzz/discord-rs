@@ -1,6 +1,8 @@
+use once_cell::sync::OnceCell;
+use regex::Regex;
 use twilight_model::{
     channel::{Attachment, Message, message::MessageType},
-    id::Id,
+    id::{Id, marker::UserMarker},
 };
 
 use crate::{
@@ -29,6 +31,8 @@ pub(crate) fn build_ai_input(content: &str, referenced: Option<&str>) -> String 
 #[cfg_attr(test, allow(dead_code))]
 const MAX_ATTACHMENTS: usize = 5;
 
+static BOT_MENTION_RE: OnceCell<Regex> = OnceCell::new();
+
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
     let mut list = message.attachments.clone();
@@ -37,6 +41,16 @@ pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
     }
     list.truncate(MAX_ATTACHMENTS);
     list
+}
+
+fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
+    let re = BOT_MENTION_RE.get_or_init(|| {
+        let id = id.get();
+        let pattern = format!(r"<@!?(?:{id})>");
+        Regex::new(&pattern).expect("failed to compile bot mention regex")
+    });
+
+    re.replace_all(raw, "").into_owned()
 }
 
 pub async fn handle(message: Message) {
@@ -100,12 +114,9 @@ pub async fn handle(message: Message) {
     }
 
     if let Some(user) = &CACHE.current_user() {
-        let bot_id = user.id;
-        if message.mentions.iter().any(|m| m.id == bot_id) {
-            let mention1 = format!("<@{}>", bot_id.get());
-            let mention2 = format!("<@!{}>", bot_id.get());
-            let mut content = message.content.replace(&mention1, "");
-            content = content.replace(&mention2, "");
+        if message.mentions.iter().any(|m| m.id == user.id) {
+            let _ = HTTP.create_typing_trigger(message.channel_id).await;
+            let content = strip_mention(&message.content, user.id);
             let ref_text = message
                 .referenced_message
                 .as_deref()
