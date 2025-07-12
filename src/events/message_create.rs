@@ -6,7 +6,7 @@ use twilight_model::{
 };
 
 use crate::{
-    configs::discord::{CACHE, HTTP},
+    context::Context,
     dbs::mongo::{channel::ChannelEnum, role::RoleEnum},
     services::{
         ai::AiService, broadcast::BroadcastService, channel::ChannelService, role::RoleService,
@@ -14,6 +14,7 @@ use crate::{
     },
     utils::embed,
 };
+use std::sync::Arc;
 
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn build_ai_input(content: &str, referenced: Option<&str>) -> String {
@@ -43,7 +44,7 @@ pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
     list
 }
 
-fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
+pub(crate) fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
     let re = BOT_MENTION_RE.get_or_init(|| {
         let id = id.get();
         let pattern = format!(r"<@!?(?:{id})>");
@@ -53,7 +54,7 @@ fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
     re.replace_all(raw, "").into_owned()
 }
 
-pub async fn handle(message: Message) {
+pub async fn handle(ctx: Arc<Context>, message: Message) {
     if message.author.bot
         || message.author.system.unwrap_or(false)
         || (message.kind != MessageType::Regular && message.kind != MessageType::Reply)
@@ -65,21 +66,26 @@ pub async fn handle(message: Message) {
         return;
     };
 
-    let q_role = RoleService::get_by_type(guild_id.get(), &RoleEnum::Quarantine).await;
-    let q_channel = ChannelService::get_by_type(guild_id.get(), &ChannelEnum::Quarantine).await;
+    let q_role = RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await;
+    let q_channel =
+        ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Quarantine).await;
 
     if let (Some(_), Some(channel)) = (q_role, q_channel) {
-        if SpamService::is_quarantined(guild_id.get(), message.author.id.get()).await {
-            let _ = HTTP.delete_message(message.channel_id, message.id).await;
+        if SpamService::is_quarantined(ctx.clone(), guild_id.get(), message.author.id.get()).await {
+            let _ = ctx
+                .http
+                .delete_message(message.channel_id, message.id)
+                .await;
             if let Some(token) =
-                SpamService::get_token(guild_id.get(), message.author.id.get()).await
+                SpamService::get_token(ctx.clone(), guild_id.get(), message.author.id.get()).await
             {
-                if let Some(guild_ref) = CACHE.guild(guild_id) {
+                if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                     if let Ok(embed) =
                         embed::quarantine_reminder_embed(&guild_ref, channel.channel_id, &token)
                     {
                         let channel_id = Id::new(channel.channel_id);
-                        let _ = HTTP
+                        let _ = ctx
+                            .http
                             .create_message(channel_id)
                             .content(&format!("<@{}>", message.author.id))
                             .embeds(&[embed])
@@ -88,13 +94,16 @@ pub async fn handle(message: Message) {
                 }
             }
             return;
-        } else if let Some(token) = SpamService::log_message(guild_id.get(), &message).await {
-            if let Some(guild_ref) = CACHE.guild(guild_id) {
+        } else if let Some(token) =
+            SpamService::log_message(ctx.clone(), guild_id.get(), &message).await
+        {
+            if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 if let Ok(embeds) =
                     embed::quarantine_embed(&guild_ref, &message, channel.channel_id, &token)
                 {
                     let channel_id = Id::new(channel.channel_id);
-                    let _ = HTTP
+                    let _ = ctx
+                        .http
                         .create_message(channel_id)
                         .content(&format!("<@{}>", message.author.id))
                         .embeds(&embeds)
@@ -102,20 +111,20 @@ pub async fn handle(message: Message) {
                 }
             }
 
-            SpamService::quarantine_member(guild_id, message.author.id, &token).await;
+            SpamService::quarantine_member(ctx.clone(), guild_id, message.author.id, &token).await;
             return;
         }
     }
 
-    for channel in ChannelService::get(message.channel_id.get()).await {
+    for channel in ChannelService::get(ctx.clone(), message.channel_id.get()).await {
         if channel.channel_type == ChannelEnum::Broadcast {
-            BroadcastService::handle(&message).await;
+            BroadcastService::handle(ctx.clone(), &message).await;
         }
     }
 
-    if let Some(user) = &CACHE.current_user() {
+    if let Some(user) = &ctx.cache.current_user() {
         if message.mentions.iter().any(|m| m.id == user.id) {
-            let _ = HTTP.create_typing_trigger(message.channel_id).await;
+            let _ = ctx.http.create_typing_trigger(message.channel_id).await;
             let content = strip_mention(&message.content, user.id);
             let ref_text = message
                 .referenced_message
@@ -124,6 +133,7 @@ pub async fn handle(message: Message) {
             let input = build_ai_input(&content, ref_text);
             let attachments = collect_attachments(&message);
             if let Ok(reply) = AiService::handle_interaction(
+                ctx.clone(),
                 message.author.id,
                 &message.author.name,
                 &input,
@@ -132,7 +142,8 @@ pub async fn handle(message: Message) {
             .await
             {
                 if let Ok(embeds) = embed::ai_embeds(&reply) {
-                    let _ = HTTP
+                    let _ = ctx
+                        .http
                         .create_message(message.channel_id)
                         .embeds(&embeds)
                         .await;

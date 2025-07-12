@@ -3,23 +3,26 @@ use discord_bot::{
         admin::AdminCommand, ai::AiCommand, help::HelpCommand, intro::IntroCommand,
         ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
     },
-    configs::discord::{CACHE, DISCORD_CONFIGS, HTTP},
+    configs::discord::DISCORD_CONFIGS,
+    context::Context,
     events::{
         interaction_create, member_add, member_remove, message_create, message_delete,
         reaction_add, reaction_remove, ready,
     },
-    services::health::HealthService,
+    services::{health::HealthService, shutdown},
 };
 use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
 use twilight_gateway::{Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt as _};
 use twilight_interactions::command::CreateCommand;
 use twilight_model::guild::Permissions;
 
+const EVENT_CONCURRENCY: usize = 50;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-
     let token = DISCORD_CONFIGS.discord_token.clone();
 
     let mut shard = Shard::new(
@@ -32,18 +35,23 @@ async fn main() -> anyhow::Result<()> {
             | Intents::MESSAGE_CONTENT,
     );
 
-    let shutdown_notify = Arc::new(Notify::new());
-    let shutdown_clone = shutdown_notify.clone();
+    let shutdown_token = CancellationToken::new();
+    shutdown::set_token(shutdown_token.clone());
+
+    let ctx = Arc::new(Context::new().await?);
+    let event_semaphore = Arc::new(Semaphore::new(EVENT_CONCURRENCY));
+
+    let shutdown_clone = shutdown_token.clone();
     HealthService::spawn(async move {
-        shutdown_clone.notified().await;
+        shutdown_clone.cancelled().await;
     });
 
-    let notify_clone = shutdown_notify.clone();
+    let token_clone = shutdown_token.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("failed to install CTRL+C handler");
-        notify_clone.notify_waiters();
+        token_clone.cancel();
     });
 
     let mut admin_commands = AdminCommand::create_command();
@@ -65,15 +73,15 @@ async fn main() -> anyhow::Result<()> {
         help_command.into(),
     ];
 
-    let application = HTTP.current_user_application().await?.model().await?;
-    let interaction_client = HTTP.interaction(application.id);
+    let application = ctx.http.current_user_application().await?.model().await?;
+    let interaction_client = ctx.http.interaction(application.id);
     interaction_client.set_global_commands(&commands).await?;
 
     let mut failure_count = 0usize;
 
     loop {
         tokio::select! {
-            _ = shutdown_notify.notified() => {
+             _ = shutdown_token.cancelled() => {
                 break;
             }
             item = shard.next_event(EventTypeFlags::all()) => {
@@ -88,8 +96,14 @@ async fn main() -> anyhow::Result<()> {
                 };
 
                 failure_count = 0;
-                CACHE.update(&event);
-                tokio::spawn(handle_event(event));
+                ctx.cache.update(&event);
+                let ctx_clone = ctx.clone();
+                let sem = event_semaphore.clone();
+                let permit = sem.acquire_owned().await.expect("semaphore closed");
+                tokio::spawn(async move {
+                    let _permit = permit;
+                    handle_event(ctx_clone, event).await;
+                });
                 HealthService::set_discord(shard.state().is_identified());
             }
         }
@@ -101,17 +115,19 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_event(event: Event) {
+async fn handle_event(ctx: Arc<Context>, event: Event) {
     match event {
-        Event::MessageCreate(r#box) => message_create::handle((*r#box).0).await,
-        Event::InteractionCreate(r#box) => interaction_create::handle((*r#box).0).await,
-        Event::Ready(r#box) => ready::handle(*r#box).await,
-        Event::MemberAdd(r#box) => member_add::handle(*r#box).await,
-        Event::MemberRemove(event) => member_remove::handle(event).await,
-        Event::ReactionAdd(r#box) => reaction_add::handle(*r#box).await,
-        Event::ReactionRemove(r#box) => reaction_remove::handle(*r#box).await,
-        Event::MessageDelete(event) => message_delete::handle_single(event).await,
-        Event::MessageDeleteBulk(event) => message_delete::handle_bulk(event).await,
+        Event::MessageCreate(r#box) => message_create::handle(ctx.clone(), (*r#box).0).await,
+        Event::InteractionCreate(r#box) => {
+            interaction_create::handle(ctx.clone(), (*r#box).0).await
+        }
+        Event::Ready(r#box) => ready::handle(ctx.clone(), *r#box).await,
+        Event::MemberAdd(r#box) => member_add::handle(ctx.clone(), *r#box).await,
+        Event::MemberRemove(event) => member_remove::handle(ctx.clone(), event).await,
+        Event::ReactionAdd(r#box) => reaction_add::handle(ctx.clone(), *r#box).await,
+        Event::ReactionRemove(r#box) => reaction_remove::handle(ctx.clone(), *r#box).await,
+        Event::MessageDelete(event) => message_delete::handle_single(ctx.clone(), event).await,
+        Event::MessageDeleteBulk(event) => message_delete::handle_bulk(ctx, event).await,
         _ => {}
     }
 }

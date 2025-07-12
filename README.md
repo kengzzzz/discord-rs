@@ -62,6 +62,14 @@ docker-compose up
 
 The bot source is mounted into the container and `cargo watch -x run` keeps it running whenever files change.
 
+## Architecture
+
+Shared services such as the Discord HTTP client, reqwest client, in-memory
+cache, MongoDB connection and Redis pool are bundled into a
+[`Context`](src/context.rs) struct. Create a `Context` when the bot starts and
+pass `Arc<Context>` references to tasks and handlers. This avoids global state
+and makes testing easier by allowing mocked services.
+
 ## Production
 
 To build a production image and run it:
@@ -82,3 +90,7 @@ cargo build --release
 ```
 
 Make sure the required environment variables are available in your shell when running the binary directly.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

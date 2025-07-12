@@ -1,11 +1,10 @@
-FROM rust:alpine AS dev
+FROM rust:alpine
                                                   
 RUN apk add --no-cache \
     pkgconf \
     openssl-dev \
     openssl-libs-static \
-    build-base \
-    musl-dev
+    build-base 
 
 WORKDIR /usr/src/discord-bot
 
@@ -13,10 +12,6 @@ RUN cargo install cargo-watch
 
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() { println!(\"hello\"); }" > src/main.rs
-RUN cargo build --release && rm -rf target/release/deps
+RUN cargo check
 
-COPY src ./src
-RUN cargo build --release
 EXPOSE 8080
-
-ENTRYPOINT ["sh", "-c", "cargo watch -x run"]

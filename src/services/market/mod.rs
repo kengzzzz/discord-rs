@@ -1,19 +1,24 @@
+mod client;
+mod session;
+
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::{
-        RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use tokio::sync::RwLock;
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
     application::interaction::{Interaction, message_component::MessageComponentInteractionData},
-    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
-    channel::message::{Embed, embed::EmbedField},
+    channel::message::{
+        Embed,
+        component::{ActionRow, Button, ButtonStyle, Component},
+        embed::EmbedField,
+    },
     http::interaction::{InteractionResponse, InteractionResponseType},
     id::{
         Id,
@@ -25,15 +30,10 @@ use twilight_util::builder::{
     embed::{EmbedBuilder, EmbedFieldBuilder},
 };
 
-use crate::{
-    configs::discord::{CACHE, HTTP},
-    dbs::redis::{redis_get, redis_set},
-    services::http::HttpService,
-    utils::embed::footer_with_icon,
-};
+use crate::{context::Context, utils::embed::footer_with_icon};
+use std::sync::Arc;
 
-const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
-const ITEM_URL: &str = "https://warframe.market/items/";
+pub use session::{MarketSession, OrderInfo};
 const COLOR: u32 = 0xF1C40F;
 const REDIS_KEY: &str = "discord-bot:market-items";
 const UPDATE_SECS: u64 = 60 * 60;
@@ -54,48 +54,6 @@ static ITEMS: Lazy<RwLock<Vec<ItemEntry>>> = Lazy::new(|| RwLock::new(Vec::new()
 static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 static SESSIONS: Lazy<RwLock<HashMap<Id<MessageMarker>, MarketSession>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
-
-#[derive(Deserialize)]
-struct ItemsPayload {
-    items: Vec<MarketItem>,
-}
-
-#[derive(Deserialize)]
-struct ItemsResponse {
-    payload: ItemsPayload,
-}
-
-#[derive(Deserialize)]
-struct MarketItem {
-    item_name: String,
-    url_name: String,
-}
-
-#[derive(Deserialize)]
-struct OrdersPayload {
-    orders: Vec<Order>,
-}
-
-#[derive(Deserialize)]
-struct OrdersResponse {
-    payload: OrdersPayload,
-}
-
-#[derive(Deserialize)]
-struct OrderUser {
-    ingame_name: String,
-    status: String,
-}
-
-#[derive(Deserialize)]
-struct Order {
-    platinum: u32,
-    quantity: u32,
-    order_type: String,
-    user: OrderUser,
-    #[serde(default)]
-    mod_rank: Option<u8>,
-}
 
 #[derive(Clone, Copy)]
 pub enum MarketKind {
@@ -126,57 +84,12 @@ impl MarketKind {
     }
 }
 
-async fn load_from_redis() -> Option<Vec<ItemEntry>> {
-    if let Some(stored) = redis_get::<Vec<StoredEntry>>(REDIS_KEY).await {
-        let entries = stored
-            .into_iter()
-            .map(|s| ItemEntry {
-                lower: s.name.to_lowercase(),
-                name: s.name,
-                url: s.url,
-            })
-            .collect();
-        return Some(entries);
-    }
-    None
-}
-
-async fn update_items() -> anyhow::Result<()> {
-    let resp = HttpService::get(ITEMS_URL).await?;
-    let data: ItemsResponse = resp.json().await?;
-    let mut stored = Vec::new();
-    let mut items = Vec::new();
-    for item in data.payload.items {
-        stored.push(StoredEntry {
-            name: item.item_name.clone(),
-            url: item.url_name.clone(),
-        });
-        items.push(ItemEntry {
-            lower: item.item_name.to_lowercase(),
-            name: item.item_name,
-            url: item.url_name,
-        });
-    }
-    stored.sort_by(|a, b| a.name.cmp(&b.name));
-    items.sort_by(|a, b| a.name.cmp(&b.name));
-    redis_set(REDIS_KEY, &stored).await;
-    *ITEMS.write().expect("ITEMS lock poisoned") = items;
-    LAST_UPDATE.store(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        Ordering::Relaxed,
-    );
-    Ok(())
-}
-
 pub struct MarketService;
 
 impl MarketService {
-    pub async fn init() {
-        if let Some(data) = load_from_redis().await {
-            *ITEMS.write().expect("ITEMS lock poisoned") = data;
+    pub async fn init(ctx: Arc<Context>) {
+        if let Some(data) = client::load_from_redis(REDIS_KEY).await {
+            *ITEMS.write().await = data;
             LAST_UPDATE.store(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -184,22 +97,32 @@ impl MarketService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = update_items().await {
+        } else if let Err(e) =
+            client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+        {
             tracing::warn!(error = %e, "failed to update market items");
         }
-        tokio::spawn(async {
+        let ctx_clone = ctx.clone();
+        tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(UPDATE_SECS)).await;
-                if let Err(e) = update_items().await {
+                if let Err(e) = client::update_items(
+                    ctx_clone.reqwest.as_ref(),
+                    REDIS_KEY,
+                    &ITEMS,
+                    &LAST_UPDATE,
+                )
+                .await
+                {
                     tracing::warn!(error = %e, "failed to update market items");
                 }
             }
         });
     }
 
-    pub fn search(prefix: &str) -> Vec<String> {
+    pub async fn search(prefix: &str) -> Vec<String> {
         let p = prefix.to_lowercase();
-        let items = ITEMS.read().expect("ITEMS lock poisoned");
+        let items = ITEMS.read().await;
         items
             .iter()
             .filter(|item| item.lower.starts_with(&p))
@@ -208,79 +131,39 @@ impl MarketService {
             .collect()
     }
 
-    async fn maybe_refresh() {
+    async fn maybe_refresh(ctx: Arc<Context>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS {
-            if let Err(e) = update_items().await {
+            if let Err(e) =
+                client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+            {
                 tracing::warn!(error = %e, "failed to update market items");
             }
         }
     }
 
-    pub async fn search_with_update(prefix: &str) -> Vec<String> {
-        let mut results = Self::search(prefix);
+    pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
+        let mut results = Self::search(prefix).await;
         if results.is_empty() {
-            Self::maybe_refresh().await;
-            results = Self::search(prefix);
+            Self::maybe_refresh(ctx.clone()).await;
+            results = Self::search(prefix).await;
         }
         results
     }
 
-    fn find_url(name: &str) -> Option<String> {
+    async fn find_url(name: &str) -> Option<String> {
         let lower = name.to_lowercase();
-        let items = ITEMS.read().expect("ITEMS lock poisoned");
+        let items = ITEMS.read().await;
         for item in items.iter() {
             if item.lower == lower {
                 return Some(item.url.clone());
             }
         }
         None
-    }
-
-    async fn fetch_orders(url: &str) -> anyhow::Result<Vec<Order>> {
-        let resp =
-            HttpService::get(format!("https://api.warframe.market/v1/items/{url}/orders")).await?;
-        let data: OrdersResponse = resp.json().await?;
-        Ok(data.payload.orders)
-    }
-
-    async fn fetch_orders_map(
-        url: &str,
-        kind: &MarketKind,
-    ) -> anyhow::Result<(BTreeMap<u8, Vec<OrderInfo>>, Option<u8>)> {
-        let orders = Self::fetch_orders(url).await?;
-        let mut by_rank: BTreeMap<u8, Vec<OrderInfo>> = BTreeMap::new();
-        let mut max_rank: Option<u8> = None;
-        for o in orders {
-            if o.user.status != "ingame" || o.order_type == kind.action() {
-                continue;
-            }
-            let rank = o.mod_rank.unwrap_or(0);
-            if let Some(m) = max_rank {
-                if rank > m {
-                    max_rank = Some(rank);
-                }
-            } else if o.mod_rank.is_some() {
-                max_rank = Some(rank);
-            }
-            by_rank.entry(rank).or_default().push(OrderInfo {
-                quantity: o.quantity,
-                platinum: o.platinum,
-                ign: o.user.ingame_name,
-            });
-        }
-        for vec in by_rank.values_mut() {
-            if kind.target_type() == "sell" {
-                vec.sort_by_key(|o| o.platinum);
-            } else {
-                vec.sort_by(|a, b| b.platinum.cmp(&a.platinum));
-            }
-        }
-        Ok((by_rank, max_rank))
     }
 
     pub fn not_found_embed(
@@ -308,7 +191,7 @@ impl MarketService {
     }
 
     fn build_fields(
-        orders: &[OrderInfo],
+        orders: &[session::OrderInfo],
         item: &str,
         kind: &MarketKind,
         rank: Option<u8>,
@@ -320,8 +203,8 @@ impl MarketService {
                 let rank_text = rank.map_or(String::new(), |r| format!(" [ Item Rank : {r} ]"));
                 EmbedFieldBuilder::new(
                     format!(
-                        "Quantity : {} | Price : {} platinum.{}",
-                        o.quantity, o.platinum, rank_text
+                        "Quantity : {} | Price : {} platinum.{rank_text}",
+                        o.quantity, o.platinum
                     ),
                     format!(
                         "```/w {} Hi! I want to {}: \"{}\" for {} platinum. (warframe.market)```",
@@ -342,7 +225,7 @@ impl MarketService {
         url: &str,
         kind: &MarketKind,
         rank: Option<u8>,
-        orders: Vec<OrderInfo>,
+        orders: Vec<session::OrderInfo>,
     ) -> anyhow::Result<Embed> {
         let mut footer = footer_with_icon(guild)?;
         footer.text = if let Some(r) = rank {
@@ -355,10 +238,11 @@ impl MarketService {
         } else {
             format!("{} {}", kind.label(), item)
         };
-        let mut builder = EmbedBuilder::new()
-            .color(COLOR)
-            .title(title)
-            .url(format!("{ITEM_URL}{url}"));
+        let mut builder = EmbedBuilder::new().color(COLOR).title(title).url(format!(
+            "{}{}",
+            client::ITEM_URL,
+            url
+        ));
         for field in Self::build_fields(&orders, item, kind, rank) {
             builder = builder.field(field);
         }
@@ -382,13 +266,14 @@ impl MarketService {
     }
 
     pub async fn create_session(
+        ctx: Arc<Context>,
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Option<MarketSession>> {
-        let Some(url) = Self::find_url(item) else {
+        let Some(url) = Self::find_url(item).await else {
             return Ok(None);
         };
-        match Self::fetch_orders_map(&url, &kind).await {
+        match client::fetch_orders_map(ctx.reqwest.as_ref(), &url, &kind).await {
             Ok((orders, max_rank)) => {
                 if orders.is_empty() {
                     return Ok(None);
@@ -465,29 +350,22 @@ impl MarketService {
         })]
     }
 
-    pub fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .insert(message_id, session);
+    pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        SESSIONS.write().await.insert(message_id, session);
     }
 
-    fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .remove(&message_id)
+    async fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
+        SESSIONS.write().await.remove(&message_id)
     }
 
-    fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .insert(message_id, session);
+    async fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        SESSIONS.write().await.insert(message_id, session);
     }
 
-    async fn refresh(session: &mut MarketSession) {
-        if let Ok((orders, max)) = Self::fetch_orders_map(&session.url, &session.kind).await {
+    async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
+        if let Ok((orders, max)) =
+            client::fetch_orders_map(ctx.reqwest.as_ref(), &session.url, &session.kind).await
+        {
             if !orders.is_empty() {
                 session.orders = orders;
                 session.max_rank = max;
@@ -497,12 +375,16 @@ impl MarketService {
         }
     }
 
-    pub async fn handle_component(interaction: Interaction, data: MessageComponentInteractionData) {
+    pub async fn handle_component(
+        ctx: Arc<Context>,
+        interaction: Interaction,
+        data: MessageComponentInteractionData,
+    ) {
         let Some(message) = interaction.message else {
             return;
         };
         let message_id = message.id;
-        let Some(mut session) = Self::get_session_mut(message_id) else {
+        let Some(mut session) = Self::get_session_mut(message_id).await else {
             return;
         };
 
@@ -532,19 +414,19 @@ impl MarketService {
                 }
             }
             "market_refresh" => {
-                Self::refresh(&mut session).await;
+                Self::refresh(ctx.clone(), &mut session).await;
             }
             _ => {}
         }
 
-        if let Some(guild_ref) = interaction.guild_id.and_then(|id| CACHE.guild(id)) {
+        if let Some(guild_ref) = interaction.guild_id.and_then(|id| ctx.cache.guild(id)) {
             if let Ok(embed) = Self::embed_for_session(&guild_ref, &session) {
                 let components = Self::components(&session);
                 let data = InteractionResponseDataBuilder::new()
                     .embeds([embed])
                     .components(components.clone())
                     .build();
-                let http = HTTP.clone();
+                let http = ctx.http.clone();
                 let _ = http
                     .interaction(interaction.application_id)
                     .create_response(
@@ -559,26 +441,27 @@ impl MarketService {
             }
         }
 
-        Self::store_session(message_id, session);
+        Self::store_session(message_id, session).await;
     }
 
     pub async fn market_embed(
+        ctx: Arc<Context>,
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Embed> {
-        let Some(url) = Self::find_url(item) else {
+        let Some(url) = Self::find_url(item).await else {
             return Self::not_found_embed(guild);
         };
-        match Self::fetch_orders(&url).await {
+        match client::fetch_orders(ctx.reqwest.as_ref(), &url).await {
             Ok(orders) => {
-                let mut by_rank: BTreeMap<u8, Vec<OrderInfo>> = BTreeMap::new();
+                let mut by_rank: BTreeMap<u8, Vec<session::OrderInfo>> = BTreeMap::new();
                 for o in orders {
                     if o.user.status != "ingame" || o.order_type == kind.action() {
                         continue;
                     }
                     let rank = o.mod_rank.unwrap_or(0);
-                    by_rank.entry(rank).or_default().push(OrderInfo {
+                    by_rank.entry(rank).or_default().push(session::OrderInfo {
                         quantity: o.quantity,
                         platinum: o.platinum,
                         ign: o.user.ingame_name,
@@ -610,50 +493,6 @@ impl MarketService {
                 tracing::warn!(error = %e, "failed to fetch market orders");
                 Self::error_embed(guild)
             }
-        }
-    }
-}
-
-#[derive(Clone)]
-struct OrderInfo {
-    quantity: u32,
-    platinum: u32,
-    ign: String,
-}
-
-#[derive(Clone)]
-pub struct MarketSession {
-    item: String,
-    url: String,
-    kind: MarketKind,
-    orders: BTreeMap<u8, Vec<OrderInfo>>,
-    rank: u8,
-    page: usize,
-    max_rank: Option<u8>,
-}
-
-impl MarketSession {
-    fn lpage(&self) -> usize {
-        self.orders
-            .get(&self.rank)
-            .map(|v| v.len().div_ceil(5))
-            .unwrap_or(1)
-    }
-
-    fn slice(&self) -> &[OrderInfo] {
-        let start = (self.page.saturating_sub(1)) * 5;
-        let orders = self
-            .orders
-            .get(&self.rank)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        let end = start + 5;
-        if start >= orders.len() {
-            &[]
-        } else if end > orders.len() {
-            &orders[start..]
-        } else {
-            &orders[start..end]
         }
     }
 }

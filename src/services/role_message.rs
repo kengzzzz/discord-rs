@@ -5,15 +5,12 @@ use twilight_http::request::channel::reaction::RequestReactionType;
 use twilight_model::id::{Id, marker::GuildMarker};
 
 use crate::{
-    configs::{
-        CACHE_PREFIX,
-        discord::{CACHE, HTTP},
-    },
+    configs::CACHE_PREFIX,
+    context::Context,
     dbs::{
         mongo::{
             channel::ChannelEnum,
             message::{Message, MessageEnum},
-            mongodb::MongoDB,
             role::RoleEnum,
         },
         redis::{redis_delete, redis_get, redis_set},
@@ -21,18 +18,19 @@ use crate::{
     services::{channel::ChannelService, role::RoleService},
     utils::{embed, reaction::role_enum_to_emoji},
 };
+use std::sync::Arc;
 
 pub struct RoleMessageService;
 
 impl RoleMessageService {
-    pub async fn get(guild_id: u64) -> Option<Message> {
+    pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
         let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
 
         if let Some(msg) = redis_get(&redis_key).await {
             return Some(msg);
         }
 
-        if let Ok(Some(msg)) = MongoDB::get()
+        if let Ok(Some(msg)) = ctx.mongo
             .messages
             .find_one(
                 doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
@@ -46,8 +44,8 @@ impl RoleMessageService {
         None
     }
 
-    pub async fn set(guild_id: u64, channel_id: u64, message_id: u64) {
-        let _ = MongoDB::get()
+    pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
+        let _ = ctx.mongo
             .messages
             .update_one(
                 doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
@@ -61,9 +59,10 @@ impl RoleMessageService {
         redis_delete(&redis_key).await;
     }
 
-    pub async fn ensure_message(guild_id: Id<GuildMarker>) {
+    pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         let Some(channel) =
-            ChannelService::get_by_type(guild_id.get(), &ChannelEnum::UpdateRole).await
+            ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::UpdateRole)
+                .await
         else {
             return;
         };
@@ -71,8 +70,9 @@ impl RoleMessageService {
         let channel_id = Id::new(channel.channel_id);
 
         let mut existing_message = None;
-        if let Some(record) = Self::get(guild_id.get()).await {
-            if HTTP
+        if let Some(record) = Self::get(ctx.clone(), guild_id.get()).await {
+            if ctx
+                .http
                 .message(channel_id, Id::new(record.message_id))
                 .await
                 .is_ok()
@@ -89,11 +89,13 @@ impl RoleMessageService {
             RoleEnum::Eidolon,
         ];
         for role_type in roles.iter() {
-            if let Some(role) = RoleService::get_by_type(guild_id.get(), role_type).await {
+            if let Some(role) =
+                RoleService::get_by_type(ctx.clone(), guild_id.get(), role_type).await
+            {
                 if role.self_assignable {
                     if let (Some(emoji), Some(role_ref)) = (
                         role_enum_to_emoji(role_type),
-                        CACHE.role(Id::new(role.role_id)),
+                        ctx.cache.role(Id::new(role.role_id)),
                     ) {
                         info.push((role_ref.name.clone(), emoji));
                     }
@@ -103,7 +105,7 @@ impl RoleMessageService {
 
         let mut embed_opt = None;
         let mut content_opt = None;
-        if let Some(guild_ref) = CACHE.guild(guild_id) {
+        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             if let Ok(embed) = embed::role_message_embed(&guild_ref, &info) {
                 embed_opt = Some(embed);
             } else {
@@ -115,7 +117,7 @@ impl RoleMessageService {
         let content_opt = content_opt.as_ref().map(|e| *e);
 
         if let Some(msg_id) = existing_message {
-            let mut update = HTTP.update_message(channel_id, Id::new(msg_id));
+            let mut update = ctx.http.update_message(channel_id, Id::new(msg_id));
             if let Some(embed) = embed_slice {
                 update = update.embeds(Some(embed));
                 update = update.content(None);
@@ -124,18 +126,22 @@ impl RoleMessageService {
                 update = update.embeds(None);
             }
             if update.await.is_ok() {
-                let _ = HTTP.delete_all_reactions(channel_id, Id::new(msg_id)).await;
+                let _ = ctx
+                    .http
+                    .delete_all_reactions(channel_id, Id::new(msg_id))
+                    .await;
                 for (_, emoji) in &info {
                     let reaction = RequestReactionType::Unicode { name: emoji };
-                    let _ = HTTP
+                    let _ = ctx
+                        .http
                         .create_reaction(channel_id, Id::new(msg_id), &reaction)
                         .await;
                 }
-                Self::set(guild_id.get(), channel_id.get(), msg_id).await;
+                Self::set(ctx.clone(), guild_id.get(), channel_id.get(), msg_id).await;
             }
             return;
         }
-        let mut create = HTTP.create_message(channel_id);
+        let mut create = ctx.http.create_message(channel_id);
         if let Some(embed) = embed_slice {
             create = create.embeds(embed);
         } else if let Some(content) = content_opt {
@@ -146,9 +152,12 @@ impl RoleMessageService {
             if let Ok(msg) = response.model().await {
                 for (_, emoji) in &info {
                     let reaction = RequestReactionType::Unicode { name: emoji };
-                    let _ = HTTP.create_reaction(channel_id, msg.id, &reaction).await;
+                    let _ = ctx
+                        .http
+                        .create_reaction(channel_id, msg.id, &reaction)
+                        .await;
                 }
-                Self::set(guild_id.get(), channel_id.get(), msg.id.get()).await;
+                Self::set(ctx.clone(), guild_id.get(), channel_id.get(), msg.id.get()).await;
             }
         }
     }

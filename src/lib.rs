@@ -1,10 +1,13 @@
 pub mod commands;
 pub mod configs;
+pub mod context;
 pub mod dbs;
 pub mod events;
 pub mod macros;
 pub mod services;
 pub mod utils;
+pub mod warframe;
 
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests;

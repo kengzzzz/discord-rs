@@ -1,4 +1,4 @@
-use crate::events::message_create::{build_ai_input, collect_attachments};
+use crate::events::message_create::{build_ai_input, strip_mention};
 use twilight_model::{
     channel::{Attachment, Message, message::MessageType},
     id::Id,
@@ -98,15 +98,12 @@ fn test_build_ai_input() {
 }
 
 #[test]
-fn test_collect_attachments() {
-    let msg1_att = vec![dummy_attachment(1), dummy_attachment(2)];
-    let ref_att = vec![dummy_attachment(3), dummy_attachment(4)];
-    let referenced = basic_message(2, ref_att.clone(), None);
-    let msg = basic_message(1, msg1_att.clone(), Some(referenced));
-    let merged = collect_attachments(&msg);
-    assert_eq!(merged.len(), 4);
-    assert_eq!(merged[0].id.get(), 1);
-    assert_eq!(merged[1].id.get(), 2);
-    assert_eq!(merged[2].id.get(), 3);
-    assert_eq!(merged[3].id.get(), 4);
+fn test_strip_mention() {
+    use twilight_model::id::marker::UserMarker;
+    let id = Id::<UserMarker>::new(123);
+    let msg1 = format!("<@{}> hi", id.get());
+    assert_eq!(strip_mention(&msg1, id), " hi");
+
+    let msg2 = format!("hello <@!{}>", id.get());
+    assert_eq!(strip_mention(&msg2, id), "hello ");
 }

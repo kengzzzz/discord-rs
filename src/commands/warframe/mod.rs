@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::{
     application::{
@@ -12,10 +12,11 @@ use twilight_model::{
 };
 
 use crate::{
-    configs::discord::HTTP,
+    context::Context,
     handle_ephemeral,
     services::{build::BuildService, market::MarketService},
 };
+use std::sync::Arc;
 
 mod build;
 mod market;
@@ -49,25 +50,25 @@ fn extract_focused(cmd: &CommandData) -> Option<(&str, &str, &str)> {
 }
 
 impl WarframeCommand {
-    pub async fn handle(interaction: Interaction, data: CommandData) {
-        handle_ephemeral!(interaction, "WarframeCommand", {
+    pub async fn handle(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
+        handle_ephemeral!(ctx.http, interaction, "WarframeCommand", {
             let command = WarframeCommand::from_interaction(data.into())
                 .context("failed to parse command data")?;
             match command {
-                WarframeCommand::Build(cmd) => cmd.run(interaction).await?,
-                WarframeCommand::Market(cmd) => cmd.run(interaction).await?,
+                WarframeCommand::Build(cmd) => cmd.run(ctx.clone(), interaction).await?,
+                WarframeCommand::Market(cmd) => cmd.run(ctx.clone(), interaction).await?,
             }
         });
     }
 
-    pub async fn autocomplete(interaction: Interaction, data: CommandData) {
+    pub async fn autocomplete(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         if let Some((sub, name, user_input)) = extract_focused(&data) {
             let mut choices = Vec::new();
             if name == "item" {
                 let results = if sub == "build" {
-                    BuildService::search_with_update(user_input).await
+                    BuildService::search_with_update(ctx.reqwest.as_ref(), user_input).await
                 } else {
-                    MarketService::search_with_update(user_input).await
+                    MarketService::search_with_update(ctx.clone(), user_input).await
                 };
                 choices.extend(results.into_iter().map(|item| CommandOptionChoice {
                     name: item.clone(),
@@ -84,7 +85,8 @@ impl WarframeCommand {
                 }),
             };
 
-            if let Err(e) = HTTP
+            if let Err(e) = ctx
+                .http
                 .interaction(interaction.application_id)
                 .create_response(interaction.id, &interaction.token, &response)
                 .await

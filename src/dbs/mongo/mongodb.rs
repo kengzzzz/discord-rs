@@ -8,8 +8,8 @@ use mongodb::{
     },
 };
 use std::sync::Arc;
-use tokio::sync::OnceCell;
 use tokio::time::{self, Duration};
+use twilight_model::id::Id;
 
 use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
@@ -23,7 +23,8 @@ use crate::{
     },
     services::{
         ai::AiService, channel::ChannelService, health::HealthService, role::RoleService,
-        role_message::RoleMessageService, spam::SpamService, status_message::StatusMessageService,
+        role_message::RoleMessageService, shutdown, spam::SpamService,
+        status_message::StatusMessageService,
     },
 };
 
@@ -35,8 +36,6 @@ pub struct MongoDB {
     pub messages: Collection<Message>,
     pub ai_prompts: Collection<AiPrompt>,
 }
-
-static MONGO_DB: OnceCell<Arc<MongoDB>> = OnceCell::const_new();
 
 impl MongoDB {
     pub async fn init() -> anyhow::Result<Arc<Self>> {
@@ -161,45 +160,58 @@ impl MongoDB {
             .full_document_before_change(Some(FullDocumentBeforeChangeType::Required))
             .build();
 
-        spawn_watcher(repo.channels.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document {
-                        ChannelService::purge_cache(doc.channel_id).await;
-                        ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type).await;
-                        ChannelService::purge_list_cache(&doc.channel_type).await;
+        let token = shutdown::get_token();
+        spawn_watcher(
+            repo.channels.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document {
+                            ChannelService::purge_cache(doc.channel_id).await;
+                            ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type)
+                                .await;
+                            ChannelService::purge_list_cache(&doc.channel_type).await;
+                        }
+                        if let Some(doc) = evt.full_document_before_change {
+                            ChannelService::purge_cache(doc.channel_id).await;
+                            ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type)
+                                .await;
+                            ChannelService::purge_list_cache(&doc.channel_type).await;
+                        }
                     }
-                    if let Some(doc) = evt.full_document_before_change {
-                        ChannelService::purge_cache(doc.channel_id).await;
-                        ChannelService::purge_cache_by_type(doc.guild_id, &doc.channel_type).await;
-                        ChannelService::purge_list_cache(&doc.channel_type).await;
-                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
-        spawn_watcher(repo.roles.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document {
-                        RoleService::purge_cache(doc.role_id).await;
-                        RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+        spawn_watcher(
+            repo.roles.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document {
+                            RoleService::purge_cache(doc.role_id).await;
+                            RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+                        }
+                        if let Some(doc) = evt.full_document_before_change {
+                            RoleService::purge_cache(doc.role_id).await;
+                            RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
+                        }
                     }
-                    if let Some(doc) = evt.full_document_before_change {
-                        RoleService::purge_cache(doc.role_id).await;
-                        RoleService::purge_cache_by_type(doc.guild_id, &doc.role_type).await;
-                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
         spawn_watcher(
             repo.quarantines.clone(),
@@ -217,55 +229,65 @@ impl MongoDB {
                     _ => {}
                 }
             },
+            token.clone(),
         )
         .await?;
-        spawn_watcher(repo.messages.clone(), options.clone(), |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                        match doc.message_type {
-                            MessageEnum::Role => {
-                                RoleMessageService::purge_cache(doc.guild_id).await
-                            }
-                            MessageEnum::Status => {
-                                StatusMessageService::purge_cache(doc.guild_id).await
-                            }
-                        };
+        spawn_watcher(
+            repo.messages.clone(),
+            options.clone(),
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                            match doc.message_type {
+                                MessageEnum::Role => {
+                                    RoleMessageService::purge_cache(doc.guild_id).await
+                                }
+                                MessageEnum::Status => {
+                                    StatusMessageService::purge_cache(doc.guild_id).await
+                                }
+                            };
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
-        spawn_watcher(repo.ai_prompts.clone(), options, |evt| async move {
-            match evt.operation_type {
-                OperationType::Insert
-                | OperationType::Update
-                | OperationType::Replace
-                | OperationType::Delete => {
-                    if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                        AiService::purge_prompt_cache(doc.user_id).await;
+        spawn_watcher(
+            repo.ai_prompts.clone(),
+            options,
+            |evt| async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                            AiService::purge_prompt_cache(doc.user_id).await;
+                            AiService::clear_history(Id::new(doc.user_id)).await;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            },
+            token.clone(),
+        )
         .await?;
-
-        MONGO_DB
-            .set(repo.clone())
-            .map_err(|_| anyhow::anyhow!("MongoDB already initialized"))?;
-
-        HealthService::set_mongo(true);
 
         let weak = Arc::downgrade(&repo);
         tokio::spawn(async move {
+            let token = shutdown::get_token();
             let mut interval = time::interval(Duration::from_secs(30));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 if let Some(db) = weak.upgrade() {
                     let ok = db
                         .client()
@@ -283,15 +305,23 @@ impl MongoDB {
         Ok(repo)
     }
 
-    pub fn get() -> Arc<Self> {
-        Arc::clone(MONGO_DB.get().expect("MongoDB not initialized."))
+    #[cfg(test)]
+    pub async fn empty() -> Arc<Self> {
+        let client = Client::with_uri_str("mongodb://localhost:27017")
+            .await
+            .unwrap();
+        let db = client.database("test");
+        Arc::new(Self {
+            client,
+            channels: db.collection("channels"),
+            roles: db.collection("roles"),
+            quarantines: db.collection("quarantines"),
+            messages: db.collection("messages"),
+            ai_prompts: db.collection("ai_prompts"),
+        })
     }
 
     pub fn client(&self) -> &Client {
         &self.client
-    }
-
-    pub fn is_initialized() -> bool {
-        MONGO_DB.get().is_some()
     }
 }

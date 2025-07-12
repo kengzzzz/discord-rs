@@ -2,10 +2,8 @@ use twilight_http::request::channel::reaction::RequestReactionType;
 use twilight_model::{channel::Message, id::Id};
 
 use crate::{
-    configs::{
-        CACHE_PREFIX, Reaction,
-        discord::{CACHE, HTTP},
-    },
+    configs::{CACHE_PREFIX, Reaction},
+    context::Context,
     dbs::{
         mongo::channel::ChannelEnum,
         redis::{redis_delete, redis_get, redis_set_ex},
@@ -13,18 +11,19 @@ use crate::{
     services::channel::ChannelService,
     utils::embed,
 };
+use std::sync::Arc;
 
 pub struct BroadcastService;
 
 const TTL: usize = 600;
 
 impl BroadcastService {
-    pub async fn handle(message: &Message) {
+    pub async fn handle(ctx: Arc<Context>, message: &Message) {
         let Some(guild_id) = message.guild_id else {
             return;
         };
 
-        let Some(guild_ref) = CACHE.guild(guild_id) else {
+        let Some(guild_ref) = ctx.cache.guild(guild_id) else {
             return;
         };
 
@@ -33,12 +32,12 @@ impl BroadcastService {
         };
 
         let mut records = Vec::new();
-        for channel in ChannelService::list_by_type(&ChannelEnum::Broadcast).await {
+        for channel in ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Broadcast).await {
             if channel.channel_id == message.channel_id.get() {
                 continue;
             }
             let channel_id = Id::new(channel.channel_id);
-            if let Ok(resp) = HTTP.create_message(channel_id).embeds(&embeds).await {
+            if let Ok(resp) = ctx.http.create_message(channel_id).embeds(&embeds).await {
                 if let Ok(msg) = resp.model().await {
                     records.push((channel.channel_id, msg.id.get()));
                 }
@@ -51,7 +50,8 @@ impl BroadcastService {
         let emoji = RequestReactionType::Unicode {
             name: Reaction::Success.emoji(),
         };
-        let _ = HTTP
+        let _ = ctx
+            .http
             .create_reaction(message.channel_id, message.id, &emoji)
             .await;
     }
@@ -61,12 +61,12 @@ impl BroadcastService {
         redis_set_ex(&key, records, TTL).await;
     }
 
-    pub async fn delete_replicas(messages: &[(u64, u64)]) {
+    pub async fn delete_replicas(ctx: Arc<Context>, messages: &[(u64, u64)]) {
         for &(_, msg_id) in messages {
             let key = format!("{CACHE_PREFIX}:broadcast:{msg_id}");
             if let Some(list) = redis_get::<Vec<(u64, u64)>>(&key).await {
                 for (ch, m) in list {
-                    let _ = HTTP.delete_message(Id::new(ch), Id::new(m)).await;
+                    let _ = ctx.http.delete_message(Id::new(ch), Id::new(m)).await;
                 }
                 redis_delete(&key).await;
             }

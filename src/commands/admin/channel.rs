@@ -1,16 +1,17 @@
 use std::mem;
 
-use anyhow::Context;
+use anyhow::Context as _;
 use mongodb::bson::doc;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::Interaction;
 
 use crate::{
-    configs::discord::{CACHE, HTTP},
-    dbs::mongo::{channel::ChannelEnum, mongodb::MongoDB},
+    context::Context,
+    dbs::mongo::channel::ChannelEnum,
     services::{notification::NotificationService, role_message::RoleMessageService},
     utils::embed,
 };
+use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "channel", desc_localizations = "admin_channel_desc")]
@@ -31,7 +32,7 @@ fn admin_type_arg_desc() -> DescLocalizations {
 }
 
 impl AdminChannelCommand {
-    pub async fn run(&self, interaction: Interaction) -> anyhow::Result<()> {
+    pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
         let guild_id = interaction.guild_id.context("failed to parse guild_id")?;
 
         let mut interaction = interaction;
@@ -40,7 +41,7 @@ impl AdminChannelCommand {
         let channel_id = channel.id.get() as i64;
         let channel_name = channel.name.context("failed to parse channel name")?;
 
-        let db = MongoDB::get();
+        let db = ctx.mongo.clone();
 
         match self.channel_type {
             ChannelEnum::None => {
@@ -70,7 +71,7 @@ impl AdminChannelCommand {
             }
         };
 
-        if let Some(guild_ref) = CACHE.guild(guild_id) {
+        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let embed = embed::set_channel_embed(
                 &guild_ref,
                 &channel_name,
@@ -78,16 +79,17 @@ impl AdminChannelCommand {
                 self.channel_type.value(),
                 &author.name,
             )?;
-            HTTP.interaction(interaction.application_id)
+            ctx.http
+                .interaction(interaction.application_id)
                 .update_response(&interaction.token)
                 .embeds(Some(&[embed]))
                 .await?;
         }
 
         if self.channel_type == ChannelEnum::UpdateRole {
-            RoleMessageService::ensure_message(guild_id).await;
+            RoleMessageService::ensure_message(ctx.clone(), guild_id).await;
         }
-        NotificationService::reload_guild(guild_id.get()).await;
+        NotificationService::reload_guild(ctx, guild_id.get()).await;
         Ok(())
     }
 }

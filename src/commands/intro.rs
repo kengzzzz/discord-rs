@@ -1,13 +1,15 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::{Interaction, application_command::CommandData};
 use twilight_model::channel::message::component::{
     ActionRow, Component, TextInput, TextInputStyle,
 };
 
-use crate::configs::discord::CACHE;
 use crate::guild_command;
-use crate::{dbs::mongo::channel::ChannelEnum, services::channel::ChannelService};
+use crate::{
+    context::Context, dbs::mongo::channel::ChannelEnum, services::channel::ChannelService,
+};
+use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "intro", desc_localizations = "intro_desc")]
@@ -18,11 +20,11 @@ fn intro_desc() -> DescLocalizations {
 }
 
 impl IntroCommand {
-    pub async fn handle(interaction: Interaction, _data: CommandData) {
-        if let Err(e) = guild_command!(interaction, true, {
+    pub async fn handle(ctx: Arc<Context>, interaction: Interaction, _data: CommandData) {
+        if let Err(e) = guild_command!(ctx.http, interaction, true, {
             let guild_id = interaction.guild_id.context("no guild id")?;
-            let guild_ref = CACHE.guild(guild_id).context("no guild")?;
-            if ChannelService::get_by_type(guild_id.get(), &ChannelEnum::Introduction)
+            let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
+            if ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Introduction)
                 .await
                 .is_none()
             {
@@ -39,7 +41,8 @@ impl IntroCommand {
                     title: None,
                     tts: None,
                 };
-                let _ = HTTP
+                let _ = ctx
+                    .http
                     .interaction(interaction.application_id)
                     .create_response(
                         interaction.id,
@@ -122,7 +125,8 @@ impl IntroCommand {
                 data: Some(data),
             };
 
-            if let Err(e) = HTTP
+            if let Err(e) = ctx
+                .http
                 .interaction(interaction.application_id)
                 .create_response(interaction.id, &interaction.token, &response)
                 .await

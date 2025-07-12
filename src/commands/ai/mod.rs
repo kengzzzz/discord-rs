@@ -1,8 +1,9 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::{Interaction, application_command::CommandData};
 
-use crate::{configs::discord::HTTP, defer_interaction, services::ai::AiService, utils::embed};
+use crate::{context::Context, defer_interaction, services::ai::AiService, utils::embed};
+use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "ai", desc_localizations = "ai_desc")]
@@ -64,17 +65,18 @@ fn clear_desc() -> DescLocalizations {
 }
 
 impl AiCommand {
-    pub async fn handle(interaction: Interaction, data: CommandData) {
+    pub async fn handle(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         if let Err(e) = async {
-            defer_interaction!(HTTP, &interaction, true).await?;
+            defer_interaction!(ctx.http, &interaction, true).await?;
             let command =
                 AiCommand::from_interaction(data.into()).context("parse ai command data")?;
             match command {
                 AiCommand::Prompt(c) => {
                     if let Some(user) = interaction.author() {
-                        AiService::set_prompt(user.id, c.prompt).await;
+                        AiService::set_prompt(ctx.clone(), user.id, c.prompt).await;
                         let embeds = embed::ai_embeds("Prompt updated")?;
-                        HTTP.interaction(interaction.application_id)
+                        ctx.http
+                            .interaction(interaction.application_id)
                             .update_response(&interaction.token)
                             .embeds(Some(&embeds))
                             .await?;
@@ -83,11 +85,17 @@ impl AiCommand {
                 AiCommand::Talk(c) => {
                     let user = interaction.author().context("no author")?;
                     let attachments = c.attachment.clone().into_iter().collect();
-                    let reply =
-                        AiService::handle_interaction(user.id, &user.name, &c.message, attachments)
-                            .await?;
+                    let reply = AiService::handle_interaction(
+                        ctx.clone(),
+                        user.id,
+                        &user.name,
+                        &c.message,
+                        attachments,
+                    )
+                    .await?;
                     let embeds = embed::ai_embeds(&reply)?;
-                    HTTP.interaction(interaction.application_id)
+                    ctx.http
+                        .interaction(interaction.application_id)
                         .update_response(&interaction.token)
                         .embeds(Some(&embeds))
                         .await?;
@@ -96,7 +104,8 @@ impl AiCommand {
                     if let Some(user) = interaction.author() {
                         AiService::clear_history(user.id).await;
                         let embeds = embed::ai_embeds("History cleared")?;
-                        HTTP.interaction(interaction.application_id)
+                        ctx.http
+                            .interaction(interaction.application_id)
                             .update_response(&interaction.token)
                             .embeds(Some(&embeds))
                             .await?;

@@ -1,8 +1,9 @@
-use anyhow::Context;
+use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::{Interaction, application_command::CommandData};
 
-use crate::{configs::discord::CACHE, handle_ephemeral, services::spam::SpamService};
+use crate::{context::Context, handle_ephemeral, services::spam::SpamService};
+use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "verify", desc_localizations = "verify_desc")]
@@ -20,15 +21,16 @@ fn verify_token_desc() -> DescLocalizations {
 }
 
 impl VerifyCommand {
-    pub async fn handle(interaction: Interaction, data: CommandData) {
-        handle_ephemeral!(interaction, "VerifyCommand", {
+    pub async fn handle(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
+        handle_ephemeral!(ctx.http, interaction, "VerifyCommand", {
             let command = VerifyCommand::from_interaction(data.into())
                 .context("failed to parse command data")?;
 
             let author = interaction.author().context("failed to get author")?;
             let guild_id = interaction.guild_id.context("no guild id")?;
-            let success = SpamService::verify(guild_id, author.id, &command.token).await;
-            let embed = if let Some(guild_ref) = CACHE.guild(guild_id) {
+            let success =
+                SpamService::verify(ctx.clone(), guild_id, author.id, &command.token).await;
+            let embed = if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 if success {
                     embed::verify_success_embed(&guild_ref)
                 } else {
@@ -39,7 +41,8 @@ impl VerifyCommand {
             };
 
             if let Some(embed) = embed {
-                HTTP.interaction(interaction.application_id)
+                ctx.http
+                    .interaction(interaction.application_id)
                     .update_response(&interaction.token)
                     .embeds(Some(&[embed]))
                     .await?;

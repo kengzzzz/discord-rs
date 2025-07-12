@@ -1,70 +1,22 @@
+pub mod api;
+
 use chrono::Utc;
-#[cfg(test)]
-use once_cell::sync::OnceCell;
-use serde::Deserialize;
 use twilight_cache_inmemory::Reference;
 use twilight_cache_inmemory::model::CachedGuild;
 use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
-use crate::services::http::HttpService;
+use crate::context::Context;
 use crate::utils::embed::footer_with_icon;
+use std::sync::Arc;
 
 use crate::configs::Reaction;
 
-const BASE_URL: &str = "https://api.warframestat.us/pc";
-
-#[cfg(test)]
-static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 const COLOR: u32 = 0xF1C40F;
 const URL: &str = "https://github.com/kengzzzz/discord-rs";
 
-#[derive(Deserialize)]
-struct NewsItem {
-    #[serde(rename = "imageLink")]
-    image_link: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct Cycle {
-    state: String,
-    expiry: String,
-}
-
-#[derive(Deserialize)]
-struct SteelPathReward {
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct SteelPathData {
-    #[serde(rename = "currentReward")]
-    current_reward: Option<SteelPathReward>,
-    expiry: String,
-    activation: Option<String>,
-}
-
-async fn fetch_json<T: for<'de> Deserialize<'de>>(path: &str) -> anyhow::Result<T> {
-    let base = {
-        #[cfg(test)]
-        {
-            if let Some(url) = BASE_URL_OVERRIDE.get() {
-                url.as_str()
-            } else {
-                BASE_URL
-            }
-        }
-        #[cfg(not(test))]
-        {
-            BASE_URL
-        }
-    };
-    let url = format!("{base}/{path}");
-    Ok(HttpService::get(url).await?.json::<T>().await?)
-}
-
-fn format_time(s: &str) -> String {
+pub(crate) fn format_time(s: &str) -> String {
     if let Ok(t) = chrono::DateTime::parse_from_rfc3339(s) {
         format!("<t:{}:R>", t.timestamp())
     } else {
@@ -72,7 +24,7 @@ fn format_time(s: &str) -> String {
     }
 }
 
-fn title_case(s: &str) -> String {
+pub(crate) fn title_case(s: &str) -> String {
     let mut out = String::new();
     for (i, part) in s.split_whitespace().enumerate() {
         if i > 0 {
@@ -91,8 +43,8 @@ fn title_case(s: &str) -> String {
     out
 }
 
-async fn image_link() -> anyhow::Result<Option<String>> {
-    match fetch_json::<Vec<NewsItem>>("news").await {
+async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
+    match api::news(ctx.reqwest.as_ref()).await {
         Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
@@ -101,8 +53,8 @@ async fn image_link() -> anyhow::Result<Option<String>> {
     }
 }
 
-async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
-    let data = fetch_json::<Cycle>(endpoint).await?;
+async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
+    let data = api::cycle(ctx.reqwest.as_ref(), endpoint).await?;
     let field = EmbedFieldBuilder::new(
         format!(
             "{}{}{}",
@@ -117,8 +69,8 @@ async fn cycle_field(endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
     Ok(field)
 }
 
-async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
-    let data = fetch_json::<SteelPathData>("steelPath").await?;
+pub(crate) async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
+    let data = api::steel_path(ctx.reqwest.as_ref()).await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {
@@ -155,15 +107,16 @@ async fn steel_path_field() -> anyhow::Result<(EmbedField, bool)> {
 }
 
 pub async fn status_embed(
+    ctx: Arc<Context>,
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> anyhow::Result<(Embed, bool)> {
-    let image_fut = image_link();
-    let steel_fut = steel_path_field();
-    let earth_fut = cycle_field("earthCycle", "Earth");
-    let cetus_fut = cycle_field("cetusCycle", "Cetus");
-    let vallis_fut = cycle_field("vallisCycle", "Vallis");
-    let cambion_fut = cycle_field("cambionCycle", "Cambion");
-    let zariman_fut = cycle_field("zarimanCycle", "Zariman");
+    let image_fut = image_link(ctx.clone());
+    let steel_fut = steel_path_field(ctx.clone());
+    let earth_fut = cycle_field(ctx.clone(), "earthCycle", "Earth");
+    let cetus_fut = cycle_field(ctx.clone(), "cetusCycle", "Cetus");
+    let vallis_fut = cycle_field(ctx.clone(), "vallisCycle", "Vallis");
+    let cambion_fut = cycle_field(ctx.clone(), "cambionCycle", "Cambion");
+    let zariman_fut = cycle_field(ctx.clone(), "zarimanCycle", "Zariman");
 
     let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(
         image_fut,
@@ -200,28 +153,4 @@ pub async fn status_embed(
 
     let embed = builder.footer(footer).build();
     Ok((embed, is_umbra))
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_base_url(url: &str) {
-    let _ = BASE_URL_OVERRIDE.set(url.to_string());
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn title_case_test(s: &str) -> String {
-    title_case(s)
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn format_time_test(s: &str) -> String {
-    format_time(s)
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn steel_path_field_test() -> anyhow::Result<(EmbedField, bool)> {
-    steel_path_field().await
 }
