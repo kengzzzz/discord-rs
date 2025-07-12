@@ -157,7 +157,7 @@ impl MongoDB {
 
         let options = ChangeStreamOptions::builder()
             .full_document(Some(FullDocumentType::UpdateLookup))
-            .full_document_before_change(Some(FullDocumentBeforeChangeType::Required))
+            .full_document_before_change(Some(FullDocumentBeforeChangeType::WhenAvailable))
             .build();
 
         let token = shutdown::get_token();
