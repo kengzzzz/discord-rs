@@ -10,17 +10,30 @@ use crate::{
 use std::sync::Arc;
 
 pub async fn handle(ctx: Arc<Context>, event: Ready) {
-    for guild in event.guilds {
-        RoleMessageService::ensure_message(ctx.clone(), guild.id).await;
-    }
-    StatusService::spawn(ctx.clone());
-    BuildService::init(ctx.clone()).await;
-    BuildService::spawn(ctx.clone());
-    MarketService::init(ctx.clone()).await;
-    NotificationService::spawn(ctx);
-
     HealthService::set_ready(true);
     HealthService::set_discord(true);
+
+    let role_ctx = ctx.clone();
+    tokio::spawn(async move {
+        for guild in event.guilds {
+            RoleMessageService::ensure_message(role_ctx.clone(), guild.id).await;
+        }
+    });
+
+    StatusService::spawn(ctx.clone());
+
+    let build_ctx = ctx.clone();
+    tokio::spawn(async move {
+        BuildService::init(build_ctx.clone()).await;
+        BuildService::spawn(build_ctx);
+    });
+
+    let market_ctx = ctx.clone();
+    tokio::spawn(async move {
+        MarketService::init(market_ctx).await;
+    });
+
+    NotificationService::spawn(ctx);
 
     println!("Logged in.");
 }

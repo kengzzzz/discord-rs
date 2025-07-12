@@ -4,6 +4,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use chrono::DateTime;
 use tokio::sync::RwLock;
 
 use once_cell::sync::Lazy;
@@ -14,7 +15,7 @@ use twilight_model::{
     channel::message::Embed,
     id::{Id, marker::GuildMarker},
 };
-use twilight_util::builder::embed::EmbedBuilder;
+use twilight_util::builder::embed::{EmbedAuthorBuilder, EmbedBuilder, ImageSource};
 
 use crate::{
     context::Context,
@@ -252,9 +253,6 @@ impl BuildService {
         item: &str,
         build: BuildData,
     ) -> anyhow::Result<Embed> {
-        use chrono::DateTime;
-        use twilight_util::builder::embed::{EmbedAuthorBuilder, ImageSource};
-
         let mut footer = footer_with_icon(guild)?;
         footer.text = guild.name().to_string();
 
