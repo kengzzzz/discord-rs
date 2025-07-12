@@ -49,9 +49,12 @@ fn test_reaction_maps() {
 fn test_ai_embeds_split() {
     let text = "a".repeat(4097);
     let embeds = ai_embeds(&text).unwrap();
-    assert_eq!(embeds.len(), 2);
-    assert_eq!(embeds[0].description.as_deref().unwrap().len(), 4096);
-    assert_eq!(embeds[1].description.as_deref().unwrap().len(), 1);
+    assert_eq!(embeds.len(), 5);
+    assert_eq!(embeds[0].description.as_deref().unwrap().len(), 1024);
+    assert_eq!(embeds[1].description.as_deref().unwrap().len(), 1024);
+    assert_eq!(embeds[2].description.as_deref().unwrap().len(), 1024);
+    assert_eq!(embeds[3].description.as_deref().unwrap().len(), 1024);
+    assert_eq!(embeds[4].description.as_deref().unwrap().len(), 1);
     assert!(ai_embeds("").unwrap().is_empty());
 }
 
