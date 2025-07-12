@@ -41,9 +41,18 @@ async fn test_prompt_and_history() {
     AiService::clear_history(user).await;
     AiService::set_prompt(ctx.clone(), user, "hi".to_string()).await;
 
-    let text = AiService::handle_interaction(ctx.clone(), user, "Tester", "hello", Vec::new())
-        .await
-        .unwrap();
+    let text = AiService::handle_interaction(
+        ctx.clone(),
+        user,
+        "Tester",
+        "hello",
+        Vec::new(),
+        None,
+        Vec::new(),
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(text, "ok");
 
     let hist = history::load_history(user).await;
@@ -55,6 +64,33 @@ async fn test_prompt_and_history() {
 }
 
 #[tokio::test]
+async fn test_reply_fields() {
+    let user = Id::<UserMarker>::new(10);
+    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    ai::set_generate_override(|_| mock_response("ok"));
+
+    AiService::clear_history(user).await;
+
+    let _ = AiService::handle_interaction(
+        ctx.clone(),
+        user,
+        "Tester",
+        "hi",
+        Vec::new(),
+        Some("hello".to_string()),
+        Vec::new(),
+        Some("Tester2".to_string()),
+    )
+    .await;
+
+    let hist = history::load_history(user).await;
+    assert_eq!(hist.len(), 2);
+    assert_eq!(hist[0].ref_text, Some("hello".to_string()));
+    assert!(hist[0].ref_attachments.is_none());
+    assert_eq!(hist[0].ref_author, Some("Tester2".to_string()));
+}
+
+#[tokio::test]
 async fn test_summary_rotation() {
     let user = Id::<UserMarker>::new(2);
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
@@ -62,15 +98,30 @@ async fn test_summary_rotation() {
     ai::set_summarize_override(|_| "SUM".to_string());
 
     let history: Vec<_> = (0..21)
-        .map(|i| ChatEntry {
-            role: "user".to_string(),
-            text: format!("m{i}"),
-            attachments: Vec::new(),
+        .map(|i| {
+            ChatEntry::new(
+                "user".to_string(),
+                format!("m{i}"),
+                Vec::new(),
+                None,
+                None,
+                None,
+            )
         })
         .collect();
     history::store_history(user, &history).await;
 
-    let _ = AiService::handle_interaction(ctx.clone(), user, "Tester", "msg", Vec::new()).await;
+    let _ = AiService::handle_interaction(
+        ctx.clone(),
+        user,
+        "Tester",
+        "msg",
+        Vec::new(),
+        None,
+        Vec::new(),
+        None,
+    )
+    .await;
     let hist = history::load_history(user).await;
     assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
     assert_eq!(hist[0].role, "system".to_string());

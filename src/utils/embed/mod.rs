@@ -200,7 +200,7 @@ pub fn broadcast_embeds(
 }
 
 pub fn ai_embeds(text: &str) -> anyhow::Result<Vec<Embed>> {
-    const LIMIT: usize = 4096;
+    const LIMIT: usize = 1024;
     let mut embeds = Vec::new();
     if text.is_empty() {
         return Ok(embeds);

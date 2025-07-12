@@ -1,6 +1,9 @@
 use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
-use twilight_model::application::interaction::{Interaction, application_command::CommandData};
+use twilight_model::{
+    application::interaction::{Interaction, application_command::CommandData},
+    channel::message::MessageFlags,
+};
 
 use crate::{context::Context, defer_interaction, services::ai::AiService, utils::embed};
 use std::sync::Arc;
@@ -91,14 +94,19 @@ impl AiCommand {
                         &user.name,
                         &c.message,
                         attachments,
+                        None,
+                        Vec::new(),
+                        None,
                     )
                     .await?;
-                    let embeds = embed::ai_embeds(&reply)?;
-                    ctx.http
-                        .interaction(interaction.application_id)
-                        .update_response(&interaction.token)
-                        .embeds(Some(&embeds))
-                        .await?;
+                    for embed in embed::ai_embeds(&reply)? {
+                        ctx.http
+                            .interaction(interaction.application_id)
+                            .create_followup(&interaction.token)
+                            .embeds(&[embed])
+                            .flags(MessageFlags::EPHEMERAL)
+                            .await?;
+                    }
                 }
                 AiCommand::Clear(_) => {
                     if let Some(user) = interaction.author() {
