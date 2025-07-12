@@ -39,12 +39,27 @@ where
             let mut stream = match builder.await {
                 Ok(stream) => stream,
                 Err(e) => {
-                    tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
-                    tokio::select! {
-                        _ = token.cancelled() => break,
-                        _ = sleep(Duration::from_secs(5)) => {}
+                    if e.to_string().to_lowercase().contains("resume") {
+                        tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
+                        match coll.watch().with_options(options.clone()).await {
+                            Ok(stream) => stream,
+                            Err(e) => {
+                                tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
+                                tokio::select! {
+                                    _ = token.cancelled() => break,
+                                    _ = sleep(Duration::from_secs(5)) => {}
+                                }
+                                continue;
+                            }
+                        }
+                    } else {
+                        tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
+                        tokio::select! {
+                            _ = token.cancelled() => break,
+                            _ = sleep(Duration::from_secs(5)) => {}
+                        }
+                        continue;
                     }
-                    continue;
                 }
             };
 
