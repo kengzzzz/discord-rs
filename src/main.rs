@@ -12,10 +12,13 @@ use discord_bot::{
     services::{health::HealthService, shutdown},
 };
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use twilight_gateway::{Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt as _};
 use twilight_interactions::command::CreateCommand;
 use twilight_model::guild::Permissions;
+
+const EVENT_CONCURRENCY: usize = 50;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -36,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
     shutdown::set_token(shutdown_token.clone());
 
     let ctx = Arc::new(Context::new().await?);
+    let event_semaphore = Arc::new(Semaphore::new(EVENT_CONCURRENCY));
 
     let shutdown_clone = shutdown_token.clone();
     HealthService::spawn(async move {
@@ -94,7 +98,12 @@ async fn main() -> anyhow::Result<()> {
                 failure_count = 0;
                 ctx.cache.update(&event);
                 let ctx_clone = ctx.clone();
-                tokio::spawn(handle_event(ctx_clone, event));
+                let sem = event_semaphore.clone();
+                let permit = sem.acquire_owned().await.expect("semaphore closed");
+                tokio::spawn(async move {
+                    let _permit = permit;
+                    handle_event(ctx_clone, event).await;
+                });
                 HealthService::set_discord(shard.state().is_identified());
             }
         }
