@@ -65,12 +65,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Connect to VPN
-        uses: tailscale/github-action@v3
-        with:
-          oauth-client-id: ${{ secrets.TAILNET_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILNET_SECRET }}
-          tags: tag:ci
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build image
@@ -86,32 +80,9 @@ jobs:
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
-      - name: Populate known_hosts
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      - name: Load ENV
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-
-      - name: Prepare key
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-        run: |
-          set +x
-          echo "::add-mask::$SSH_KEY"
-          echo "$SSH_KEY" | base64 --decode > id_rsa  
-          chmod 600 id_rsa
-
-      - name: Use scp
-        env:
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          ENV_PATH:   ${{ secrets.ENV_PATH }}
-        run: |
-          set -x
-          scp -i id_rsa  \
-            "$DEPLOY_USER@$DEPLOY_HOST:$ENV_PATH" .env
-          shred -u id_rsa || rm -f id_rsa
+          echo "${{ secrets.ENV }}" >> .env
 
       - name: Recreate container
         run: |          
