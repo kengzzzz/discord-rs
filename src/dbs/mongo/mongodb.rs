@@ -9,6 +9,7 @@ use mongodb::{
 };
 use std::sync::Arc;
 use tokio::time::{self, Duration};
+use twilight_model::id::Id;
 
 use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
@@ -268,6 +269,7 @@ impl MongoDB {
                     | OperationType::Delete => {
                         if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
                             AiService::purge_prompt_cache(doc.user_id).await;
+                            AiService::clear_history(Id::new(doc.user_id)).await;
                         }
                     }
                     _ => {}
