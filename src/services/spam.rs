@@ -1,5 +1,4 @@
 use chrono::Utc;
-use futures::StreamExt;
 use mongodb::bson::{doc, to_bson};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,7 +16,7 @@ use crate::{
         mongo::{quarantine::Quarantine, role::RoleEnum},
         redis::{redis_delete, redis_get, redis_set, redis_set_ex},
     },
-    services::{broadcast::BroadcastService, http::HttpService, role::RoleService},
+    services::{broadcast::BroadcastService, role::RoleService},
 };
 use std::sync::Arc;
 
@@ -180,7 +179,7 @@ impl SpamService {
         guild_id: u64,
         message: &Message,
     ) -> Option<String> {
-        let hash = Self::hash_message(ctx.reqwest.as_ref(), message).await;
+        let hash = Self::hash_message(message).await;
         let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
         let now = Utc::now().timestamp();
         let mut record = redis_get::<SpamRecord>(&key).await.unwrap_or(SpamRecord {
@@ -232,18 +231,20 @@ impl SpamService {
         redis_delete(&quarantine_key).await;
     }
 
-    async fn hash_message(client: &reqwest::Client, message: &Message) -> String {
+    async fn hash_message(message: &Message) -> String {
         let mut hasher = Sha256::new();
         hasher.update(message.content.as_bytes());
         for a in &message.attachments {
-            match HttpService::get(client, &a.url).await {
-                Ok(resp) => {
-                    let mut stream = resp.bytes_stream();
-                    while let Some(Ok(bytes)) = stream.next().await {
-                        hasher.update(&bytes);
-                    }
-                }
-                Err(_) => hasher.update(a.url.as_bytes()),
+            hasher.update(&a.filename);
+            hasher.update(a.size.to_be_bytes());
+            if let Some(ct) = &a.content_type {
+                hasher.update(ct);
+            }
+            if let Some(h) = &a.height {
+                hasher.update(h.to_be_bytes());
+            }
+            if let Some(w) = a.width {
+                hasher.update(w.to_be_bytes());
             }
         }
         hex::encode(hasher.finalize())

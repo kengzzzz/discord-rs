@@ -20,7 +20,6 @@ use twilight_model::guild::Permissions;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-
     let token = DISCORD_CONFIGS.discord_token.clone();
 
     let mut shard = Shard::new(
@@ -33,10 +32,11 @@ async fn main() -> anyhow::Result<()> {
             | Intents::MESSAGE_CONTENT,
     );
 
-    let ctx = Arc::new(Context::new().await?);
-
     let shutdown_token = CancellationToken::new();
     shutdown::set_token(shutdown_token.clone());
+    
+    let ctx = Arc::new(Context::new().await?);
+
     let shutdown_clone = shutdown_token.clone();
     HealthService::spawn(async move {
         shutdown_clone.cancelled().await;
