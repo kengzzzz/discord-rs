@@ -35,13 +35,20 @@ const MAX_ATTACHMENTS: usize = 5;
 static BOT_MENTION_RE: OnceCell<Regex> = OnceCell::new();
 
 #[cfg_attr(test, allow(dead_code))]
-pub(crate) fn collect_attachments(message: &Message) -> Vec<Attachment> {
-    let mut list = message.attachments.clone();
-    if let Some(ref_msg) = &message.referenced_message {
-        list.extend(ref_msg.attachments.clone());
+pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<Attachment>) {
+    let mut main = message.attachments.clone();
+    main.truncate(MAX_ATTACHMENTS);
+
+    let remaining = MAX_ATTACHMENTS.saturating_sub(main.len());
+    let mut refs = Vec::new();
+    if remaining > 0 {
+        if let Some(ref_msg) = &message.referenced_message {
+            refs = ref_msg.attachments.clone();
+            refs.truncate(remaining);
+        }
     }
-    list.truncate(MAX_ATTACHMENTS);
-    list
+
+    (main, refs)
 }
 
 pub(crate) fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
@@ -126,27 +133,37 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
         if message.mentions.iter().any(|m| m.id == user.id) {
             let _ = ctx.http.create_typing_trigger(message.channel_id).await;
             let content = strip_mention(&message.content, user.id);
-            let ref_text = message
+            let ref_text_opt = message
                 .referenced_message
-                .as_deref()
-                .map(|m| m.content.as_str());
-            let input = build_ai_input(&content, ref_text);
-            let attachments = collect_attachments(&message);
+                .as_ref()
+                .map(|m| m.content.clone());
+            let ref_author = message
+                .referenced_message
+                .as_ref()
+                .map(|m| m.author.name.clone());
+            let input = build_ai_input(&content, ref_text_opt.as_deref());
+            let (attachments, ref_attachments) = collect_attachments(&message);
             if let Ok(reply) = AiService::handle_interaction(
                 ctx.clone(),
                 message.author.id,
                 &message.author.name,
                 &input,
                 attachments,
+                ref_text_opt,
+                ref_attachments,
+                ref_author,
             )
             .await
             {
                 if let Ok(embeds) = embed::ai_embeds(&reply) {
-                    let _ = ctx
-                        .http
-                        .create_message(message.channel_id)
-                        .embeds(&embeds)
-                        .await;
+                    for embed in embeds {
+                        let _ = dbg!(
+                            ctx.http
+                                .create_message(message.channel_id)
+                                .embeds(&[embed])
+                                .await
+                        );
+                    }
                 }
             }
         }

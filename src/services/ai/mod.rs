@@ -36,6 +36,32 @@ pub(crate) struct ChatEntry {
     pub text: String,
     #[serde(default)]
     pub attachments: Vec<String>,
+    #[serde(default)]
+    pub ref_text: Option<String>,
+    #[serde(default)]
+    pub ref_attachments: Option<Vec<String>>,
+    #[serde(default)]
+    pub ref_author: Option<String>,
+}
+
+impl ChatEntry {
+    pub fn new(
+        role: String,
+        text: String,
+        attachments: Vec<String>,
+        ref_text: Option<String>,
+        ref_attachments: Option<Vec<String>>,
+        ref_author: Option<String>,
+    ) -> Self {
+        Self {
+            role,
+            text,
+            attachments,
+            ref_text,
+            ref_attachments,
+            ref_author,
+        }
+    }
 }
 
 pub struct AiService;
@@ -65,59 +91,20 @@ impl AiService {
         hist::get_prompt(ctx, user).await
     }
 
-    pub async fn handle_interaction(
-        ctx: Arc<Context>,
-        user_id: Id<UserMarker>,
-        user_name: &str,
-        message: &str,
+    async fn append_attachments(
+        ctx: &Arc<Context>,
+        parts: &mut Vec<Part>,
         attachments: Vec<Attachment>,
-    ) -> anyhow::Result<String> {
-        let mut history = Self::load_history(user_id).await;
-
-        if history.len() > MAX_HISTORY {
-            if let Ok(summary) = client::summarize(&history).await {
-                let start = history.len().saturating_sub(KEEP_RECENT);
-                let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
-                new_history.push(ChatEntry {
-                    role: "system".to_string(),
-                    text: format!("Summary so far: {summary}"),
-                    attachments: Vec::new(),
-                });
-                new_history.extend(history[start..].to_vec());
-                history = new_history;
-            }
-        }
-
-        let prompt = Self::get_prompt(ctx.clone(), user_id).await;
-
-        let mut system = format!(
-            "{}\nYou are chatting with {user_name}",
-            GOOGLE_CONFIGS.base_prompt
-        );
-        if let Some(p) = prompt {
-            system.push_str("\n\nUser instructions:\n");
-            system.push_str(&p);
-        }
-
-        let mut contents: Vec<Content> = history
-            .iter()
-            .map(|c| {
-                let mut text = c.text.clone();
-                for url in &c.attachments {
-                    text.push_str("\nAttachment: ");
-                    text.push_str(url);
-                }
-                Content::from((text.as_str(),))
-            })
-            .collect();
-
-        let mut parts = vec![Part::text(message)];
-        let mut attachment_urls = Vec::new();
+        owner: &str,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut urls = Vec::new();
         for a in attachments {
             if let (Some(ct), Ok(resp)) = (
                 a.content_type.as_deref(),
                 HttpService::get(ctx.reqwest.as_ref(), &a.url).await,
             ) {
+                let label = format!("Attachment from {owner}:");
+                parts.push(Part::text(&label));
                 if a.size > INLINE_LIMIT {
                     let stream = Body::wrap_stream(resp.bytes_stream());
                     let upload_url = reqwest::Url::parse_with_params(
@@ -141,13 +128,93 @@ impl AiService {
                     let json: serde_json::Value = resp.json().await?;
                     let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
                     parts.push(Part::file_data(ct, uri));
-                    attachment_urls.push(uri.to_string());
+                    urls.push(uri.to_string());
                 } else if let Ok(bytes) = resp.bytes().await {
                     parts.push(Part::blob(ct, bytes.to_vec()));
-                    attachment_urls.push(a.url.clone());
+                    urls.push(a.url.clone());
                 }
             }
         }
+        Ok(urls)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn handle_interaction(
+        ctx: Arc<Context>,
+        user_id: Id<UserMarker>,
+        user_name: &str,
+        message: &str,
+        attachments: Vec<Attachment>,
+        ref_text: Option<String>,
+        ref_attachments: Vec<Attachment>,
+        ref_author: Option<String>,
+    ) -> anyhow::Result<String> {
+        let mut history = Self::load_history(user_id).await;
+
+        if history.len() > MAX_HISTORY {
+            if let Ok(summary) = client::summarize(&history).await {
+                let start = history.len().saturating_sub(KEEP_RECENT);
+                let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
+                new_history.push(ChatEntry::new(
+                    "system".to_string(),
+                    format!("Summary so far: {summary}"),
+                    Vec::new(),
+                    None,
+                    None,
+                    None,
+                ));
+                new_history.extend(history[start..].to_vec());
+                history = new_history;
+            }
+        }
+
+        let prompt = Self::get_prompt(ctx.clone(), user_id).await;
+
+        let mut system = format!(
+            "{}\nYou are chatting with {user_name}",
+            GOOGLE_CONFIGS.base_prompt
+        );
+        if let Some(p) = prompt {
+            system.push_str("\n\nUser instructions:\n");
+            system.push_str(&p);
+        }
+
+        let mut contents: Vec<Content> = history
+            .iter()
+            .map(|c| {
+                let mut text = c.text.clone();
+                for url in &c.attachments {
+                    text.push_str("\nAttachment from ");
+                    text.push_str(user_name);
+                    text.push_str(": ");
+                    text.push_str(url);
+                }
+                if let Some(ref_text) = &c.ref_text {
+                    let owner = c.ref_author.as_deref().unwrap_or("another user");
+                    text.push_str("\nIn reply to ");
+                    text.push_str(owner);
+                    text.push_str(": ");
+                    text.push_str(ref_text);
+                }
+                if let Some(ref_urls) = &c.ref_attachments {
+                    let owner = c.ref_author.as_deref().unwrap_or("another user");
+                    for url in ref_urls {
+                        text.push_str("\nAttachment from ");
+                        text.push_str(owner);
+                        text.push_str(": ");
+                        text.push_str(url);
+                    }
+                }
+                Content::from((text.as_str(),))
+            })
+            .collect();
+
+        let mut parts = vec![Part::text(message)];
+        let attachment_urls =
+            Self::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
+        let ref_owner = ref_author.as_deref().unwrap_or("referenced user");
+        let ref_attachment_urls =
+            Self::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
 
         contents.push(Content::from(parts));
 
@@ -181,17 +248,26 @@ impl AiService {
 
         let text = extract_text(response);
 
-        history.push(ChatEntry {
-            role: "user".into(),
-            text: message.to_owned(),
-            attachments: attachment_urls,
-        });
-        history.push(ChatEntry {
-            role: "model".into(),
-            text: text.clone(),
-            attachments: Vec::new(),
-        });
-
+        history.push(ChatEntry::new(
+            "user".into(),
+            message.to_owned(),
+            attachment_urls,
+            ref_text,
+            if ref_attachment_urls.is_empty() {
+                None
+            } else {
+                Some(ref_attachment_urls)
+            },
+            ref_author.clone(),
+        ));
+        history.push(ChatEntry::new(
+            "model".into(),
+            text.clone(),
+            Vec::new(),
+            None,
+            None,
+            None,
+        ));
         Self::store_history(user_id, &history).await;
 
         Ok(text)
