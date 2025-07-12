@@ -1,11 +1,10 @@
 use std::{
     collections::HashSet,
-    sync::{
-        RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use tokio::sync::RwLock;
 
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -124,7 +123,7 @@ async fn update_items(client: &Client) -> anyhow::Result<()> {
     }
     names.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     original.sort_unstable();
-    *ITEMS.write().expect("ITEMS lock poisoned") = names;
+    *ITEMS.write().await = names;
     redis_set(REDIS_KEY, &original).await;
     LAST_UPDATE.store(
         SystemTime::now()
@@ -141,7 +140,7 @@ pub struct BuildService;
 impl BuildService {
     pub async fn init(ctx: Arc<Context>) {
         if let Some(data) = load_from_redis().await {
-            *ITEMS.write().expect("ITEMS lock poisoned") = data;
+            *ITEMS.write().await = data;
             LAST_UPDATE.store(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -170,9 +169,9 @@ impl BuildService {
         })
     }
 
-    pub fn search(prefix: &str) -> Vec<String> {
+    pub async fn search(prefix: &str) -> Vec<String> {
         let p = prefix.to_lowercase();
-        let items = ITEMS.read().expect("ITEMS lock poisoned");
+        let items = ITEMS.read().await;
         items
             .iter()
             .filter(|(_, lower)| lower.starts_with(&p))
@@ -195,10 +194,10 @@ impl BuildService {
     }
 
     pub async fn search_with_update(client: &Client, prefix: &str) -> Vec<String> {
-        let mut results = Self::search(prefix);
+        let mut results = Self::search(prefix).await;
         if results.is_empty() {
             Self::maybe_refresh(client).await;
-            results = Self::search(prefix);
+            results = Self::search(prefix).await;
         }
         results
     }
@@ -307,7 +306,7 @@ impl BuildService {
 
     #[cfg(test)]
     #[allow(dead_code)]
-    pub(crate) fn set_items(items: Vec<ItemEntry>) {
-        *ITEMS.write().expect("ITEMS lock poisoned") = items;
+    pub(crate) async fn set_items(items: Vec<ItemEntry>) {
+        *ITEMS.write().await = items;
     }
 }

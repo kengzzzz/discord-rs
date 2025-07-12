@@ -3,12 +3,11 @@ mod session;
 
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::{
-        RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use tokio::sync::RwLock;
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -90,7 +89,7 @@ pub struct MarketService;
 impl MarketService {
     pub async fn init(ctx: Arc<Context>) {
         if let Some(data) = client::load_from_redis(REDIS_KEY).await {
-            *ITEMS.write().expect("ITEMS lock poisoned") = data;
+            *ITEMS.write().await = data;
             LAST_UPDATE.store(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -121,9 +120,9 @@ impl MarketService {
         });
     }
 
-    pub fn search(prefix: &str) -> Vec<String> {
+    pub async fn search(prefix: &str) -> Vec<String> {
         let p = prefix.to_lowercase();
-        let items = ITEMS.read().expect("ITEMS lock poisoned");
+        let items = ITEMS.read().await;
         items
             .iter()
             .filter(|item| item.lower.starts_with(&p))
@@ -148,17 +147,17 @@ impl MarketService {
     }
 
     pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
-        let mut results = Self::search(prefix);
+        let mut results = Self::search(prefix).await;
         if results.is_empty() {
             Self::maybe_refresh(ctx.clone()).await;
-            results = Self::search(prefix);
+            results = Self::search(prefix).await;
         }
         results
     }
 
-    fn find_url(name: &str) -> Option<String> {
+    async fn find_url(name: &str) -> Option<String> {
         let lower = name.to_lowercase();
-        let items = ITEMS.read().expect("ITEMS lock poisoned");
+        let items = ITEMS.read().await;
         for item in items.iter() {
             if item.lower == lower {
                 return Some(item.url.clone());
@@ -271,7 +270,7 @@ impl MarketService {
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Option<MarketSession>> {
-        let Some(url) = Self::find_url(item) else {
+        let Some(url) = Self::find_url(item).await else {
             return Ok(None);
         };
         match client::fetch_orders_map(ctx.reqwest.as_ref(), &url, &kind).await {
@@ -351,25 +350,16 @@ impl MarketService {
         })]
     }
 
-    pub fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .insert(message_id, session);
+    pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        SESSIONS.write().await.insert(message_id, session);
     }
 
-    fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .remove(&message_id)
+    async fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
+        SESSIONS.write().await.remove(&message_id)
     }
 
-    fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
-        SESSIONS
-            .write()
-            .expect("SESSIONS lock poisoned")
-            .insert(message_id, session);
+    async fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        SESSIONS.write().await.insert(message_id, session);
     }
 
     async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
@@ -394,7 +384,7 @@ impl MarketService {
             return;
         };
         let message_id = message.id;
-        let Some(mut session) = Self::get_session_mut(message_id) else {
+        let Some(mut session) = Self::get_session_mut(message_id).await else {
             return;
         };
 
@@ -451,7 +441,7 @@ impl MarketService {
             }
         }
 
-        Self::store_session(message_id, session);
+        Self::store_session(message_id, session).await;
     }
 
     pub async fn market_embed(
@@ -460,7 +450,7 @@ impl MarketService {
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Embed> {
-        let Some(url) = Self::find_url(item) else {
+        let Some(url) = Self::find_url(item).await else {
             return Self::not_found_embed(guild);
         };
         match client::fetch_orders(ctx.reqwest.as_ref(), &url).await {

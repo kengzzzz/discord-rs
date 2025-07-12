@@ -4,9 +4,11 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use twilight_cache_inmemory::Reference;
 use twilight_cache_inmemory::model::CachedGuild;
+use twilight_model::channel::message::Embed;
 use twilight_model::id::Id;
 use twilight_model::id::marker::GuildMarker;
 
+use crate::services::shutdown;
 use crate::{
     context::Context,
     dbs::mongo::channel::ChannelEnum,
@@ -27,7 +29,7 @@ impl StatusService {
     async fn build_embed(
         ctx: Arc<Context>,
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
-    ) -> Option<twilight_model::channel::message::Embed> {
+    ) -> Option<Embed> {
         match warframe::status_embed(ctx.clone(), guild).await {
             Ok((e, is_umbra)) => {
                 UMBRA_FORMA.store(is_umbra, Ordering::Relaxed);
@@ -109,8 +111,6 @@ impl StatusService {
     }
 
     pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
-        use crate::services::shutdown;
-
         tokio::spawn(async move {
             let token = shutdown::get_token();
             Self::update_all(ctx.clone()).await;

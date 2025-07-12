@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown_token = CancellationToken::new();
     shutdown::set_token(shutdown_token.clone());
-    
+
     let ctx = Arc::new(Context::new().await?);
 
     let shutdown_clone = shutdown_token.clone();

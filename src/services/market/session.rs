@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 #[derive(Clone)]
 pub struct OrderInfo {
     pub quantity: u32,
@@ -10,7 +12,7 @@ pub struct MarketSession {
     pub item: String,
     pub url: String,
     pub kind: super::MarketKind,
-    pub orders: std::collections::BTreeMap<u8, Vec<OrderInfo>>,
+    pub orders: BTreeMap<u8, Vec<OrderInfo>>,
     pub rank: u8,
     pub page: usize,
     pub max_rank: Option<u8>,

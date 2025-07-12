@@ -5,7 +5,8 @@ use tokio::{sync::RwLock, task::JoinHandle};
 
 use chrono::{DateTime, Datelike, Utc};
 use tokio_util::sync::CancellationToken;
-use twilight_model::id::Id;
+use twilight_http::Client;
+use twilight_model::id::{Id, marker::ChannelMarker};
 
 use crate::{
     configs::notifications::NOTIFICATIONS,
@@ -35,8 +36,8 @@ pub(crate) fn next_monday_duration() -> Duration {
 }
 
 fn notify_loop(
-    http: Arc<twilight_http::Client>,
-    channel_id: Id<twilight_model::id::marker::ChannelMarker>,
+    http: Arc<Client>,
+    channel_id: Id<ChannelMarker>,
     role_id: u64,
     message: &str,
     mut calc_delay: impl FnMut() -> Duration + Send + 'static,
@@ -60,8 +61,8 @@ fn notify_loop(
 }
 
 fn notify_umbra_loop(
-    http: Arc<twilight_http::Client>,
-    channel_id: Id<twilight_model::id::marker::ChannelMarker>,
+    http: Arc<Client>,
+    channel_id: Id<ChannelMarker>,
     role_id: u64,
     token: CancellationToken,
 ) -> JoinHandle<()> {
@@ -160,8 +161,6 @@ impl NotificationService {
     }
 
     pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
-        use crate::services::shutdown;
-
         tokio::spawn(async move {
             let token = shutdown::get_token();
             let map = Self::init_all(ctx.clone(), token.clone()).await;

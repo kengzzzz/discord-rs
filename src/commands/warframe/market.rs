@@ -70,7 +70,7 @@ impl WarframeMarketCommand {
                     .await?
                     .model()
                     .await?;
-                MarketService::insert_session(message.id, session);
+                MarketService::insert_session(message.id, session).await;
             } else {
                 let embed = MarketService::not_found_embed(&guild_ref)?;
                 ctx.http

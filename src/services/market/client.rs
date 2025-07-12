@@ -1,4 +1,8 @@
+use std::{collections::BTreeMap, sync::atomic::AtomicU64};
+
+use once_cell::sync::Lazy;
 use serde::Deserialize;
+use tokio::sync::RwLock;
 
 use crate::{
     dbs::redis::{redis_get, redis_set},
@@ -72,8 +76,8 @@ pub(super) async fn load_from_redis(key: &str) -> Option<Vec<ItemEntry>> {
 pub(super) async fn update_items(
     client: &Client,
     key: &str,
-    items: &once_cell::sync::Lazy<std::sync::RwLock<Vec<ItemEntry>>>,
-    last_update: &once_cell::sync::Lazy<std::sync::atomic::AtomicU64>,
+    items: &Lazy<RwLock<Vec<ItemEntry>>>,
+    last_update: &Lazy<AtomicU64>,
 ) -> anyhow::Result<()> {
     let resp = HttpService::get(client, ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
@@ -93,7 +97,7 @@ pub(super) async fn update_items(
     stored.sort_by(|a, b| a.name.cmp(&b.name));
     new_items.sort_by(|a, b| a.name.cmp(&b.name));
     redis_set(key, &stored).await;
-    *items.write().expect("ITEMS lock poisoned") = new_items;
+    *items.write().await = new_items;
     last_update.store(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -118,13 +122,9 @@ pub(super) async fn fetch_orders_map(
     client: &Client,
     url: &str,
     kind: &MarketKind,
-) -> anyhow::Result<(
-    std::collections::BTreeMap<u8, Vec<super::session::OrderInfo>>,
-    Option<u8>,
-)> {
+) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)> {
     let orders = fetch_orders(client, url).await?;
-    let mut by_rank: std::collections::BTreeMap<u8, Vec<super::session::OrderInfo>> =
-        std::collections::BTreeMap::new();
+    let mut by_rank: BTreeMap<u8, Vec<super::session::OrderInfo>> = BTreeMap::new();
     let mut max_rank: Option<u8> = None;
     for o in orders {
         if o.user.status != "ingame" || o.order_type == kind.action() {
