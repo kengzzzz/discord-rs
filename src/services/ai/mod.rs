@@ -28,8 +28,6 @@ static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Sen
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
 
-const INLINE_LIMIT: u64 = 20 * 1024 * 1024;
-
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ChatEntry {
     pub role: String,
@@ -105,34 +103,29 @@ impl AiService {
             ) {
                 let label = format!("Attachment from {owner}:");
                 parts.push(Part::text(&label));
-                if a.size > INLINE_LIMIT {
-                    let stream = Body::wrap_stream(resp.bytes_stream());
-                    let upload_url = reqwest::Url::parse_with_params(
-                        "https://generativelanguage.googleapis.com/upload/v1beta/files",
-                        &[("uploadType", "media")],
-                    )?;
-                    let mut headers = HeaderMap::new();
-                    headers.append(
-                        HeaderName::from_str("X-Goog-Api-Key")?,
-                        HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
-                    );
-                    if let Some(content_type) = &a.content_type {
-                        headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
-                    }
-                    let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
-                        .headers(headers)
-                        .body(stream)
-                        .send()
-                        .await?
-                        .error_for_status()?;
-                    let json: serde_json::Value = resp.json().await?;
-                    let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
-                    parts.push(Part::file_data(ct, uri));
-                    urls.push(uri.to_string());
-                } else if let Ok(bytes) = resp.bytes().await {
-                    parts.push(Part::blob(ct, bytes.to_vec()));
-                    urls.push(a.url.clone());
+                let stream = Body::wrap_stream(resp.bytes_stream());
+                let upload_url = reqwest::Url::parse_with_params(
+                    "https://generativelanguage.googleapis.com/upload/v1beta/files",
+                    &[("uploadType", "media")],
+                )?;
+                let mut headers = HeaderMap::new();
+                headers.append(
+                    HeaderName::from_str("X-Goog-Api-Key")?,
+                    HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
+                );
+                if let Some(content_type) = &a.content_type {
+                    headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
                 }
+                let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
+                    .headers(headers)
+                    .body(stream)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+                let json: serde_json::Value = resp.json().await?;
+                let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
+                parts.push(Part::file_data(ct, uri));
+                urls.push(uri.to_string());
             }
         }
         Ok(urls)
