@@ -9,6 +9,8 @@ use twilight_http::Client;
 
 use crate::configs::discord::DISCORD_CONFIGS;
 use crate::dbs::redis::new_pool;
+#[cfg(test)]
+use crate::tests::redis_setup;
 #[derive(Clone)]
 pub struct Context {
     pub http: Arc<Client>,
@@ -58,6 +60,7 @@ impl Context {
 
     #[cfg(test)]
     pub async fn test() -> Self {
+        redis_setup::start().await;
         Self {
             http: Arc::new(Client::new(String::new())),
             cache: Arc::new(DefaultInMemoryCache::builder().build()),

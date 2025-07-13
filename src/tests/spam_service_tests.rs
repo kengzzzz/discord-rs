@@ -1,8 +1,5 @@
-use futures::future;
-use mini_redis::server;
-use once_cell::sync::OnceCell;
+use crate::tests::redis_setup;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 
 use crate::{context::Context, services::spam::SpamService};
 use twilight_model::{
@@ -11,28 +8,6 @@ use twilight_model::{
     user::User,
     util::datetime::Timestamp,
 };
-
-static REDIS_PORT: OnceCell<u16> = OnceCell::new();
-static REDIS_HANDLE: OnceCell<tokio::task::JoinHandle<()>> = OnceCell::new();
-
-async fn init_redis() -> u16 {
-    if let Some(port) = REDIS_PORT.get() {
-        return *port;
-    }
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    unsafe {
-        std::env::set_var("REDIS_URL", format!("redis://127.0.0.1:{port}"));
-    }
-    let handle = tokio::spawn(async move {
-        let _ = server::run(listener, future::pending::<()>()).await;
-    });
-    let _ = REDIS_HANDLE.set(handle);
-    REDIS_PORT.set(port).unwrap();
-    // give server time to start
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    port
-}
 
 fn dummy_user(id: u64) -> User {
     User {
@@ -99,7 +74,7 @@ fn make_message(channel: u64, id: u64, user: u64, content: &str) -> Message {
 
 #[tokio::test]
 async fn test_spam_log_threshold() {
-    init_redis().await;
+    redis_setup::start().await;
     let ctx = Arc::new(Context::test().await);
     let mut token = None;
     for i in 0..4u64 {
@@ -113,7 +88,7 @@ async fn test_spam_log_threshold() {
 
 #[tokio::test]
 async fn test_spam_log_reset() {
-    init_redis().await;
+    redis_setup::start().await;
     let ctx = Arc::new(Context::test().await);
     let msg1 = make_message(1, 100, 6, "hi");
     assert!(
@@ -139,7 +114,6 @@ async fn test_spam_log_reset() {
             .await
             .is_none()
     );
-    // reset because content changed before reaching limit
     let msg5 = make_message(5, 104, 6, "hi");
     let tok = SpamService::log_message(ctx.clone(), 1, &msg5).await;
     assert!(tok.is_none());
