@@ -2,23 +2,19 @@ use std::fmt::Display;
 
 use chrono::Utc;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
-use twilight_model::util::Timestamp;
 use twilight_model::{
-    channel::{Message, message::Embed},
+    channel::message::Embed,
     id::{Id, marker::GuildMarker},
 };
-use twilight_util::builder::embed::{
-    EmbedAuthorBuilder, EmbedBuilder, EmbedFieldBuilder, ImageSource,
-};
+use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
 pub(super) const COLOR: u32 = 0xF1C40F;
 pub(super) const COLOR_INVALID: u32 = 0xE74C3C;
 
 pub mod general;
-mod intro;
 
+pub use crate::services::introduction::embed::*;
 pub use general::{footer_with_icon, guild_only_embed, pinging_embed, pong_embed};
-pub use intro::*;
 
 pub fn welcome_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
