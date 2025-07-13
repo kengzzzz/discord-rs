@@ -1,6 +1,6 @@
 use super::ChatEntry;
 #[cfg(test)]
-use super::SUMMARIZE_OVERRIDE;
+use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;
 use google_ai_rs::Client;
 use google_ai_rs::{Content, genai::Response};

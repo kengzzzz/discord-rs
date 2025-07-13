@@ -9,5 +9,4 @@ pub mod utils;
 pub mod warframe;
 
 #[cfg(test)]
-#[allow(dead_code)]
 mod tests;

@@ -4,18 +4,10 @@ use anyhow::Context as _;
 use deadpool_redis::{Config, Pool, Runtime, redis::cmd};
 use once_cell::sync::Lazy;
 use serde::{Serialize, de::DeserializeOwned};
-#[cfg(test)]
-use std::collections::HashMap;
-#[cfg(test)]
-use tokio::sync::RwLock;
 
 use crate::configs::redis::REDIS_CONFIGS;
 
 pub static REDIS_POOL: Lazy<Pool> = Lazy::new(new_pool);
-
-#[cfg(test)]
-static REDIS_STORE: Lazy<RwLock<HashMap<String, String>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
 
 pub fn new_pool() -> Pool {
     let cfg = Config::from_url(REDIS_CONFIGS.redis_url.clone());
@@ -99,34 +91,7 @@ pub async fn redis_delete(key: &str) {
 }
 
 #[cfg(test)]
-pub async fn redis_get<T>(key: &str) -> Option<T>
-where
-    T: DeserializeOwned + Send + Sync,
-{
-    let map = REDIS_STORE.read().await;
-    let json = map.get(key)?.clone();
-    serde_json::from_str(&json).ok()
-}
+pub(crate) mod tests;
 
 #[cfg(test)]
-pub async fn redis_set<T>(key: &str, value: &T)
-where
-    T: Serialize + Sync,
-{
-    if let Ok(json) = serde_json::to_string(value) {
-        REDIS_STORE.write().await.insert(key.to_string(), json);
-    }
-}
-
-#[cfg(test)]
-pub async fn redis_set_ex<T>(key: &str, value: &T, _ttl: usize)
-where
-    T: Serialize + Sync,
-{
-    redis_set(key, value).await;
-}
-
-#[cfg(test)]
-pub async fn redis_delete(key: &str) {
-    REDIS_STORE.write().await.remove(key);
-}
+pub use tests::{redis_delete, redis_get, redis_set, redis_set_ex};

@@ -1,8 +1,8 @@
+#[cfg(test)]
+use self::tests::GENERATE_OVERRIDE;
 use anyhow::Context as AnyhowContext;
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use google_ai_rs::{Content, Part};
-#[cfg(test)]
-use once_cell::sync::OnceCell as SyncOnceCell;
 use reqwest::{Body, header::CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -15,15 +15,6 @@ use std::sync::Arc;
 
 mod client;
 pub(crate) mod history;
-
-#[cfg(test)]
-static GENERATE_OVERRIDE: SyncOnceCell<
-    Box<dyn Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync>,
-> = SyncOnceCell::new();
-#[cfg(test)]
-#[allow(clippy::type_complexity)]
-static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Send + Sync>> =
-    SyncOnceCell::new();
 
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
@@ -268,19 +259,4 @@ impl AiService {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_generate_override<F>(f: F)
-where
-    F: Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync + 'static,
-{
-    let _ = GENERATE_OVERRIDE.set(Box::new(f));
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_summarize_override<F>(f: F)
-where
-    F: Fn(&[ChatEntry]) -> String + Send + Sync + 'static,
-{
-    let _ = SUMMARIZE_OVERRIDE.set(Box::new(f));
-}
+pub(crate) mod tests;

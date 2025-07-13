@@ -301,10 +301,7 @@ impl BuildService {
             }
         }
     }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) async fn set_items(items: Vec<ItemEntry>) {
-        *ITEMS.write().await = items;
-    }
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

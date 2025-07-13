@@ -5,7 +5,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    services::notification::notify_loop_mock,
+    services::notification::tests::notify_loop_mock,
     tests::{
         mock_db::{init_mock, spawn_watcher_mock},
         mock_http::MockHttp,

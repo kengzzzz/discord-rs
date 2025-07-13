@@ -3,6 +3,7 @@ use httpmock::MockServer;
 use serde_json::json;
 
 use crate::warframe;
+use crate::warframe::api::tests::set_base_url;
 
 #[tokio::test]
 async fn test_title_and_time() {
@@ -16,7 +17,7 @@ async fn test_title_and_time() {
 #[tokio::test]
 async fn test_steel_path_umbra() {
     let server = MockServer::start_async().await;
-    crate::warframe::api::set_base_url(&server.url(""));
+    set_base_url(&server.url(""));
 
     server
         .mock_async(|when, then| {
