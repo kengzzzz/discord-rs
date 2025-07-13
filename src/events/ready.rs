@@ -4,7 +4,7 @@ use crate::{
     context::Context,
     services::{
         build::BuildService, health::HealthService, market::MarketService,
-        notification::NotificationService, role_message::RoleMessageService, status::StatusService,
+        notification::NotificationService, role_message, status::StatusService,
     },
 };
 use std::sync::Arc;
@@ -16,7 +16,7 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
     let role_ctx = ctx.clone();
     tokio::spawn(async move {
         for guild in event.guilds {
-            RoleMessageService::ensure_message(role_ctx.clone(), guild.id).await;
+            role_message::handler::ensure_message(role_ctx.clone(), guild.id).await;
         }
     });
 

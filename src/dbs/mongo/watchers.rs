@@ -13,8 +13,8 @@ use crate::dbs::mongo::{
     watcher::spawn_watcher,
 };
 use crate::services::{
-    ai::AiService, channel::ChannelService, role::RoleService, role_message::RoleMessageService,
-    spam, status_message::StatusMessageService,
+    ai::AiService, channel::ChannelService, role::RoleService, role_message, spam,
+    status_message::StatusMessageService,
 };
 
 pub async fn spawn_channel_watcher(
@@ -124,7 +124,7 @@ pub async fn spawn_message_watcher(
                     if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
                         match doc.message_type {
                             MessageEnum::Role => {
-                                RoleMessageService::purge_cache(doc.guild_id).await;
+                                role_message::storage::purge_cache(doc.guild_id).await;
                             }
                             MessageEnum::Status => {
                                 StatusMessageService::purge_cache(doc.guild_id).await;
