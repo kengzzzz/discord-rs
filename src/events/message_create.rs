@@ -91,12 +91,20 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
                         embed::quarantine_reminder_embed(&guild_ref, channel.channel_id, &token)
                     {
                         let channel_id = Id::new(channel.channel_id);
-                        let _ = ctx
+                        if let Err(e) = ctx
                             .http
                             .create_message(channel_id)
                             .content(&format!("<@{}>", message.author.id))
                             .embeds(&[embed])
-                            .await;
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = channel_id.get(),
+                                user_id = message.author.id.get(),
+                                error = %e,
+                                "failed to send quarantine reminder"
+                            );
+                        }
                     }
                 }
             }
@@ -109,12 +117,20 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
                     embed::quarantine_embed(&guild_ref, &message, channel.channel_id, &token)
                 {
                     let channel_id = Id::new(channel.channel_id);
-                    let _ = ctx
+                    if let Err(e) = ctx
                         .http
                         .create_message(channel_id)
                         .content(&format!("<@{}>", message.author.id))
                         .embeds(&embeds)
-                        .await;
+                        .await
+                    {
+                        tracing::warn!(
+                            channel_id = channel_id.get(),
+                            user_id = message.author.id.get(),
+                            error = %e,
+                            "failed to send quarantine notice"
+                        );
+                    }
                 }
             }
 
@@ -157,11 +173,18 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             {
                 if let Ok(embeds) = embed::ai_embeds(&reply) {
                     for embed in embeds {
-                        let _ = ctx
+                        if let Err(e) = ctx
                             .http
                             .create_message(message.channel_id)
                             .embeds(&[embed])
-                            .await;
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = message.channel_id.get(),
+                                error = %e,
+                                "failed to send AI response"
+                            );
+                        }
                     }
                 }
             }

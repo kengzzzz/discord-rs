@@ -50,10 +50,18 @@ pub(crate) fn notify_loop(
             tokio::select! {
                 _ = token.cancelled() => break,
                 _ = tokio::time::sleep(delay) => {
-                    let _ = http
+                    if let Err(e) = http
                         .create_message(channel_id)
                         .content(&format!("{msg} <@&{role_id}>"))
-                        .await;
+                        .await
+                    {
+                        tracing::warn!(
+                            channel_id = channel_id.get(),
+                            role_id,
+                            error = %e,
+                            "failed to send notification"
+                        );
+                    }
                 }
             }
         }
@@ -74,10 +82,18 @@ pub(crate) fn notify_umbra_loop(
                 _ = tokio::time::sleep(Duration::from_secs(10)) => {
                     let now_state = StatusService::is_umbra_forma();
                     if now_state && !last {
-                        let _ = http
+                        if let Err(e) = http
                             .create_message(channel_id)
                             .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
-                            .await;
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = channel_id.get(),
+                                role_id,
+                                error = %e,
+                                "failed to send umbra forma notification"
+                            );
+                        }
                     }
                     last = now_state;
                 }
