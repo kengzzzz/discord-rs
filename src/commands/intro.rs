@@ -41,7 +41,7 @@ impl IntroCommand {
                     title: None,
                     tts: None,
                 };
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .interaction(interaction.application_id)
                     .create_response(
@@ -52,7 +52,10 @@ impl IntroCommand {
                             data: Some(data),
                         },
                     )
-                    .await;
+                    .await
+                {
+                    tracing::warn!(error = %e, "failed to send intro unavailable response");
+                }
                 return Ok::<_, anyhow::Error>(());
             }
 

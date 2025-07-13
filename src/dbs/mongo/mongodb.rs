@@ -66,43 +66,58 @@ impl MongoDB {
         let client = Client::with_options(opts)?;
         let database = client.database(&MONGO_CONFIGS.database);
 
-        let _ = database.create_collection("channels").await;
-        let _ = database.create_collection("roles").await;
-        let _ = database.create_collection("quarantines").await;
-        let _ = database.create_collection("messages").await;
-        let _ = database.create_collection("ai_prompts").await;
+        for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts"] {
+            if let Err(e) = database.create_collection(coll).await {
+                tracing::debug!(collection = coll, error = %e, "failed to create collection (might already exist)");
+            }
+        }
 
         if !APP_CONFIG.is_atlas() {
-            let _ = database
+            if let Err(e) = database
                 .run_command(doc! {
                     "collMod": "channels",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
-                .await;
-            let _ = database
+                .await
+            {
+                tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
+            }
+            if let Err(e) = database
                 .run_command(doc! {
                     "collMod": "roles",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
-                .await;
-            let _ = database
+                .await
+            {
+                tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
+            }
+            if let Err(e) = database
                 .run_command(doc! {
                     "collMod": "quarantines",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
-                .await;
-            let _ = database
+                .await
+            {
+                tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
+            }
+            if let Err(e) = database
                 .run_command(doc! {
                     "collMod": "messages",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
-                .await;
-            let _ = database
+                .await
+            {
+                tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
+            }
+            if let Err(e) = database
                 .run_command(doc! {
                     "collMod": "ai_prompts",
                     "changeStreamPreAndPostImages": { "enabled": true }
                 })
-                .await;
+                .await
+            {
+                tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
+            }
         }
 
         let channels = database.collection::<Channel>("channels");
@@ -116,7 +131,9 @@ impl MongoDB {
             .options(IndexOptions::builder().unique(true).build())
             .build();
         let idx2 = IndexModel::builder().keys(doc! { "channel_id": 1 }).build();
-        let _ = channels.create_indexes([idx1, idx2]).await;
+        if let Err(e) = channels.create_indexes([idx1, idx2]).await {
+            tracing::debug!(collection = "channels", error = %e, "failed to create indexes");
+        }
 
         let idx1 = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "role_type": 1 })
@@ -126,25 +143,33 @@ impl MongoDB {
             .keys(doc! { "role_id": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = roles.create_indexes([idx1, idx2]).await;
+        if let Err(e) = roles.create_indexes([idx1, idx2]).await {
+            tracing::debug!(collection = "roles", error = %e, "failed to create indexes");
+        }
 
         let idx = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "user_id": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = quarantines.create_index(idx).await;
+        if let Err(e) = quarantines.create_index(idx).await {
+            tracing::debug!(collection = "quarantines", error = %e, "failed to create index");
+        }
 
         let idx = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "message_type": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = messages.create_index(idx).await;
+        if let Err(e) = messages.create_index(idx).await {
+            tracing::debug!(collection = "messages", error = %e, "failed to create index");
+        }
 
         let idx = IndexModel::builder()
             .keys(doc! { "user_id": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = ai_prompts.create_index(idx).await;
+        if let Err(e) = ai_prompts.create_index(idx).await {
+            tracing::debug!(collection = "ai_prompts", error = %e, "failed to create index");
+        }
 
         let repo = Arc::new(Self {
             client,

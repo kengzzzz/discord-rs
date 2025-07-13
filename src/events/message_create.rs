@@ -80,10 +80,13 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
 
     if let (Some(_), Some(channel)) = (q_role, q_channel) {
         if SpamService::is_quarantined(ctx.clone(), guild_id.get(), message.author.id.get()).await {
-            let _ = ctx
+            if let Err(e) = ctx
                 .http
                 .delete_message(message.channel_id, message.id)
-                .await;
+                .await
+            {
+                tracing::warn!(channel_id = message.channel_id.get(), message_id = message.id.get(), error = %e, "failed to delete message from quarantined user");
+            }
             if let Some(token) =
                 SpamService::get_token(ctx.clone(), guild_id.get(), message.author.id.get()).await
             {
@@ -148,7 +151,9 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
 
     if let Some(user) = &ctx.cache.current_user() {
         if message.mentions.iter().any(|m| m.id == user.id) {
-            let _ = ctx.http.create_typing_trigger(message.channel_id).await;
+            if let Err(e) = ctx.http.create_typing_trigger(message.channel_id).await {
+                tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
+            }
             let content = strip_mention(&message.content, user.id);
             let ref_text_opt = message
                 .referenced_message

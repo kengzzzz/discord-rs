@@ -79,26 +79,35 @@ impl SpamService {
             if let Some(role) =
                 RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
             {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .remove_guild_member_role(guild_id, user_id, Id::new(role.role_id))
-                    .await;
+                    .await
+                {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to remove quarantine role");
+                }
             }
             for id in record.roles.iter() {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .add_guild_member_role(guild_id, user_id, Id::new(*id))
-                    .await;
+                    .await
+                {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "failed to restore member role");
+                }
             }
 
-            let _ = ctx
+            if let Err(e) = ctx
                 .mongo
                 .quarantines
                 .delete_one(doc! {
                     "guild_id": guild_id.get() as i64,
                     "user_id": user_id.get() as i64,
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to delete quarantine record");
+            }
 
             return true;
         }
@@ -140,18 +149,24 @@ impl SpamService {
         if let Some(member_ref) = ctx.cache.member(guild_id, user_id) {
             let roles = member_ref.roles();
             for r in roles {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .remove_guild_member_role(guild_id, user_id, *r)
-                    .await;
+                    .await
+                {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = r.get(), error = %e, "failed to remove member role for quarantine");
+                }
             }
             if let Some(role) =
                 RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
             {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
-                    .await;
+                    .await
+                {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
+                }
             }
             let record = Quarantine {
                 id: None,
@@ -161,7 +176,7 @@ impl SpamService {
                 roles: roles.iter().map(|r| r.get()).collect(),
             };
             if let Ok(bson) = to_bson(&record) {
-                let _ = ctx
+                if let Err(e) = ctx
                     .mongo
                     .quarantines
                     .update_one(
@@ -169,7 +184,10 @@ impl SpamService {
                         doc! {"$set": bson},
                     )
                     .upsert(true)
-                    .await;
+                    .await
+                {
+                    tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
+                }
             }
         }
     }
@@ -212,7 +230,9 @@ impl SpamService {
             let http = ctx.http.clone();
             tokio::spawn(async move {
                 for (c_id, m_id) in to_delete {
-                    let _ = http.delete_message(Id::new(c_id), Id::new(m_id)).await;
+                    if let Err(e) = http.delete_message(Id::new(c_id), Id::new(m_id)).await {
+                        tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
+                    }
                 }
             });
             let token = format!("{:06}", fastrand::u32(0..1_000_000));

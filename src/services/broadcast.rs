@@ -50,10 +50,13 @@ impl BroadcastService {
         let emoji = RequestReactionType::Unicode {
             name: Reaction::Success.emoji(),
         };
-        let _ = ctx
+        if let Err(e) = ctx
             .http
             .create_reaction(message.channel_id, message.id, &emoji)
-            .await;
+            .await
+        {
+            tracing::warn!(channel_id = message.channel_id.get(), message_id = message.id.get(), error = %e, "failed to react to broadcast");
+        }
     }
 
     async fn remember(original: u64, records: &Vec<(u64, u64)>) {
@@ -66,7 +69,9 @@ impl BroadcastService {
             let key = format!("{CACHE_PREFIX}:broadcast:{msg_id}");
             if let Some(list) = redis_get::<Vec<(u64, u64)>>(&key).await {
                 for (ch, m) in list {
-                    let _ = ctx.http.delete_message(Id::new(ch), Id::new(m)).await;
+                    if let Err(e) = ctx.http.delete_message(Id::new(ch), Id::new(m)).await {
+                        tracing::warn!(channel_id = ch, message_id = m, error = %e, "failed to delete broadcast replica");
+                    }
                 }
                 redis_delete(&key).await;
             }

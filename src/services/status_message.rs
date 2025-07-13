@@ -32,14 +32,17 @@ impl StatusMessageService {
     }
 
     pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
-        let _ = ctx.mongo
+        if let Err(e) = ctx.mongo
             .messages
             .update_one(
                 doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()},
                 doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()}},
             )
             .upsert(true)
-            .await;
+            .await
+        {
+            tracing::warn!(guild_id, channel_id, message_id, error = %e, "failed to persist status message location");
+        }
     }
 
     pub async fn purge_cache(guild_id: u64) {

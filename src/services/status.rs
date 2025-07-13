@@ -64,11 +64,14 @@ impl StatusService {
             }
 
             if let Some(msg_id) = existing {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .update_message(channel_id, Id::new(msg_id))
                     .embeds(Some(&[embed.clone()]))
-                    .await;
+                    .await
+                {
+                    tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to update status message");
+                }
                 StatusMessageService::set(
                     ctx.clone(),
                     channel.guild_id,
@@ -83,9 +86,13 @@ impl StatusService {
 
                         for chunk in ids.chunks(100) {
                             if chunk.len() == 1 {
-                                let _ = ctx.http.delete_message(channel_id, chunk[0]).await;
-                            } else {
-                                let _ = ctx.http.delete_messages(channel_id, chunk).await;
+                                if let Err(e) = ctx.http.delete_message(channel_id, chunk[0]).await
+                                {
+                                    tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
+                                }
+                            } else if let Err(e) = ctx.http.delete_messages(channel_id, chunk).await
+                            {
+                                tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
                             }
                         }
                     }
