@@ -8,7 +8,7 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::mongo::role::RoleEnum,
+    dbs::mongo::models::role::RoleEnum,
     services::{notification::NotificationService, role_message::RoleMessageService},
     utils::embed,
 };

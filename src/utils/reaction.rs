@@ -1,6 +1,6 @@
 use twilight_model::channel::message::EmojiReactionType;
 
-use crate::{configs::Reaction, dbs::mongo::role::RoleEnum};
+use crate::{configs::Reaction, dbs::mongo::models::role::RoleEnum};
 
 pub fn emoji_to_role_enum(emoji: &EmojiReactionType) -> Option<RoleEnum> {
     match emoji {

@@ -5,7 +5,7 @@ use crate::{
     configs::{CACHE_PREFIX, Reaction},
     context::Context,
     dbs::{
-        mongo::channel::ChannelEnum,
+        mongo::models::channel::ChannelEnum,
         redis::{redis_delete, redis_get, redis_set_ex},
     },
     services::channel::ChannelService,

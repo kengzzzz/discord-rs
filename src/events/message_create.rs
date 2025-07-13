@@ -7,7 +7,7 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::mongo::{channel::ChannelEnum, role::RoleEnum},
+    dbs::mongo::models::{channel::ChannelEnum, role::RoleEnum},
     services::{
         ai::AiService, broadcast::BroadcastService, channel::ChannelService, role::RoleService,
         spam::SpamService,

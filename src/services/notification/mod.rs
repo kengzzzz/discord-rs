@@ -11,7 +11,7 @@ use twilight_model::id::{Id, marker::ChannelMarker};
 use crate::{
     configs::notifications::NOTIFICATIONS,
     context::Context,
-    dbs::mongo::{
+    dbs::mongo::models::{
         channel::{Channel, ChannelEnum},
         role::RoleEnum,
     },

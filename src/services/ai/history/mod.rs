@@ -102,7 +102,7 @@ pub(crate) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: 
     }
     #[cfg(not(test))]
     {
-        use crate::dbs::mongo::ai_prompt::AiPrompt;
+        use crate::dbs::mongo::models::ai_prompt::AiPrompt;
         use mongodb::bson::{doc, to_bson};
 
         if let Ok(bson) = to_bson(&AiPrompt {

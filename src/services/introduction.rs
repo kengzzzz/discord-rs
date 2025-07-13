@@ -12,7 +12,7 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::mongo::{
+    dbs::mongo::models::{
         channel::{Channel, ChannelEnum},
         role::RoleEnum,
     },

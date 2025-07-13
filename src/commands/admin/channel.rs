@@ -7,7 +7,7 @@ use twilight_model::application::interaction::Interaction;
 
 use crate::{
     context::Context,
-    dbs::mongo::channel::ChannelEnum,
+    dbs::mongo::models::channel::ChannelEnum,
     services::{notification::NotificationService, role_message::RoleMessageService},
     utils::embed,
 };

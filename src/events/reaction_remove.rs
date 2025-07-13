@@ -2,7 +2,7 @@ use twilight_model::{gateway::payload::incoming::ReactionRemove, id::Id};
 
 use crate::{
     context::Context,
-    dbs::mongo::channel::ChannelEnum,
+    dbs::mongo::models::channel::ChannelEnum,
     services::{channel::ChannelService, role::RoleService, role_message::RoleMessageService},
     utils::reaction::emoji_to_role_enum,
 };

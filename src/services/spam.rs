@@ -13,7 +13,7 @@ use twilight_model::{
 use crate::{
     context::Context,
     dbs::{
-        mongo::{quarantine::Quarantine, role::RoleEnum},
+        mongo::models::{quarantine::Quarantine, role::RoleEnum},
         redis::{redis_delete, redis_get, redis_set, redis_set_ex},
     },
     services::{broadcast::BroadcastService, role::RoleService},

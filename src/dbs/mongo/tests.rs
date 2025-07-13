@@ -1,4 +1,4 @@
-use super::*;
+use super::client::MongoDB;
 use mongodb::Client;
 use std::sync::Arc;
 

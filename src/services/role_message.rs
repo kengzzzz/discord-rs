@@ -8,7 +8,7 @@ use crate::{
     configs::CACHE_PREFIX,
     context::Context,
     dbs::{
-        mongo::{
+        mongo::models::{
             channel::ChannelEnum,
             message::{Message, MessageEnum},
             role::RoleEnum,

@@ -2,7 +2,7 @@ use crate::{
     configs::CACHE_PREFIX,
     context::Context,
     dbs::{
-        mongo::message::{Message, MessageEnum},
+        mongo::models::message::{Message, MessageEnum},
         redis::{redis_delete, redis_get, redis_set},
     },
 };

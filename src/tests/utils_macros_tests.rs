@@ -1,5 +1,5 @@
 use crate::configs::Reaction;
-use crate::dbs::mongo::role::RoleEnum;
+use crate::dbs::mongo::models::role::RoleEnum;
 use crate::tests::mock_http::MockHttp;
 use crate::utils::embed::ai_embeds;
 use crate::utils::{env as env_util, reaction};

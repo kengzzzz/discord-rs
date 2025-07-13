@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::dbs::mongo::mongodb::MongoDB;
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
 use twilight_http::Client;
 
 use crate::configs::discord::DISCORD_CONFIGS;
+use crate::dbs::mongo::client::MongoDB;
 use crate::dbs::redis::new_pool;
 
 #[derive(Clone)]

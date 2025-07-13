@@ -11,7 +11,7 @@ use twilight_model::id::marker::GuildMarker;
 use crate::services::shutdown;
 use crate::{
     context::Context,
-    dbs::mongo::channel::ChannelEnum,
+    dbs::mongo::models::channel::ChannelEnum,
     services::{channel::ChannelService, status_message::StatusMessageService},
     warframe,
 };

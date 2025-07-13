@@ -14,11 +14,13 @@ use twilight_model::id::Id;
 use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
     dbs::mongo::{
-        ai_prompt::AiPrompt,
-        channel::Channel,
-        message::{Message, MessageEnum},
-        quarantine::Quarantine,
-        role::Role,
+        models::{
+            ai_prompt::AiPrompt,
+            channel::Channel,
+            message::{Message, MessageEnum},
+            quarantine::Quarantine,
+            role::Role,
+        },
         watcher::spawn_watcher,
     },
     services::{
@@ -29,7 +31,7 @@ use crate::{
 };
 
 pub struct MongoDB {
-    client: Client,
+    pub(crate) client: Client,
     pub channels: Collection<Channel>,
     pub roles: Collection<Role>,
     pub quarantines: Collection<Quarantine>,
@@ -334,6 +336,3 @@ impl MongoDB {
         &self.client
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests;

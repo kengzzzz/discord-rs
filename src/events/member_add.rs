@@ -5,7 +5,7 @@ use crate::context::Context;
 use crate::send_with_fallback;
 use crate::services::spam::SpamService;
 use crate::{
-    dbs::mongo::{channel::ChannelEnum, role::RoleEnum},
+    dbs::mongo::models::{channel::ChannelEnum, role::RoleEnum},
     services::{channel::ChannelService, role::RoleService},
     utils::embed,
 };
