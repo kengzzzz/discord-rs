@@ -175,30 +175,30 @@ impl AiService {
         let mut contents: Vec<Content> = history
             .iter()
             .map(|c| {
-                let mut text = c.text.clone();
+                let mut parts = vec![Part::text(&c.text)];
                 for url in &c.attachments {
-                    text.push_str("\nAttachment from ");
-                    text.push_str(user_name);
-                    text.push_str(": ");
-                    text.push_str(url);
+                    let label = format!("Attachment from {user_name}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::file_data("", url));
                 }
                 if let Some(ref_text) = &c.ref_text {
                     let owner = c.ref_author.as_deref().unwrap_or("another user");
-                    text.push_str("\nIn reply to ");
-                    text.push_str(owner);
-                    text.push_str(": ");
-                    text.push_str(ref_text);
+                    let label = format!("In reply to {owner}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::text(ref_text));
                 }
                 if let Some(ref_urls) = &c.ref_attachments {
                     let owner = c.ref_author.as_deref().unwrap_or("another user");
                     for url in ref_urls {
-                        text.push_str("\nAttachment from ");
-                        text.push_str(owner);
-                        text.push_str(": ");
-                        text.push_str(url);
+                        let label = format!("Attachment from {owner}:");
+                        parts.push(Part::text(&label));
+                        parts.push(Part::file_data("", url));
                     }
                 }
-                Content::from((text.as_str(),))
+                Content {
+                    role: c.role.clone(),
+                    parts,
+                }
             })
             .collect();
 
