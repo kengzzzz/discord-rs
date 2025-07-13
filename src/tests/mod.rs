@@ -1,5 +1,6 @@
 mod ai_service_tests;
 mod build_market_tests;
+mod command_parsing_tests;
 mod context_startup_tests;
 mod health_service_tests;
 mod intro_service_tests;
