@@ -12,7 +12,7 @@ use crate::{
 use std::sync::Arc;
 
 pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
-    if event.member.user.bot | event.member.user.system.unwrap_or_default() {
+    if event.member.user.bot || event.member.user.system.unwrap_or_default() {
         return;
     }
     let guild_id = event.guild_id;

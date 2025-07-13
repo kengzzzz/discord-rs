@@ -15,7 +15,7 @@ pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
     let Some(user) = &interaction.author() else {
         return;
     };
-    if user.bot | user.system.unwrap_or_default() {
+    if user.bot || user.system.unwrap_or_default() {
         return;
     }
 
