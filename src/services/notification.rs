@@ -35,7 +35,7 @@ pub(crate) fn next_monday_duration() -> Duration {
     Duration::from_secs(dur.num_seconds() as u64)
 }
 
-fn notify_loop(
+pub(crate) fn notify_loop(
     http: Arc<Client>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
@@ -60,7 +60,7 @@ fn notify_loop(
     })
 }
 
-fn notify_umbra_loop(
+pub(crate) fn notify_umbra_loop(
     http: Arc<Client>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
@@ -80,6 +80,32 @@ fn notify_umbra_loop(
                             .await;
                     }
                     last = now_state;
+                }
+            }
+        }
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn notify_loop_mock(
+    http: std::sync::Arc<crate::tests::mock_http::MockHttp>,
+    channel_id: Id<ChannelMarker>,
+    role_id: u64,
+    message: &str,
+    mut calc_delay: impl FnMut() -> Duration + Send + 'static,
+    token: CancellationToken,
+) -> JoinHandle<()> {
+    let msg = message.to_string();
+    tokio::spawn(async move {
+        loop {
+            let delay = calc_delay();
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = tokio::time::sleep(delay) => {
+                    let _ = http
+                        .create_message(channel_id)
+                        .content(&format!("{msg} <@&{role_id}>"))
+                        .await;
                 }
             }
         }
