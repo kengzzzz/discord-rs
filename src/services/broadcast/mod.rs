@@ -1,3 +1,5 @@
+pub mod embed;
+
 use twilight_http::request::channel::reaction::RequestReactionType;
 use twilight_model::{channel::Message, id::Id};
 
@@ -9,7 +11,6 @@ use crate::{
         redis::{redis_delete, redis_get, redis_set_ex},
     },
     services::channel::ChannelService,
-    utils::embed,
 };
 use std::sync::Arc;
 
@@ -27,7 +28,7 @@ impl BroadcastService {
             return;
         };
 
-        let Ok(embeds) = embed::broadcast_embeds(&guild_ref, message) else {
+        let Ok(embeds) = Self::broadcast_embeds(&guild_ref, message) else {
             return;
         };
 

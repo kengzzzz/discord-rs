@@ -14,6 +14,7 @@ use crate::{configs::google::GOOGLE_CONFIGS, context::Context, services::http::H
 use std::sync::Arc;
 
 mod client;
+pub mod embed;
 pub(crate) mod history;
 
 const MAX_HISTORY: usize = 20;

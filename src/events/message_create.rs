@@ -187,7 +187,7 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             )
             .await
             {
-                if let Ok(embeds) = embed::ai_embeds(&reply) {
+                if let Ok(embeds) = AiService::ai_embeds(&reply) {
                     for embed in embeds {
                         if let Err(e) = ctx
                             .http

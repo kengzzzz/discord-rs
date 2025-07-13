@@ -5,7 +5,7 @@ use twilight_model::{
     channel::message::MessageFlags,
 };
 
-use crate::{context::Context, defer_interaction, services::ai::AiService, utils::embed};
+use crate::{context::Context, defer_interaction, services::ai::AiService};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -77,7 +77,7 @@ impl AiCommand {
                 AiCommand::Prompt(c) => {
                     if let Some(user) = interaction.author() {
                         AiService::set_prompt(ctx.clone(), user.id, c.prompt).await;
-                        let embeds = embed::ai_embeds("Prompt updated")?;
+                        let embeds = AiService::ai_embeds("Prompt updated")?;
                         ctx.http
                             .interaction(interaction.application_id)
                             .update_response(&interaction.token)
@@ -99,7 +99,7 @@ impl AiCommand {
                         None,
                     )
                     .await?;
-                    for embed in embed::ai_embeds(&reply)? {
+                    for embed in AiService::ai_embeds(&reply)? {
                         ctx.http
                             .interaction(interaction.application_id)
                             .create_followup(&interaction.token)
@@ -111,7 +111,7 @@ impl AiCommand {
                 AiCommand::Clear(_) => {
                     if let Some(user) = interaction.author() {
                         AiService::clear_history(user.id).await;
-                        let embeds = embed::ai_embeds("History cleared")?;
+                        let embeds = AiService::ai_embeds("History cleared")?;
                         ctx.http
                             .interaction(interaction.application_id)
                             .update_response(&interaction.token)
