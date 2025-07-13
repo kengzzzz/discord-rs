@@ -49,7 +49,7 @@ async fn test_steel_path_umbra() {
 
 #[tokio::test]
 async fn test_next_monday_duration() {
-    let dur = crate::services::notification::next_monday_duration();
+    let dur = crate::services::notification::worker::next_monday_duration();
     assert!(dur.as_secs() > 0);
     assert!(dur.as_secs() <= 8 * 24 * 60 * 60);
 }
