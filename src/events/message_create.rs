@@ -157,12 +157,11 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             {
                 if let Ok(embeds) = embed::ai_embeds(&reply) {
                     for embed in embeds {
-                        let _ = dbg!(
-                            ctx.http
-                                .create_message(message.channel_id)
-                                .embeds(&[embed])
-                                .await
-                        );
+                        let _ = ctx
+                            .http
+                            .create_message(message.channel_id)
+                            .embeds(&[embed])
+                            .await;
                     }
                 }
             }
