@@ -45,13 +45,17 @@ impl RoleMessageService {
     }
 
     pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
-        let _ = ctx.mongo
+        if let Err(e) = ctx.mongo
             .messages
             .update_one(
                 doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
                 doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()}},
-            ).upsert(true)
-            .await;
+            )
+            .upsert(true)
+            .await
+        {
+            tracing::warn!(guild_id, channel_id, message_id, error = %e, "failed to persist role message location");
+        }
     }
 
     pub async fn purge_cache(guild_id: u64) {
@@ -126,16 +130,22 @@ impl RoleMessageService {
                 update = update.embeds(None);
             }
             if update.await.is_ok() {
-                let _ = ctx
+                if let Err(e) = ctx
                     .http
                     .delete_all_reactions(channel_id, Id::new(msg_id))
-                    .await;
+                    .await
+                {
+                    tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to clear reactions");
+                }
                 for (_, emoji) in &info {
                     let reaction = RequestReactionType::Unicode { name: emoji };
-                    let _ = ctx
+                    if let Err(e) = ctx
                         .http
                         .create_reaction(channel_id, Id::new(msg_id), &reaction)
-                        .await;
+                        .await
+                    {
+                        tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to add reaction");
+                    }
                 }
                 Self::set(ctx.clone(), guild_id.get(), channel_id.get(), msg_id).await;
             }
@@ -152,10 +162,13 @@ impl RoleMessageService {
             if let Ok(msg) = response.model().await {
                 for (_, emoji) in &info {
                     let reaction = RequestReactionType::Unicode { name: emoji };
-                    let _ = ctx
+                    if let Err(e) = ctx
                         .http
                         .create_reaction(channel_id, msg.id, &reaction)
-                        .await;
+                        .await
+                    {
+                        tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
+                    }
                 }
                 Self::set(ctx.clone(), guild_id.get(), channel_id.get(), msg.id.get()).await;
             }

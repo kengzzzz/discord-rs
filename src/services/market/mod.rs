@@ -427,7 +427,7 @@ impl MarketService {
                     .components(components.clone())
                     .build();
                 let http = ctx.http.clone();
-                let _ = http
+                if let Err(e) = http
                     .interaction(interaction.application_id)
                     .create_response(
                         interaction.id,
@@ -437,7 +437,10 @@ impl MarketService {
                             data: Some(data),
                         },
                     )
-                    .await;
+                    .await
+                {
+                    tracing::warn!(error = %e, "failed to update market session message");
+                }
             }
         }
 

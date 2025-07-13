@@ -7,10 +7,16 @@ This repository contains a simple Discord bot written in Rust.
 - [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
 - Rust toolchain (only required when running the bot without Docker)
 
+## Quick Start
+
+1. Copy `.env.example` to `.env` and fill in the required values.
+2. Run `docker-compose up` to build containers and start the bot in watch mode.
+
+The bot reloads automatically whenever sources change. Use the Rust toolchain only if you want to run it without Docker.
+
 ## Setup
 
-1. Copy `.env.example` to `.env`.
-2. Fill in the environment variables in the created file. Set `APP_ENV=production` in the production file.
+If you prefer running the bot directly with the Rust toolchain, make sure the environment variables are available in your shell. Set `APP_ENV=production` in the production file.
 
 ### Environment Variables
 

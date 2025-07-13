@@ -10,7 +10,7 @@ macro_rules! guild_command {
 
             if $interaction.guild_id.is_none() {
                 if let Ok(embed) = embed::guild_only_embed() {
-                    let _ = $http
+                    if let Err(e) = $http
                         .interaction($interaction.application_id)
                         .create_response(
                             $interaction.id,
@@ -24,7 +24,10 @@ macro_rules! guild_command {
                                 }),
                             },
                         )
-                        .await;
+                        .await
+                    {
+                        tracing::warn!(error = %e, "failed to send guild-only response");
+                    }
                 }
                 return Ok::<(), anyhow::Error>(());
             }

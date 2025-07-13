@@ -35,5 +35,9 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
 
     NotificationService::spawn(ctx);
 
-    println!("Logged in.");
+    tracing::info!(
+        user = %event.user.name,
+        id = %event.user.id,
+        "Logged in"
+    );
 }

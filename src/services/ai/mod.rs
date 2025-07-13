@@ -28,8 +28,6 @@ static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Sen
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
 
-const INLINE_LIMIT: u64 = 20 * 1024 * 1024;
-
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ChatEntry {
     pub role: String,
@@ -105,34 +103,29 @@ impl AiService {
             ) {
                 let label = format!("Attachment from {owner}:");
                 parts.push(Part::text(&label));
-                if a.size > INLINE_LIMIT {
-                    let stream = Body::wrap_stream(resp.bytes_stream());
-                    let upload_url = reqwest::Url::parse_with_params(
-                        "https://generativelanguage.googleapis.com/upload/v1beta/files",
-                        &[("uploadType", "media")],
-                    )?;
-                    let mut headers = HeaderMap::new();
-                    headers.append(
-                        HeaderName::from_str("X-Goog-Api-Key")?,
-                        HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
-                    );
-                    if let Some(content_type) = &a.content_type {
-                        headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
-                    }
-                    let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
-                        .headers(headers)
-                        .body(stream)
-                        .send()
-                        .await?
-                        .error_for_status()?;
-                    let json: serde_json::Value = resp.json().await?;
-                    let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
-                    parts.push(Part::file_data(ct, uri));
-                    urls.push(uri.to_string());
-                } else if let Ok(bytes) = resp.bytes().await {
-                    parts.push(Part::blob(ct, bytes.to_vec()));
-                    urls.push(a.url.clone());
+                let stream = Body::wrap_stream(resp.bytes_stream());
+                let upload_url = reqwest::Url::parse_with_params(
+                    "https://generativelanguage.googleapis.com/upload/v1beta/files",
+                    &[("uploadType", "media")],
+                )?;
+                let mut headers = HeaderMap::new();
+                headers.append(
+                    HeaderName::from_str("X-Goog-Api-Key")?,
+                    HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
+                );
+                if let Some(content_type) = &a.content_type {
+                    headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
                 }
+                let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
+                    .headers(headers)
+                    .body(stream)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+                let json: serde_json::Value = resp.json().await?;
+                let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
+                parts.push(Part::file_data(ct, uri));
+                urls.push(uri.to_string());
             }
         }
         Ok(urls)
@@ -145,9 +138,9 @@ impl AiService {
         user_name: &str,
         message: &str,
         attachments: Vec<Attachment>,
-        ref_text: Option<String>,
+        ref_text: Option<&str>,
         ref_attachments: Vec<Attachment>,
-        ref_author: Option<String>,
+        ref_author: Option<&str>,
     ) -> anyhow::Result<String> {
         let mut history = Self::load_history(user_id).await;
 
@@ -182,37 +175,37 @@ impl AiService {
         let mut contents: Vec<Content> = history
             .iter()
             .map(|c| {
-                let mut text = c.text.clone();
+                let mut parts = vec![Part::text(&c.text)];
                 for url in &c.attachments {
-                    text.push_str("\nAttachment from ");
-                    text.push_str(user_name);
-                    text.push_str(": ");
-                    text.push_str(url);
+                    let label = format!("Attachment from {user_name}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::file_data("", url));
                 }
                 if let Some(ref_text) = &c.ref_text {
                     let owner = c.ref_author.as_deref().unwrap_or("another user");
-                    text.push_str("\nIn reply to ");
-                    text.push_str(owner);
-                    text.push_str(": ");
-                    text.push_str(ref_text);
+                    let label = format!("In reply to {owner}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::text(ref_text));
                 }
                 if let Some(ref_urls) = &c.ref_attachments {
                     let owner = c.ref_author.as_deref().unwrap_or("another user");
                     for url in ref_urls {
-                        text.push_str("\nAttachment from ");
-                        text.push_str(owner);
-                        text.push_str(": ");
-                        text.push_str(url);
+                        let label = format!("Attachment from {owner}:");
+                        parts.push(Part::text(&label));
+                        parts.push(Part::file_data("", url));
                     }
                 }
-                Content::from((text.as_str(),))
+                Content {
+                    role: c.role.clone(),
+                    parts,
+                }
             })
             .collect();
 
         let mut parts = vec![Part::text(message)];
         let attachment_urls =
             Self::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
-        let ref_owner = ref_author.as_deref().unwrap_or("referenced user");
+        let ref_owner = ref_author.unwrap_or("referenced user");
         let ref_attachment_urls =
             Self::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
 
@@ -234,7 +227,7 @@ impl AiService {
             for name in MODELS {
                 let m = client
                     .generative_model(name)
-                    .with_system_instruction(system.clone());
+                    .with_system_instruction(system.as_str());
                 match m.generate_content(contents.clone()).await {
                     Ok(r) => {
                         response = Some(r);
@@ -252,13 +245,13 @@ impl AiService {
             "user".into(),
             message.to_owned(),
             attachment_urls,
-            ref_text,
+            ref_text.map(|t| t.to_string()),
             if ref_attachment_urls.is_empty() {
                 None
             } else {
                 Some(ref_attachment_urls)
             },
-            ref_author.clone(),
+            ref_author.map(|t| t.to_string()),
         ));
         history.push(ChatEntry::new(
             "model".into(),

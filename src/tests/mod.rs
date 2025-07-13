@@ -1,10 +1,16 @@
 mod ai_service_tests;
 mod build_market_tests;
+mod command_parsing_tests;
+mod context_startup_tests;
 mod health_service_tests;
 mod intro_service_tests;
+mod market_service_tests;
 mod message_create_tests;
-mod mock_db;
-mod mock_http;
+pub mod mock_db;
+pub mod mock_http;
+pub mod redis_setup;
+mod service_loop_tests;
+mod spam_service_tests;
 mod utils_macros_tests;
 mod warframe_notification_tests;
 mod watcher_session_tests;

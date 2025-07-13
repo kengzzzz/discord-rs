@@ -42,10 +42,13 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionAdd) {
     };
     if let Some(role) = RoleService::get_by_type(ctx.clone(), guild_id.get(), &role_type).await {
         if role.self_assignable {
-            let _ = ctx
+            if let Err(e) = ctx
                 .http
                 .add_guild_member_role(guild_id, event.user_id, Id::new(role.role_id))
-                .await;
+                .await
+            {
+                tracing::warn!(guild_id = guild_id.get(), user_id = event.user_id.get(), error = %e, "failed to assign role via reaction");
+            }
         }
     }
 }

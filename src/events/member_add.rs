@@ -12,7 +12,7 @@ use crate::{
 use std::sync::Arc;
 
 pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
-    if event.member.user.bot | event.member.user.system.unwrap_or_default() {
+    if event.member.user.bot || event.member.user.system.unwrap_or_default() {
         return;
     }
     let guild_id = event.guild_id;
@@ -22,10 +22,13 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await,
         ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Quarantine).await,
     ) {
-        let _ = ctx
+        if let Err(e) = ctx
             .http
             .add_guild_member_role(guild_id, event.user.id, Id::new(q_role.role_id))
-            .await;
+            .await
+        {
+            tracing::warn!(guild_id = guild_id.get(), user_id = event.user.id.get(), error = %e, "failed to assign quarantine role on join");
+        }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let http = ctx.http.clone();
@@ -46,10 +49,13 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
 
     if let (Some(guest), Some(channel)) = (guest_role, intro_channel) {
         let guest_id = Id::new(guest.role_id);
-        let _ = ctx
+        if let Err(e) = ctx
             .http
             .add_guild_member_role(guild_id, event.user.id, guest_id)
-            .await;
+            .await
+        {
+            tracing::warn!(guild_id = guild_id.get(), user_id = event.user.id.get(), error = %e, "failed to assign guest role on join");
+        }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let http = ctx.http.clone();

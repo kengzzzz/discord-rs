@@ -81,7 +81,7 @@ fn basic_message(id: u64, attachments: Vec<Attachment>, ref_msg: Option<Message>
         referenced_message: ref_msg.map(Box::new),
         role_subscription_data: None,
         sticker_items: Vec::new(),
-        timestamp: Timestamp::from_secs(0).unwrap(),
+        timestamp: Timestamp::from_secs(1).unwrap(),
         thread: None,
         tts: false,
         webhook_id: None,
@@ -106,4 +106,19 @@ fn test_strip_mention() {
 
     let msg2 = format!("hello <@!{}>", id.get());
     assert_eq!(strip_mention(&msg2, id), "hello ");
+}
+
+#[test]
+fn test_collect_attachments() {
+    use crate::events::message_create::collect_attachments;
+    let msg = basic_message(1, (1..7).map(dummy_attachment).collect(), None);
+    let (main, refs) = collect_attachments(&msg);
+    assert_eq!(main.len(), 5);
+    assert!(refs.is_empty());
+
+    let ref_msg = basic_message(2, vec![dummy_attachment(10); 4], None);
+    let msg2 = basic_message(3, vec![dummy_attachment(1)], Some(ref_msg));
+    let (main2, refs2) = collect_attachments(&msg2);
+    assert_eq!(main2.len(), 1);
+    assert_eq!(refs2.len(), 4);
 }

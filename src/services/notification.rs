@@ -35,8 +35,76 @@ pub(crate) fn next_monday_duration() -> Duration {
     Duration::from_secs(dur.num_seconds() as u64)
 }
 
-fn notify_loop(
+pub(crate) fn notify_loop(
     http: Arc<Client>,
+    channel_id: Id<ChannelMarker>,
+    role_id: u64,
+    message: &str,
+    mut calc_delay: impl FnMut() -> Duration + Send + 'static,
+    token: CancellationToken,
+) -> JoinHandle<()> {
+    let msg = message.to_string();
+    tokio::spawn(async move {
+        loop {
+            let delay = calc_delay();
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = tokio::time::sleep(delay) => {
+                    if let Err(e) = http
+                        .create_message(channel_id)
+                        .content(&format!("{msg} <@&{role_id}>"))
+                        .await
+                    {
+                        tracing::warn!(
+                            channel_id = channel_id.get(),
+                            role_id,
+                            error = %e,
+                            "failed to send notification"
+                        );
+                    }
+                }
+            }
+        }
+    })
+}
+
+pub(crate) fn notify_umbra_loop(
+    http: Arc<Client>,
+    channel_id: Id<ChannelMarker>,
+    role_id: u64,
+    token: CancellationToken,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut last = StatusService::is_umbra_forma();
+        loop {
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = tokio::time::sleep(Duration::from_secs(10)) => {
+                    let now_state = StatusService::is_umbra_forma();
+                    if now_state && !last {
+                        if let Err(e) = http
+                            .create_message(channel_id)
+                            .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = channel_id.get(),
+                                role_id,
+                                error = %e,
+                                "failed to send umbra forma notification"
+                            );
+                        }
+                    }
+                    last = now_state;
+                }
+            }
+        }
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn notify_loop_mock(
+    http: std::sync::Arc<crate::tests::mock_http::MockHttp>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     message: &str,
@@ -54,32 +122,6 @@ fn notify_loop(
                         .create_message(channel_id)
                         .content(&format!("{msg} <@&{role_id}>"))
                         .await;
-                }
-            }
-        }
-    })
-}
-
-fn notify_umbra_loop(
-    http: Arc<Client>,
-    channel_id: Id<ChannelMarker>,
-    role_id: u64,
-    token: CancellationToken,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut last = StatusService::is_umbra_forma();
-        loop {
-            tokio::select! {
-                _ = token.cancelled() => break,
-                _ = tokio::time::sleep(Duration::from_secs(10)) => {
-                    let now_state = StatusService::is_umbra_forma();
-                    if now_state && !last {
-                        let _ = http
-                            .create_message(channel_id)
-                            .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
-                            .await;
-                    }
-                    last = now_state;
                 }
             }
         }

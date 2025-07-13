@@ -11,9 +11,13 @@ use tokio_util::sync::CancellationToken;
 static REDIS_MOCK: OnceCell<Arc<Mutex<HashMap<String, String>>>> = OnceCell::new();
 
 pub fn init_mock() -> Arc<Mutex<HashMap<String, String>>> {
-    let map = Arc::new(Mutex::new(HashMap::new()));
-    let _ = REDIS_MOCK.set(map.clone());
-    map
+    if let Some(map) = REDIS_MOCK.get() {
+        map.clone()
+    } else {
+        let map = Arc::new(Mutex::new(HashMap::new()));
+        let _ = REDIS_MOCK.set(map.clone());
+        map
+    }
 }
 
 async fn redis_set_mock<T: serde::Serialize + Sync>(key: &str, value: &T) {
