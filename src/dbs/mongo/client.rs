@@ -25,8 +25,7 @@ use crate::{
     },
     services::{
         ai::AiService, channel::ChannelService, health::HealthService, role::RoleService,
-        role_message::RoleMessageService, shutdown, spam::SpamService,
-        status_message::StatusMessageService,
+        role_message::RoleMessageService, shutdown, spam, status_message::StatusMessageService,
     },
 };
 
@@ -250,7 +249,7 @@ impl MongoDB {
                     | OperationType::Replace
                     | OperationType::Delete => {
                         if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
-                            SpamService::purge_cache(doc.guild_id, doc.user_id).await;
+                            spam::quarantine::purge_cache(doc.guild_id, doc.user_id).await;
                         }
                     }
                     _ => {}

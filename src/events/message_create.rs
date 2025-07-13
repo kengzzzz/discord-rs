@@ -87,8 +87,12 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             {
                 tracing::warn!(channel_id = message.channel_id.get(), message_id = message.id.get(), error = %e, "failed to delete message from quarantined user");
             }
-            if let Some(token) =
-                SpamService::get_token(ctx.clone(), guild_id.get(), message.author.id.get()).await
+            if let Some(token) = crate::services::spam::quarantine::get_token(
+                ctx.clone(),
+                guild_id.get(),
+                message.author.id.get(),
+            )
+            .await
             {
                 if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                     if let Ok(embed) =
@@ -114,7 +118,7 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             }
             return;
         } else if let Some(token) =
-            SpamService::log_message(ctx.clone(), guild_id.get(), &message).await
+            crate::services::spam::log::log_message(ctx.clone(), guild_id.get(), &message).await
         {
             if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 if let Ok(embeds) =
@@ -138,7 +142,13 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
                 }
             }
 
-            SpamService::quarantine_member(ctx.clone(), guild_id, message.author.id, &token).await;
+            crate::services::spam::quarantine::quarantine_member(
+                ctx.clone(),
+                guild_id,
+                message.author.id,
+                &token,
+            )
+            .await;
             return;
         }
     }

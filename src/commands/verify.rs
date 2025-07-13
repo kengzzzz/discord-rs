@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::{Interaction, application_command::CommandData};
 
-use crate::{context::Context, handle_ephemeral, services::spam::SpamService};
+use crate::{context::Context, handle_ephemeral, services::spam};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -29,7 +29,7 @@ impl VerifyCommand {
             let author = interaction.author().context("failed to get author")?;
             let guild_id = interaction.guild_id.context("no guild id")?;
             let success =
-                SpamService::verify(ctx.clone(), guild_id, author.id, &command.token).await;
+                spam::quarantine::verify(ctx.clone(), guild_id, author.id, &command.token).await;
             let embed = if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 if success {
                     embed::verify_success_embed(&guild_ref)
