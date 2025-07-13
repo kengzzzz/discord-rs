@@ -227,7 +227,7 @@ impl AiService {
             for name in MODELS {
                 let m = client
                     .generative_model(name)
-                    .with_system_instruction(system.clone());
+                    .with_system_instruction(system.as_str());
                 match m.generate_content(contents.clone()).await {
                     Ok(r) => {
                         response = Some(r);

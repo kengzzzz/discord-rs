@@ -88,9 +88,7 @@ pub(crate) async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(Embed
     }
     let value = format!(
         "**{}**\nends {}",
-        data.current_reward
-            .map(|r| r.name)
-            .unwrap_or_else(|| "".to_string()),
+        data.current_reward.map(|r| r.name).unwrap_or_default(),
         format_time(&data.expiry)
     );
     let field = EmbedFieldBuilder::new(

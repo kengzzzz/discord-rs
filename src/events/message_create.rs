@@ -14,18 +14,19 @@ use crate::{
     },
     utils::embed,
 };
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 #[cfg_attr(test, allow(dead_code))]
-pub(crate) fn build_ai_input(content: &str, referenced: Option<&str>) -> String {
+pub(crate) fn build_ai_input<'a>(content: &'a str, referenced: Option<&'a str>) -> Cow<'a, str> {
     let trimmed = content.trim();
     if let Some(r) = referenced {
         if r.is_empty() {
-            return trimmed.to_string();
+            Cow::Borrowed(trimmed)
+        } else {
+            Cow::Owned(format!("Replying to: {r}\n{trimmed}"))
         }
-        format!("Replying to: {r}\n{trimmed}")
     } else {
-        trimmed.to_string()
+        Cow::Borrowed(trimmed)
     }
 }
 
@@ -51,14 +52,14 @@ pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<At
     (main, refs)
 }
 
-pub(crate) fn strip_mention(raw: &str, id: Id<UserMarker>) -> String {
+pub(crate) fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
     let re = BOT_MENTION_RE.get_or_init(|| {
         let id = id.get();
         let pattern = format!(r"<@!?(?:{id})>");
         Regex::new(&pattern).expect("failed to compile bot mention regex")
     });
 
-    re.replace_all(raw, "").into_owned()
+    re.replace_all(raw, "")
 }
 
 pub async fn handle(ctx: Arc<Context>, message: Message) {
@@ -157,13 +158,13 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
                 .referenced_message
                 .as_ref()
                 .map(|m| (*m.author.name).as_ref());
-            let input = build_ai_input(&content, ref_text_opt);
+            let input = build_ai_input(content.as_ref(), ref_text_opt);
             let (attachments, ref_attachments) = collect_attachments(&message);
             if let Ok(reply) = AiService::handle_interaction(
                 ctx.clone(),
                 message.author.id,
                 &message.author.name,
-                &input,
+                input.as_ref(),
                 attachments,
                 ref_text_opt,
                 ref_attachments,

@@ -60,12 +60,12 @@ pub(super) async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
         .iter()
         .map(|c| Content::from((c.text.as_str(),)))
         .collect();
-    let system = "Summarize the conversation so far in a concise form.".to_string();
+    let system = "Summarize the conversation so far in a concise form.";
 
     for name in SUMMARY_MODELS {
         let model = client
             .generative_model(name)
-            .with_system_instruction(system.clone());
+            .with_system_instruction(system);
         match model.generate_content(contents.clone()).await {
             Ok(resp) => return Ok(extract_text(resp)),
             Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
