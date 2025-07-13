@@ -77,9 +77,9 @@ async fn test_reply_fields() {
         "Tester",
         "hi",
         Vec::new(),
-        Some("hello".to_string()),
+        Some("hello"),
         Vec::new(),
-        Some("Tester2".to_string()),
+        Some("Tester2"),
     )
     .await;
 

@@ -87,7 +87,7 @@ impl AiCommand {
                 }
                 AiCommand::Talk(c) => {
                     let user = interaction.author().context("no author")?;
-                    let attachments = c.attachment.clone().into_iter().collect();
+                    let attachments = c.attachment.into_iter().collect();
                     let reply = AiService::handle_interaction(
                         ctx.clone(),
                         user.id,

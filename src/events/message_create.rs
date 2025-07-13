@@ -136,12 +136,12 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
             let ref_text_opt = message
                 .referenced_message
                 .as_ref()
-                .map(|m| m.content.clone());
+                .map(|m| (*m.content).as_ref());
             let ref_author = message
                 .referenced_message
                 .as_ref()
-                .map(|m| m.author.name.clone());
-            let input = build_ai_input(&content, ref_text_opt.as_deref());
+                .map(|m| (*m.author.name).as_ref());
+            let input = build_ai_input(&content, ref_text_opt);
             let (attachments, ref_attachments) = collect_attachments(&message);
             if let Ok(reply) = AiService::handle_interaction(
                 ctx.clone(),

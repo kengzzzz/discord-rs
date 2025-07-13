@@ -145,9 +145,9 @@ impl AiService {
         user_name: &str,
         message: &str,
         attachments: Vec<Attachment>,
-        ref_text: Option<String>,
+        ref_text: Option<&str>,
         ref_attachments: Vec<Attachment>,
-        ref_author: Option<String>,
+        ref_author: Option<&str>,
     ) -> anyhow::Result<String> {
         let mut history = Self::load_history(user_id).await;
 
@@ -212,7 +212,7 @@ impl AiService {
         let mut parts = vec![Part::text(message)];
         let attachment_urls =
             Self::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
-        let ref_owner = ref_author.as_deref().unwrap_or("referenced user");
+        let ref_owner = ref_author.unwrap_or("referenced user");
         let ref_attachment_urls =
             Self::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
 
@@ -252,13 +252,13 @@ impl AiService {
             "user".into(),
             message.to_owned(),
             attachment_urls,
-            ref_text,
+            ref_text.map(|t| t.to_string()),
             if ref_attachment_urls.is_empty() {
                 None
             } else {
                 Some(ref_attachment_urls)
             },
-            ref_author.clone(),
+            ref_author.map(|t| t.to_string()),
         ));
         history.push(ChatEntry::new(
             "model".into(),
