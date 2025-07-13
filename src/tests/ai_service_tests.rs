@@ -6,7 +6,7 @@ use google_ai_rs::{
 use twilight_model::id::{Id, marker::UserMarker};
 
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
-use crate::services::ai::{AiService, ChatEntry, history};
+use crate::services::ai::{AiService, history, models::ChatEntry};
 
 fn mock_response(text: &str) -> Response {
     Response {

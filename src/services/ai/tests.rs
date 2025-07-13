@@ -1,3 +1,4 @@
+use super::models::ChatEntry;
 use super::*;
 use once_cell::sync::OnceCell as SyncOnceCell;
 

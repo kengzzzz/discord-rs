@@ -2,7 +2,7 @@ use twilight_model::id::{Id, marker::UserMarker};
 
 #[cfg(test)]
 use self::tests::{HISTORY_STORE, PROMPT_STORE};
-use super::ChatEntry;
+use super::models::ChatEntry;
 
 #[cfg(not(test))]
 use crate::configs::CACHE_PREFIX;

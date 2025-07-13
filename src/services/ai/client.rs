@@ -1,4 +1,4 @@
-use super::ChatEntry;
+use super::models::ChatEntry;
 #[cfg(test)]
 use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;

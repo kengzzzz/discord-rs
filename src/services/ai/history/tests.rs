@@ -1,4 +1,4 @@
-use super::*;
+use super::super::models::ChatEntry;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
