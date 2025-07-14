@@ -71,7 +71,7 @@ pub async fn handle_ai(ctx: Arc<Context>, message: &Message) {
                 .map(|m| (*m.author.name).as_ref());
             let input = build_ai_input(content.as_ref(), ref_text_opt);
             let (attachments, ref_attachments) = collect_attachments(message);
-            if let Ok(reply) = AiService::handle_interaction(
+            match AiService::handle_interaction(
                 ctx.clone(),
                 message.author.id,
                 &message.author.name,
@@ -83,21 +83,30 @@ pub async fn handle_ai(ctx: Arc<Context>, message: &Message) {
             )
             .await
             {
-                if let Ok(embeds) = AiService::ai_embeds(&reply) {
-                    for embed in embeds {
-                        if let Err(e) = ctx
-                            .http
-                            .create_message(message.channel_id)
-                            .embeds(&[embed])
-                            .await
-                        {
-                            tracing::warn!(
-                                channel_id = message.channel_id.get(),
-                                error = %e,
-                                "failed to send AI response"
-                            );
+                Ok(reply) => {
+                    if let Ok(embeds) = AiService::ai_embeds(&reply) {
+                        for embed in embeds {
+                            if let Err(e) = ctx
+                                .http
+                                .create_message(message.channel_id)
+                                .embeds(&[embed])
+                                .await
+                            {
+                                tracing::warn!(
+                                    channel_id = message.channel_id.get(),
+                                    error = %e,
+                                    "failed to send AI response"
+                                );
+                            }
                         }
                     }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        channel_id = message.channel_id.get(),
+                        error = %e,
+                        "failed to handle AI interaction"
+                    );
                 }
             }
         }
