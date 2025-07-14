@@ -2,20 +2,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::task::JoinHandle;
-use twilight_cache_inmemory::Reference;
-use twilight_cache_inmemory::model::CachedGuild;
-use twilight_model::channel::message::Embed;
 use twilight_model::id::Id;
-use twilight_model::id::marker::GuildMarker;
 
 use crate::services::shutdown;
 use crate::{
     context::Context,
     dbs::mongo::models::channel::ChannelEnum,
     services::{channel::ChannelService, status_message::StatusMessageService},
-    warframe,
 };
 use std::sync::Arc;
+
+pub mod embed;
 
 static UMBRA_FORMA: AtomicBool = AtomicBool::new(false);
 
@@ -26,28 +23,12 @@ impl StatusService {
         UMBRA_FORMA.load(Ordering::Relaxed)
     }
 
-    async fn build_embed(
-        ctx: Arc<Context>,
-        guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
-    ) -> Option<Embed> {
-        match warframe::status_embed(ctx.clone(), guild).await {
-            Ok((e, is_umbra)) => {
-                UMBRA_FORMA.store(is_umbra, Ordering::Relaxed);
-                Some(e)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to build status embed");
-                None
-            }
-        }
-    }
-
     pub async fn update_all(ctx: Arc<Context>) {
         for channel in ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Status).await {
             let Some(guild_ref) = ctx.cache.guild(Id::new(channel.guild_id)) else {
                 continue;
             };
-            let Some(embed) = Self::build_embed(ctx.clone(), &guild_ref).await else {
+            let Some(embed) = embed::build_embed(ctx.clone(), &guild_ref).await else {
                 continue;
             };
             let channel_id = Id::new(channel.channel_id);
