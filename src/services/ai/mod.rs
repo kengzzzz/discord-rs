@@ -63,7 +63,7 @@ impl AiService {
                 let start = history.len().saturating_sub(KEEP_RECENT);
                 let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
                 new_history.push(ChatEntry::new(
-                    "system".to_string(),
+                    "user".to_string(),
                     format!("Summary so far: {summary}"),
                     Vec::new(),
                     None,

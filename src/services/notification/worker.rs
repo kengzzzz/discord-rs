@@ -1,12 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, Datelike, Utc};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use twilight_http::Client;
 use twilight_model::id::{Id, marker::ChannelMarker};
 
-use crate::{configs::notifications::NOTIFICATIONS, services::status::StatusService};
+use crate::configs::notifications::NOTIFICATIONS;
 
 pub(crate) fn next_monday_duration() -> Duration {
     let now = Utc::now();
@@ -56,15 +57,19 @@ pub(crate) fn notify_umbra_loop(
     http: Arc<Client>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
+    mut rx: watch::Receiver<bool>,
     token: CancellationToken,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut last = StatusService::is_umbra_forma();
+        let mut last = *rx.borrow();
         loop {
             tokio::select! {
                 _ = token.cancelled() => break,
-                _ = tokio::time::sleep(Duration::from_secs(10)) => {
-                    let now_state = StatusService::is_umbra_forma();
+                changed = rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    let now_state = *rx.borrow();
                     if now_state && !last {
                         if let Err(e) = http
                             .create_message(channel_id)

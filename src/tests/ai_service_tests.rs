@@ -125,7 +125,7 @@ async fn test_summary_rotation() {
     .await;
     let hist = history::load_history(user).await;
     assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
-    assert_eq!(hist[0].role, "system".to_string());
+    assert_eq!(hist[0].role, "user".to_string());
     assert!(hist[0].text.contains("SUM"));
 }
 

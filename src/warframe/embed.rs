@@ -1,23 +1,57 @@
 use chrono::Utc;
-use twilight_cache_inmemory::Reference;
-use twilight_cache_inmemory::model::CachedGuild;
+use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use super::api;
 use super::utils::{format_time, title_case};
-use crate::configs::Reaction;
+use crate::configs::{CACHE_PREFIX, Reaction};
 use crate::context::Context;
+use crate::dbs::redis::{redis_get, redis_set_ex};
 use crate::utils::embed::footer_with_icon;
+use serde::{Serialize, de::DeserializeOwned};
 
 const COLOR: u32 = 0xF1C40F;
 const URL: &str = "https://github.com/kengzzzz/discord-rs";
+const MIN_CACHE_TTL: usize = 60;
+
+fn ttl_from_expiry(expiry: &str) -> usize {
+    if let Ok(t) = chrono::DateTime::parse_from_rfc3339(expiry) {
+        let secs = t.with_timezone(&Utc).timestamp() - Utc::now().timestamp();
+        std::cmp::max(secs.max(0) as usize, MIN_CACHE_TTL)
+    } else {
+        MIN_CACHE_TTL
+    }
+}
+
+async fn cached_or_request<T, F, Fut, G>(key: &str, fetcher: F, ttl_calc: G) -> anyhow::Result<T>
+where
+    T: Serialize + DeserializeOwned + Send + Sync,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+    G: Fn(&T) -> usize,
+{
+    if let Some(val) = redis_get::<T>(key).await {
+        return Ok(val);
+    }
+    let val = fetcher().await?;
+    let ttl = ttl_calc(&val);
+    redis_set_ex(key, &val, ttl).await;
+    Ok(val)
+}
 
 async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
-    match api::news(ctx.reqwest.as_ref()).await {
+    let key = format!("{CACHE_PREFIX}:wf:news");
+    match cached_or_request(
+        &key,
+        || async move { api::news(ctx.reqwest.as_ref()).await },
+        |_| MIN_CACHE_TTL,
+    )
+    .await
+    {
         Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
@@ -27,7 +61,13 @@ async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
 }
 
 async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
-    let data = api::cycle(ctx.reqwest.as_ref(), endpoint).await?;
+    let key = format!("{CACHE_PREFIX}:wf:cycle:{endpoint}");
+    let data = cached_or_request(
+        &key,
+        || async move { api::cycle(ctx.reqwest.as_ref(), endpoint).await },
+        |d| ttl_from_expiry(&d.expiry),
+    )
+    .await?;
     let field = EmbedFieldBuilder::new(
         format!(
             "{}{}{}",
@@ -43,7 +83,13 @@ async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::R
 }
 
 pub async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
-    let data = api::steel_path(ctx.reqwest.as_ref()).await?;
+    let key = format!("{CACHE_PREFIX}:wf:steel-path");
+    let data = cached_or_request(
+        &key,
+        || async move { api::steel_path(ctx.reqwest.as_ref()).await },
+        |d| ttl_from_expiry(&d.expiry),
+    )
+    .await?;
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {

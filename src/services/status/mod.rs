@@ -1,6 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use once_cell::sync::Lazy;
+use tokio::sync::watch;
+
 use tokio::task::JoinHandle;
 use twilight_model::id::Id;
 
@@ -14,11 +17,24 @@ use std::sync::Arc;
 
 pub mod embed;
 
-static UMBRA_FORMA: AtomicBool = AtomicBool::new(false);
+static UMBRA_FORMA: AtomicBool = AtomicBool::new(true);
+static UMBRA_CHANNEL: Lazy<(watch::Sender<bool>, watch::Receiver<bool>)> =
+    Lazy::new(|| watch::channel(true));
 
 pub struct StatusService;
 
 impl StatusService {
+    pub fn subscribe_umbra_forma() -> watch::Receiver<bool> {
+        UMBRA_CHANNEL.0.subscribe()
+    }
+
+    fn set_umbra_forma(val: bool) {
+        let prev = UMBRA_FORMA.swap(val, Ordering::Relaxed);
+        if prev != val {
+            let _ = UMBRA_CHANNEL.0.send(val);
+        }
+    }
+
     pub fn is_umbra_forma() -> bool {
         UMBRA_FORMA.load(Ordering::Relaxed)
     }

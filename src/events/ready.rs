@@ -29,8 +29,7 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
 
         let build_ctx = ctx.clone();
         tokio::spawn(async move {
-            BuildService::init(build_ctx.clone()).await;
-            BuildService::spawn(build_ctx);
+            BuildService::init(build_ctx).await;
         });
 
         let market_ctx = ctx.clone();

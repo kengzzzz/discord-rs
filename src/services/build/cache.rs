@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use once_cell::sync::Lazy;
@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use crate::{
     context::Context,
     dbs::redis::{redis_get, redis_set},
-    services::{http::HttpService, shutdown},
+    services::http::HttpService,
 };
 
 use reqwest::Client;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 const ITEMS_URL: &str =
     "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/All.json";
 const REDIS_KEY: &str = "discord-bot:build-items";
-const UPDATE_SECS: u64 = 60 * 60;
+const UPDATE_SECS: u16 = 60 * 60;
 
 pub(crate) type ItemEntry = (String, String); // (original, lowercase)
 pub(crate) static ITEMS: Lazy<RwLock<Vec<ItemEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
@@ -119,22 +119,6 @@ impl BuildService {
         }
     }
 
-    pub fn spawn(ctx: Arc<Context>) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            let token = shutdown::get_token();
-            loop {
-                tokio::select! {
-                    _ = token.cancelled() => break,
-                    _ = tokio::time::sleep(Duration::from_secs(UPDATE_SECS)) => {
-                        if let Err(e) = update_items(ctx.reqwest.as_ref()).await {
-                            tracing::warn!(error = %e, "failed to update build items");
-                        }
-                    }
-                }
-            }
-        })
-    }
-
     pub async fn search(prefix: &str) -> Vec<String> {
         let p = prefix.to_lowercase();
         let items = ITEMS.read().await;
@@ -152,7 +136,7 @@ impl BuildService {
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS {
+        if now.saturating_sub(last) > UPDATE_SECS as u64 {
             if let Err(e) = update_items(client).await {
                 tracing::warn!(error = %e, "failed to update build items");
             }

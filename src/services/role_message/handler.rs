@@ -1,9 +1,8 @@
 use std::slice;
 use std::sync::Arc;
 
-use std::collections::HashSet;
 use twilight_http::request::channel::reaction::RequestReactionType;
-use twilight_model::channel::message::{EmojiReactionType, Message};
+use twilight_model::channel::message::Message;
 use twilight_model::id::{Id, marker::GuildMarker};
 
 use crate::{
@@ -83,18 +82,9 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         } else if let Some(content) = content_opt {
             correct &= msg.content == content;
             correct &= msg.embeds.is_empty();
+        } else {
+            correct = false;
         }
-
-        let expected: HashSet<&str> = info.iter().map(|(_, e)| *e).collect();
-        let actual: HashSet<&str> = msg
-            .reactions
-            .iter()
-            .filter_map(|r| match &r.emoji {
-                EmojiReactionType::Unicode { name } => Some(name.as_str()),
-                _ => None,
-            })
-            .collect();
-        correct &= expected == actual;
 
         if correct {
             return;

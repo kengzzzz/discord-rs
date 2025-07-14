@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
     channel::message::Embed,
@@ -13,7 +13,7 @@ pub async fn build_embed(
 ) -> Option<Embed> {
     match warframe::status_embed(ctx.clone(), guild).await {
         Ok((e, is_umbra)) => {
-            super::UMBRA_FORMA.store(is_umbra, Ordering::Relaxed);
+            super::StatusService::set_umbra_forma(is_umbra);
             Some(e)
         }
         Err(e) => {
