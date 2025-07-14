@@ -1,7 +1,9 @@
 use std::slice;
 use std::sync::Arc;
 
+use std::collections::HashSet;
 use twilight_http::request::channel::reaction::RequestReactionType;
+use twilight_model::channel::message::{EmojiReactionType, Message};
 use twilight_model::id::{Id, marker::GuildMarker};
 
 use crate::{
@@ -26,15 +28,16 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
 
     let channel_id = Id::new(channel.channel_id);
 
-    let mut existing_message = None;
+    let mut existing_message: Option<(u64, Message)> = None;
     if let Some(record) = storage::get(ctx.clone(), guild_id.get()).await {
-        if ctx
+        if let Ok(resp) = ctx
             .http
             .message(channel_id, Id::new(record.message_id))
             .await
-            .is_ok()
         {
-            existing_message = Some(record.message_id);
+            if let Ok(msg) = resp.model().await {
+                existing_message = Some((record.message_id, msg));
+            }
         }
     }
 
@@ -71,7 +74,32 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     let embed_slice = embed_opt.as_ref().map(slice::from_ref);
     let content_opt = content_opt.as_ref().map(|e| *e);
 
-    if let Some(msg_id) = existing_message {
+    if let Some((msg_id, msg)) = existing_message {
+        let mut correct = true;
+        if let Some(embed) = embed_slice {
+            correct &= msg.embeds.first() == Some(&(*embed)[0]);
+            correct &= msg.embeds.len() == 1;
+            correct &= msg.content.is_empty();
+        } else if let Some(content) = content_opt {
+            correct &= msg.content == content;
+            correct &= msg.embeds.is_empty();
+        }
+
+        let expected: HashSet<&str> = info.iter().map(|(_, e)| *e).collect();
+        let actual: HashSet<&str> = msg
+            .reactions
+            .iter()
+            .filter_map(|r| match &r.emoji {
+                EmojiReactionType::Unicode { name } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        correct &= expected == actual;
+
+        if correct {
+            return;
+        }
+
         let mut update = ctx.http.update_message(channel_id, Id::new(msg_id));
         if let Some(embed) = embed_slice {
             update = update.embeds(Some(embed));

@@ -117,18 +117,6 @@ impl NotificationService {
         })
     }
 
-    pub async fn reload(ctx: Arc<Context>) {
-        let token = shutdown::get_token();
-        let map = Self::init_all(ctx, token.clone()).await;
-        let mut guard = HANDLES.write().await;
-        for (_, hs) in guard.drain() {
-            for h in hs {
-                h.abort();
-            }
-        }
-        *guard = map;
-    }
-
     pub async fn reload_guild(ctx: Arc<Context>, guild_id: u64) {
         let token = shutdown::get_token();
         let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
