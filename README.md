@@ -72,7 +72,7 @@ The bot source is mounted into the container and `cargo watch -x run` keeps it r
 
 Shared services such as the Discord HTTP client, reqwest client, in-memory
 cache, MongoDB connection and Redis pool are bundled into a
-[`Context`](src/context.rs) struct. Create a `Context` when the bot starts and
+[`Context`](src/context/mod.rs) struct. Create a `Context` when the bot starts and
 pass `Arc<Context>` references to tasks and handlers. This avoids global state
 and makes testing easier by allowing mocked services.
 
