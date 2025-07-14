@@ -1,6 +1,6 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use once_cell::sync::Lazy;
@@ -13,7 +13,7 @@ use super::{MarketService, client};
 use std::sync::Arc;
 
 const REDIS_KEY: &str = "discord-bot:market-items";
-const UPDATE_SECS: u64 = 60 * 60;
+const UPDATE_SECS: u16 = 60 * 60;
 
 #[derive(Serialize, Deserialize)]
 pub(super) struct StoredEntry {
@@ -46,22 +46,6 @@ impl MarketService {
         {
             tracing::warn!(error = %e, "failed to update market items");
         }
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(UPDATE_SECS)).await;
-                if let Err(e) = client::update_items(
-                    ctx_clone.reqwest.as_ref(),
-                    REDIS_KEY,
-                    &ITEMS,
-                    &LAST_UPDATE,
-                )
-                .await
-                {
-                    tracing::warn!(error = %e, "failed to update market items");
-                }
-            }
-        });
     }
 
     pub async fn search(prefix: &str) -> Vec<String> {
@@ -81,7 +65,7 @@ impl MarketService {
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS {
+        if now.saturating_sub(last) > UPDATE_SECS as u64 {
             if let Err(e) =
                 client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
             {
