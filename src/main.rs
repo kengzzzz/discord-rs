@@ -12,7 +12,7 @@ use discord_bot::{
     services::{health::HealthService, shutdown},
 };
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 use twilight_gateway::{Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt as _};
 use twilight_interactions::command::CreateCommand;
@@ -39,7 +39,24 @@ async fn main() -> anyhow::Result<()> {
     shutdown::set_token(shutdown_token.clone());
 
     let ctx = Arc::new(Context::new().await?);
-    let event_semaphore = Arc::new(Semaphore::new(EVENT_CONCURRENCY));
+    let (tx, rx) = mpsc::channel::<Event>(EVENT_CONCURRENCY * 2);
+    let rx = Arc::new(Mutex::new(rx));
+    for _ in 0..EVENT_CONCURRENCY {
+        let rx_clone = rx.clone();
+        let ctx_clone = ctx.clone();
+        tokio::spawn(async move {
+            loop {
+                let next = {
+                    let mut lock = rx_clone.lock().await;
+                    lock.recv().await
+                };
+                match next {
+                    Some(event) => handle_event(ctx_clone.clone(), event).await,
+                    None => break,
+                }
+            }
+        });
+    }
 
     let shutdown_clone = shutdown_token.clone();
     HealthService::spawn(async move {
@@ -97,13 +114,9 @@ async fn main() -> anyhow::Result<()> {
 
                 failure_count = 0;
                 ctx.cache.update(&event);
-                let ctx_clone = ctx.clone();
-                let sem = event_semaphore.clone();
-                let permit = sem.acquire_owned().await.expect("semaphore closed");
-                tokio::spawn(async move {
-                    let _permit = permit;
-                    handle_event(ctx_clone, event).await;
-                });
+                if tx.send(event).await.is_err() {
+                    break;
+                }
                 HealthService::set_discord(shard.state().is_identified());
             }
         }
