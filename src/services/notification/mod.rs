@@ -15,7 +15,7 @@ use crate::{
         channel::{Channel, ChannelEnum},
         role::RoleEnum,
     },
-    services::{channel::ChannelService, role::RoleService, shutdown},
+    services::{channel::ChannelService, role::RoleService, shutdown, status::StatusService},
 };
 use std::sync::Arc;
 
@@ -65,6 +65,7 @@ impl NotificationService {
                 ctx.http.clone(),
                 channel_id,
                 role.role_id,
+                StatusService::subscribe_umbra_forma(),
                 token.clone(),
             ));
         }
