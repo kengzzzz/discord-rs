@@ -1,66 +1,22 @@
-use anyhow::Context as AnyhowContext;
-use axum::http::{HeaderMap, HeaderName, HeaderValue};
-use google_ai_rs::{Content, Part};
 #[cfg(test)]
-use once_cell::sync::OnceCell as SyncOnceCell;
-use reqwest::{Body, header::CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use self::tests::GENERATE_OVERRIDE;
+use google_ai_rs::{Content, Part};
 use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
 use self::client::{MODELS, extract_text};
 use self::history as hist;
-use crate::{configs::google::GOOGLE_CONFIGS, context::Context, services::http::HttpService};
+use self::models::ChatEntry;
+use crate::{configs::google::GOOGLE_CONFIGS, context::Context};
 use std::sync::Arc;
 
+pub mod attachments;
 mod client;
+pub mod embed;
 pub(crate) mod history;
-
-#[cfg(test)]
-static GENERATE_OVERRIDE: SyncOnceCell<
-    Box<dyn Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync>,
-> = SyncOnceCell::new();
-#[cfg(test)]
-#[allow(clippy::type_complexity)]
-static SUMMARIZE_OVERRIDE: SyncOnceCell<Box<dyn Fn(&[ChatEntry]) -> String + Send + Sync>> =
-    SyncOnceCell::new();
+pub mod models;
 
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
-
-#[derive(Serialize, Deserialize, Clone)]
-pub(crate) struct ChatEntry {
-    pub role: String,
-    pub text: String,
-    #[serde(default)]
-    pub attachments: Vec<String>,
-    #[serde(default)]
-    pub ref_text: Option<String>,
-    #[serde(default)]
-    pub ref_attachments: Option<Vec<String>>,
-    #[serde(default)]
-    pub ref_author: Option<String>,
-}
-
-impl ChatEntry {
-    pub fn new(
-        role: String,
-        text: String,
-        attachments: Vec<String>,
-        ref_text: Option<String>,
-        ref_attachments: Option<Vec<String>>,
-        ref_author: Option<String>,
-    ) -> Self {
-        Self {
-            role,
-            text,
-            attachments,
-            ref_text,
-            ref_attachments,
-            ref_author,
-        }
-    }
-}
 
 pub struct AiService;
 
@@ -87,48 +43,6 @@ impl AiService {
 
     async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
         hist::get_prompt(ctx, user).await
-    }
-
-    async fn append_attachments(
-        ctx: &Arc<Context>,
-        parts: &mut Vec<Part>,
-        attachments: Vec<Attachment>,
-        owner: &str,
-    ) -> anyhow::Result<Vec<String>> {
-        let mut urls = Vec::new();
-        for a in attachments {
-            if let (Some(ct), Ok(resp)) = (
-                a.content_type.as_deref(),
-                HttpService::get(ctx.reqwest.as_ref(), &a.url).await,
-            ) {
-                let label = format!("Attachment from {owner}:");
-                parts.push(Part::text(&label));
-                let stream = Body::wrap_stream(resp.bytes_stream());
-                let upload_url = reqwest::Url::parse_with_params(
-                    "https://generativelanguage.googleapis.com/upload/v1beta/files",
-                    &[("uploadType", "media")],
-                )?;
-                let mut headers = HeaderMap::new();
-                headers.append(
-                    HeaderName::from_str("X-Goog-Api-Key")?,
-                    HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
-                );
-                if let Some(content_type) = &a.content_type {
-                    headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
-                }
-                let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
-                    .headers(headers)
-                    .body(stream)
-                    .send()
-                    .await?
-                    .error_for_status()?;
-                let json: serde_json::Value = resp.json().await?;
-                let uri = json["file"]["uri"].as_str().context("Missing file uri")?;
-                parts.push(Part::file_data(ct, uri));
-                urls.push(uri.to_string());
-            }
-        }
-        Ok(urls)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -204,10 +118,10 @@ impl AiService {
 
         let mut parts = vec![Part::text(message)];
         let attachment_urls =
-            Self::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
+            attachments::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
         let ref_owner = ref_author.unwrap_or("referenced user");
         let ref_attachment_urls =
-            Self::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
+            attachments::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
 
         contents.push(Content::from(parts));
 
@@ -268,19 +182,4 @@ impl AiService {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_generate_override<F>(f: F)
-where
-    F: Fn(Vec<Content>) -> google_ai_rs::genai::Response + Send + Sync + 'static,
-{
-    let _ = GENERATE_OVERRIDE.set(Box::new(f));
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn set_summarize_override<F>(f: F)
-where
-    F: Fn(&[ChatEntry]) -> String + Send + Sync + 'static,
-{
-    let _ = SUMMARIZE_OVERRIDE.set(Box::new(f));
-}
+pub(crate) mod tests;

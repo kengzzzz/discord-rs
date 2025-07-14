@@ -7,7 +7,7 @@ use twilight_model::channel::message::component::{
 
 use crate::guild_command;
 use crate::{
-    context::Context, dbs::mongo::channel::ChannelEnum, services::channel::ChannelService,
+    context::Context, dbs::mongo::models::channel::ChannelEnum, services::channel::ChannelService,
 };
 use std::sync::Arc;
 

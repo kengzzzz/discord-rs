@@ -1,23 +1,22 @@
-mod client;
-mod session;
+pub mod cache;
+pub mod client;
+pub mod embed;
+pub mod session;
 
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    sync::Arc,
 };
 
 use tokio::sync::RwLock;
 
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
     application::interaction::{Interaction, message_component::MessageComponentInteractionData},
     channel::message::{
         Embed,
         component::{ActionRow, Button, ButtonStyle, Component},
-        embed::EmbedField,
     },
     http::interaction::{InteractionResponse, InteractionResponseType},
     id::{
@@ -25,33 +24,12 @@ use twilight_model::{
         marker::{GuildMarker, MessageMarker},
     },
 };
-use twilight_util::builder::{
-    InteractionResponseDataBuilder,
-    embed::{EmbedBuilder, EmbedFieldBuilder},
-};
+use twilight_util::builder::InteractionResponseDataBuilder;
 
-use crate::{context::Context, utils::embed::footer_with_icon};
-use std::sync::Arc;
+use crate::context::Context;
 
 pub use session::{MarketSession, OrderInfo};
-const COLOR: u32 = 0xF1C40F;
-const REDIS_KEY: &str = "discord-bot:market-items";
-const UPDATE_SECS: u64 = 60 * 60;
 
-#[derive(Serialize, Deserialize)]
-struct StoredEntry {
-    name: String,
-    url: String,
-}
-
-struct ItemEntry {
-    name: String,
-    url: String,
-    lower: String,
-}
-
-static ITEMS: Lazy<RwLock<Vec<ItemEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
-static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 static SESSIONS: Lazy<RwLock<HashMap<Id<MessageMarker>, MarketSession>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
@@ -87,169 +65,6 @@ impl MarketKind {
 pub struct MarketService;
 
 impl MarketService {
-    pub async fn init(ctx: Arc<Context>) {
-        if let Some(data) = client::load_from_redis(REDIS_KEY).await {
-            *ITEMS.write().await = data;
-            LAST_UPDATE.store(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-                Ordering::Relaxed,
-            );
-        } else if let Err(e) =
-            client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
-        {
-            tracing::warn!(error = %e, "failed to update market items");
-        }
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(UPDATE_SECS)).await;
-                if let Err(e) = client::update_items(
-                    ctx_clone.reqwest.as_ref(),
-                    REDIS_KEY,
-                    &ITEMS,
-                    &LAST_UPDATE,
-                )
-                .await
-                {
-                    tracing::warn!(error = %e, "failed to update market items");
-                }
-            }
-        });
-    }
-
-    pub async fn search(prefix: &str) -> Vec<String> {
-        let p = prefix.to_lowercase();
-        let items = ITEMS.read().await;
-        items
-            .iter()
-            .filter(|item| item.lower.starts_with(&p))
-            .take(25)
-            .map(|item| item.name.clone())
-            .collect()
-    }
-
-    async fn maybe_refresh(ctx: Arc<Context>) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS {
-            if let Err(e) =
-                client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
-            {
-                tracing::warn!(error = %e, "failed to update market items");
-            }
-        }
-    }
-
-    pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
-        let mut results = Self::search(prefix).await;
-        if results.is_empty() {
-            Self::maybe_refresh(ctx.clone()).await;
-            results = Self::search(prefix).await;
-        }
-        results
-    }
-
-    async fn find_url(name: &str) -> Option<String> {
-        let lower = name.to_lowercase();
-        let items = ITEMS.read().await;
-        for item in items.iter() {
-            if item.lower == lower {
-                return Some(item.url.clone());
-            }
-        }
-        None
-    }
-
-    pub fn not_found_embed(
-        guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
-    ) -> anyhow::Result<Embed> {
-        let mut footer = footer_with_icon(guild)?;
-        footer.text = guild.name().to_string();
-        Ok(EmbedBuilder::new()
-            .color(COLOR)
-            .title("ไม่พบราคา")
-            .description("กรุณาตรวจสอบชื่อ item อีกครั้ง")
-            .footer(footer)
-            .build())
-    }
-
-    fn error_embed(guild: &Reference<'_, Id<GuildMarker>, CachedGuild>) -> anyhow::Result<Embed> {
-        let mut footer = footer_with_icon(guild)?;
-        footer.text = guild.name().to_string();
-        Ok(EmbedBuilder::new()
-            .color(COLOR)
-            .title("เกิดข้อผิดพลาด")
-            .description("กรุณาลองอีกครั้ง ภายหลัง")
-            .footer(footer)
-            .build())
-    }
-
-    fn build_fields(
-        orders: &[session::OrderInfo],
-        item: &str,
-        kind: &MarketKind,
-        rank: Option<u8>,
-    ) -> Vec<EmbedField> {
-        orders
-            .iter()
-            .take(5)
-            .map(|o| {
-                let rank_text = rank.map_or(String::new(), |r| format!(" [ Item Rank : {r} ]"));
-                EmbedFieldBuilder::new(
-                    format!(
-                        "Quantity : {} | Price : {} platinum.{rank_text}",
-                        o.quantity, o.platinum
-                    ),
-                    format!(
-                        "```/w {} Hi! I want to {}: \"{}\" for {} platinum. (warframe.market)```",
-                        o.ign,
-                        kind.action(),
-                        item,
-                        o.platinum
-                    ),
-                )
-                .build()
-            })
-            .collect()
-    }
-
-    fn build_embed(
-        guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
-        item: &str,
-        url: &str,
-        kind: &MarketKind,
-        rank: Option<u8>,
-        orders: Vec<session::OrderInfo>,
-    ) -> anyhow::Result<Embed> {
-        let mut footer = footer_with_icon(guild)?;
-        footer.text = if let Some(r) = rank {
-            format!("{} [ Item Rank : {r} ]", guild.name())
-        } else {
-            guild.name().to_string()
-        };
-        let title = if let Some(r) = rank {
-            format!("{} {} [Rank {}]", kind.label(), item, r)
-        } else {
-            format!("{} {}", kind.label(), item)
-        };
-        let mut builder = EmbedBuilder::new().color(COLOR).title(title).url(format!(
-            "{}{}",
-            client::ITEM_URL,
-            url
-        ));
-        for field in Self::build_fields(&orders, item, kind, rank) {
-            builder = builder.field(field);
-        }
-        let embed = builder.footer(footer).build();
-        Ok(embed)
-    }
-
     pub fn embed_for_session(
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         session: &MarketSession,

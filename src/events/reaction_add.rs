@@ -2,8 +2,8 @@ use twilight_model::{gateway::payload::incoming::ReactionAdd, id::Id};
 
 use crate::{
     context::Context,
-    dbs::mongo::channel::ChannelEnum,
-    services::{channel::ChannelService, role::RoleService, role_message::RoleMessageService},
+    dbs::mongo::models::channel::ChannelEnum,
+    services::{channel::ChannelService, role::RoleService, role_message},
     utils::reaction::emoji_to_role_enum,
 };
 use std::sync::Arc;
@@ -29,7 +29,7 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionAdd) {
         return;
     }
 
-    if let Some(record) = RoleMessageService::get(ctx.clone(), guild_id.get()).await {
+    if let Some(record) = role_message::storage::get(ctx.clone(), guild_id.get()).await {
         if record.message_id != event.message_id.get() {
             return;
         }

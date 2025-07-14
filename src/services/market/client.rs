@@ -11,7 +11,10 @@ use crate::{
 
 use reqwest::Client;
 
-use super::{ItemEntry, MarketKind, StoredEntry};
+use super::{
+    MarketKind,
+    cache::{ItemEntry, StoredEntry},
+};
 
 const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
 pub(super) const ITEM_URL: &str = "https://warframe.market/items/";

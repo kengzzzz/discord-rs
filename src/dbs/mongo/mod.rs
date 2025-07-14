@@ -1,7 +1,8 @@
-pub mod ai_prompt;
-pub mod channel;
-pub mod message;
-pub mod mongodb;
-pub mod quarantine;
-pub mod role;
+pub mod client;
+pub mod models;
+pub mod monitor;
 pub mod watcher;
+pub mod watchers;
+
+#[cfg(test)]
+pub(crate) mod tests;

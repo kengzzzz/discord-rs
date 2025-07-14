@@ -7,8 +7,8 @@ use twilight_model::application::interaction::Interaction;
 
 use crate::{
     context::Context,
-    dbs::mongo::channel::ChannelEnum,
-    services::{notification::NotificationService, role_message::RoleMessageService},
+    dbs::mongo::models::channel::ChannelEnum,
+    services::{notification::NotificationService, role_message},
     utils::embed,
 };
 use std::sync::Arc;
@@ -87,7 +87,7 @@ impl AdminChannelCommand {
         }
 
         if self.channel_type == ChannelEnum::UpdateRole {
-            RoleMessageService::ensure_message(ctx.clone(), guild_id).await;
+            role_message::handler::ensure_message(ctx.clone(), guild_id).await;
         }
         NotificationService::reload_guild(ctx, guild_id.get()).await;
         Ok(())

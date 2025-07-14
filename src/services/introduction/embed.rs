@@ -1,5 +1,21 @@
-use super::*;
-use crate::services::introduction::IntroDetails;
+use std::fmt::Display;
+
+use chrono::Utc;
+use twilight_cache_inmemory::{Reference, model::CachedGuild};
+use twilight_model::{
+    channel::{Message, message::Embed},
+    id::{Id, marker::GuildMarker},
+    util::Timestamp,
+};
+use twilight_util::builder::embed::{
+    EmbedAuthorBuilder, EmbedBuilder, EmbedFieldBuilder, ImageSource,
+};
+
+use crate::services::introduction::form::IntroDetails;
+use crate::utils::embed::footer_with_icon;
+
+const COLOR: u32 = 0xF1C40F;
+const COLOR_INVALID: u32 = 0xE74C3C;
 
 pub fn intro_prompt_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,

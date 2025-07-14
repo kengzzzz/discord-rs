@@ -1,16 +1,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::dbs::mongo::mongodb::MongoDB;
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
 use twilight_http::Client;
 
 use crate::configs::discord::DISCORD_CONFIGS;
+use crate::dbs::mongo::client::MongoDB;
 use crate::dbs::redis::new_pool;
-#[cfg(test)]
-use crate::tests::redis_setup;
+
 #[derive(Clone)]
 pub struct Context {
     pub http: Arc<Client>,
@@ -57,16 +56,7 @@ impl Context {
             reqwest,
         })
     }
-
-    #[cfg(test)]
-    pub async fn test() -> Self {
-        redis_setup::start().await;
-        Self {
-            http: Arc::new(Client::new(String::new())),
-            cache: Arc::new(DefaultInMemoryCache::builder().build()),
-            redis: new_pool(),
-            mongo: MongoDB::empty().await,
-            reqwest: Arc::new(ReqwestClient::new()),
-        }
-    }
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

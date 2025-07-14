@@ -8,8 +8,8 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::mongo::role::RoleEnum,
-    services::{notification::NotificationService, role_message::RoleMessageService},
+    dbs::mongo::models::role::RoleEnum,
+    services::{notification::NotificationService, role_message},
     utils::embed,
 };
 use std::sync::Arc;
@@ -103,7 +103,7 @@ impl AdminRoleCommand {
                 .await?;
         }
 
-        RoleMessageService::ensure_message(ctx.clone(), guild_id).await;
+        role_message::handler::ensure_message(ctx.clone(), guild_id).await;
         NotificationService::reload_guild(ctx, guild_id.get()).await;
 
         Ok(())

@@ -1,7 +1,7 @@
 use crate::tests::redis_setup;
 use std::sync::Arc;
 
-use crate::{context::Context, services::spam::SpamService};
+use crate::{context::Context, services::spam};
 use twilight_model::{
     channel::{Message, message::MessageType},
     id::{Id, marker::GuildMarker},
@@ -79,11 +79,11 @@ async fn test_spam_log_threshold() {
     let mut token = None;
     for i in 0..4u64 {
         let msg = make_message(i + 1, i + 10, 5, "hello");
-        token = SpamService::log_message(ctx.clone(), 1, &msg).await;
+        token = spam::log::log_message(ctx.clone(), 1, &msg).await;
     }
     assert!(token.is_some());
     assert_eq!(token.unwrap().len(), 6);
-    SpamService::purge_cache(1, 5).await;
+    spam::quarantine::purge_cache(1, 5).await;
 }
 
 #[tokio::test]
@@ -92,30 +92,30 @@ async fn test_spam_log_reset() {
     let ctx = Arc::new(Context::test().await);
     let msg1 = make_message(1, 100, 6, "hi");
     assert!(
-        SpamService::log_message(ctx.clone(), 1, &msg1)
+        spam::log::log_message(ctx.clone(), 1, &msg1)
             .await
             .is_none()
     );
     let msg2 = make_message(2, 101, 6, "hi");
     assert!(
-        SpamService::log_message(ctx.clone(), 1, &msg2)
+        spam::log::log_message(ctx.clone(), 1, &msg2)
             .await
             .is_none()
     );
     let msg3 = make_message(3, 102, 6, "bye");
     assert!(
-        SpamService::log_message(ctx.clone(), 1, &msg3)
+        spam::log::log_message(ctx.clone(), 1, &msg3)
             .await
             .is_none()
     );
     let msg4 = make_message(4, 103, 6, "hi");
     assert!(
-        SpamService::log_message(ctx.clone(), 1, &msg4)
+        spam::log::log_message(ctx.clone(), 1, &msg4)
             .await
             .is_none()
     );
     let msg5 = make_message(5, 104, 6, "hi");
-    let tok = SpamService::log_message(ctx.clone(), 1, &msg5).await;
+    let tok = spam::log::log_message(ctx.clone(), 1, &msg5).await;
     assert!(tok.is_none());
-    SpamService::purge_cache(1, 6).await;
+    spam::quarantine::purge_cache(1, 6).await;
 }

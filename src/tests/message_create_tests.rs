@@ -1,4 +1,4 @@
-use crate::events::message_create::{build_ai_input, strip_mention};
+use crate::events::message_create::ai::{build_ai_input, strip_mention};
 use twilight_model::{
     channel::{Attachment, Message, message::MessageType},
     id::Id,
@@ -110,7 +110,7 @@ fn test_strip_mention() {
 
 #[test]
 fn test_collect_attachments() {
-    use crate::events::message_create::collect_attachments;
+    use crate::events::message_create::ai::collect_attachments;
     let msg = basic_message(1, (1..7).map(dummy_attachment).collect(), None);
     let (main, refs) = collect_attachments(&msg);
     assert_eq!(main.len(), 5);

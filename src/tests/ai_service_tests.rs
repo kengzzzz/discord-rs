@@ -5,7 +5,8 @@ use google_ai_rs::{
 };
 use twilight_model::id::{Id, marker::UserMarker};
 
-use crate::services::ai::{self, AiService, ChatEntry, history};
+use crate::services::ai::tests::{set_generate_override, set_summarize_override};
+use crate::services::ai::{AiService, history, models::ChatEntry};
 
 fn mock_response(text: &str) -> Response {
     Response {
@@ -36,7 +37,7 @@ fn mock_response(text: &str) -> Response {
 async fn test_prompt_and_history() {
     let user = Id::<UserMarker>::new(1);
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
-    ai::set_generate_override(|_| mock_response("ok"));
+    set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(user).await;
     AiService::set_prompt(ctx.clone(), user, "hi".to_string()).await;
@@ -67,7 +68,7 @@ async fn test_prompt_and_history() {
 async fn test_reply_fields() {
     let user = Id::<UserMarker>::new(10);
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
-    ai::set_generate_override(|_| mock_response("ok"));
+    set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(user).await;
 
@@ -94,8 +95,8 @@ async fn test_reply_fields() {
 async fn test_summary_rotation() {
     let user = Id::<UserMarker>::new(2);
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
-    ai::set_generate_override(|_| mock_response("ok"));
-    ai::set_summarize_override(|_| "SUM".to_string());
+    set_generate_override(|_| mock_response("ok"));
+    set_summarize_override(|_| "SUM".to_string());
 
     let history: Vec<_> = (0..21)
         .map(|i| {

@@ -2,21 +2,22 @@ use httpmock::Method::GET;
 use httpmock::MockServer;
 use serde_json::json;
 
-use crate::warframe;
+use crate::warframe::api::tests::set_base_url;
+use crate::warframe::{embed, utils};
 
 #[tokio::test]
 async fn test_title_and_time() {
-    let title = warframe::title_case("cetus day");
+    let title = utils::title_case("cetus day");
     assert_eq!(title, "**Cetus **Day** ends");
 
-    let formatted = warframe::format_time("2025-01-01T00:00:00Z");
+    let formatted = utils::format_time("2025-01-01T00:00:00Z");
     assert_eq!(formatted, "<t:1735689600:R>");
 }
 
 #[tokio::test]
 async fn test_steel_path_umbra() {
     let server = MockServer::start_async().await;
-    crate::warframe::api::set_base_url(&server.url(""));
+    set_base_url(&server.url(""));
 
     server
         .mock_async(|when, then| {
@@ -30,7 +31,7 @@ async fn test_steel_path_umbra() {
         .await;
 
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
-    let (field, is_umbra) = warframe::steel_path_field(ctx).await.unwrap();
+    let (field, is_umbra) = embed::steel_path_field(ctx).await.unwrap();
     assert!(is_umbra);
     assert_eq!(
         field.name,
@@ -48,7 +49,7 @@ async fn test_steel_path_umbra() {
 
 #[tokio::test]
 async fn test_next_monday_duration() {
-    let dur = crate::services::notification::next_monday_duration();
+    let dur = crate::services::notification::worker::next_monday_duration();
     assert!(dur.as_secs() > 0);
     assert!(dur.as_secs() <= 8 * 24 * 60 * 60);
 }

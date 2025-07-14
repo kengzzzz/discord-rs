@@ -1,7 +1,7 @@
 use crate::configs::Reaction;
-use crate::dbs::mongo::role::RoleEnum;
+use crate::dbs::mongo::models::role::RoleEnum;
+use crate::services::ai::AiService;
 use crate::tests::mock_http::MockHttp;
-use crate::utils::embed::ai_embeds;
 use crate::utils::{env as env_util, reaction};
 use crate::{defer_interaction, send_with_fallback};
 use twilight_model::channel::message::EmojiReactionType;
@@ -48,14 +48,14 @@ fn test_reaction_maps() {
 #[test]
 fn test_ai_embeds_split() {
     let text = "a".repeat(4097);
-    let embeds = ai_embeds(&text).unwrap();
+    let embeds = AiService::ai_embeds(&text).unwrap();
     assert_eq!(embeds.len(), 5);
     assert_eq!(embeds[0].description.as_deref().unwrap().len(), 1024);
     assert_eq!(embeds[1].description.as_deref().unwrap().len(), 1024);
     assert_eq!(embeds[2].description.as_deref().unwrap().len(), 1024);
     assert_eq!(embeds[3].description.as_deref().unwrap().len(), 1024);
     assert_eq!(embeds[4].description.as_deref().unwrap().len(), 1);
-    assert!(ai_embeds("").unwrap().is_empty());
+    assert!(AiService::ai_embeds("").unwrap().is_empty());
 }
 
 #[tokio::test]

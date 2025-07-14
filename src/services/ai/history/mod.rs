@@ -1,12 +1,8 @@
 use twilight_model::id::{Id, marker::UserMarker};
 
-use super::ChatEntry;
 #[cfg(test)]
-use once_cell::sync::Lazy;
-#[cfg(test)]
-use std::collections::HashMap;
-#[cfg(test)]
-use tokio::sync::RwLock;
+use self::tests::{HISTORY_STORE, PROMPT_STORE};
+use super::models::ChatEntry;
 
 #[cfg(not(test))]
 use crate::configs::CACHE_PREFIX;
@@ -14,12 +10,6 @@ use crate::context::Context;
 #[cfg(not(test))]
 use crate::dbs::redis::{redis_delete, redis_get, redis_set};
 use std::sync::Arc;
-
-#[cfg(test)]
-static HISTORY_STORE: Lazy<RwLock<HashMap<u64, Vec<ChatEntry>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-#[cfg(test)]
-static PROMPT_STORE: Lazy<RwLock<HashMap<u64, String>>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 #[cfg(not(test))]
 async fn history_key(user: Id<UserMarker>) -> String {
@@ -112,7 +102,7 @@ pub(crate) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: 
     }
     #[cfg(not(test))]
     {
-        use crate::dbs::mongo::ai_prompt::AiPrompt;
+        use crate::dbs::mongo::models::ai_prompt::AiPrompt;
         use mongodb::bson::{doc, to_bson};
 
         if let Ok(bson) = to_bson(&AiPrompt {
@@ -141,3 +131,6 @@ pub(crate) async fn purge_prompt_cache(user_id: u64) {
         redis_delete(&key).await;
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

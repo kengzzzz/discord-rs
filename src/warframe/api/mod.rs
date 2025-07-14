@@ -1,13 +1,10 @@
 #[cfg(test)]
-use once_cell::sync::OnceCell;
+use self::tests::BASE_URL_OVERRIDE;
 use serde::Deserialize;
 
 use crate::services::http::HttpService;
 
 const BASE_URL: &str = "https://api.warframestat.us/pc";
-
-#[cfg(test)]
-static BASE_URL_OVERRIDE: OnceCell<String> = OnceCell::new();
 
 #[derive(Deserialize)]
 pub struct NewsItem {
@@ -69,6 +66,4 @@ pub async fn steel_path(client: &reqwest::Client) -> anyhow::Result<SteelPathDat
 }
 
 #[cfg(test)]
-pub fn set_base_url(url: &str) {
-    let _ = BASE_URL_OVERRIDE.set(url.to_string());
-}
+pub(crate) mod tests;

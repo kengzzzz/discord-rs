@@ -4,7 +4,7 @@ use crate::{
     configs::CACHE_PREFIX,
     context::Context,
     dbs::{
-        mongo::role::{Role, RoleEnum},
+        mongo::models::role::{Role, RoleEnum},
         redis::{redis_delete, redis_get, redis_set},
     },
 };
