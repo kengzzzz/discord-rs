@@ -3,7 +3,7 @@ use super::models::ChatEntry;
 use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;
 use google_ai_rs::Client;
-use google_ai_rs::{Content, genai::Response};
+use google_ai_rs::{Content, Part, genai::Response};
 use tokio::sync::OnceCell;
 
 pub(super) static CLIENT: OnceCell<Client> = OnceCell::const_new();
@@ -58,9 +58,33 @@ pub(super) async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
     let client = client().await?;
     let contents: Vec<Content> = history
         .iter()
-        .map(|c| Content::from((c.text.as_str(),)))
+        .map(|c| {
+            let mut parts = vec![Part::text(&c.text)];
+            for url in &c.attachments {
+                parts.push(Part::text("Attachment:"));
+                parts.push(Part::file_data("", url));
+            }
+            if let Some(ref_text) = &c.ref_text {
+                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                let label = format!("In reply to {owner}:");
+                parts.push(Part::text(&label));
+                parts.push(Part::text(ref_text));
+            }
+            if let Some(ref_urls) = &c.ref_attachments {
+                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                for url in ref_urls {
+                    let label = format!("Attachment from {owner}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::file_data("", url));
+                }
+            }
+            Content {
+                role: c.role.clone(),
+                parts,
+            }
+        })
         .collect();
-    let system = "Summarize the conversation so far in a concise form.";
+    let system = "Summarize the conversation so far in a concise form. Include brief mentions of any attachments or quotes.";
 
     for name in SUMMARY_MODELS {
         let model = client
