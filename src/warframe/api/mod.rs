@@ -1,29 +1,29 @@
 #[cfg(test)]
 use self::tests::BASE_URL_OVERRIDE;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::services::http::HttpService;
 
 const BASE_URL: &str = "https://api.warframestat.us/pc";
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NewsItem {
     #[serde(rename = "imageLink")]
     pub image_link: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Cycle {
     pub state: String,
     pub expiry: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SteelPathReward {
     pub name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SteelPathData {
     #[serde(rename = "currentReward")]
     pub current_reward: Option<SteelPathReward>,
