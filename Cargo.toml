@@ -38,6 +38,5 @@ tokio-util = "0.7"
 
 [dev-dependencies]
 httpmock = "0.7"
-mini-redis = "0.4"
 mockall = "0.13"
 tokio-stream = "0.1"
