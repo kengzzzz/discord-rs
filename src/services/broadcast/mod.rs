@@ -1,5 +1,6 @@
 pub mod embed;
 
+use futures::{StreamExt as _, stream};
 use twilight_http::request::channel::reaction::RequestReactionType;
 use twilight_model::{channel::Message, id::Id};
 
@@ -17,6 +18,7 @@ use std::sync::Arc;
 pub struct BroadcastService;
 
 const TTL: usize = 600;
+const DISPATCH_CONCURRENCY: usize = 5;
 
 impl BroadcastService {
     pub async fn handle(ctx: Arc<Context>, message: &Message) {
@@ -32,18 +34,27 @@ impl BroadcastService {
             return;
         };
 
-        let mut records = Vec::new();
-        for channel in ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Broadcast).await {
-            if channel.channel_id == message.channel_id.get() {
-                continue;
-            }
-            let channel_id = Id::new(channel.channel_id);
-            if let Ok(resp) = ctx.http.create_message(channel_id).embeds(&embeds).await {
-                if let Ok(msg) = resp.model().await {
-                    records.push((channel.channel_id, msg.id.get()));
+        let channels = ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Broadcast).await;
+        let records: Vec<(u64, u64)> = stream::iter(channels)
+            .filter(|ch| futures::future::ready(ch.channel_id != message.channel_id.get()))
+            .map(|channel| {
+                let ctx = ctx.clone();
+                let embeds = embeds.clone();
+                async move {
+                    let channel_id = Id::new(channel.channel_id);
+                    if let Ok(resp) = ctx.http.create_message(channel_id).embeds(&embeds).await {
+                        if let Ok(msg) = resp.model().await {
+                            return Some((channel.channel_id, msg.id.get()));
+                        }
+                    }
+                    None
                 }
-            }
-        }
+            })
+            .buffer_unordered(DISPATCH_CONCURRENCY)
+            .filter_map(|r| async move { r })
+            .collect()
+            .await;
+
         if !records.is_empty() {
             Self::remember(message.id.get(), &records).await;
         }
