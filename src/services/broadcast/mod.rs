@@ -1,5 +1,6 @@
 pub mod embed;
 
+use deadpool_redis::Pool;
 use futures::{StreamExt as _, stream};
 use twilight_http::request::channel::reaction::RequestReactionType;
 use twilight_model::{channel::Message, id::Id};
@@ -56,7 +57,7 @@ impl BroadcastService {
             .await;
 
         if !records.is_empty() {
-            Self::remember(message.id.get(), &records).await;
+            Self::remember(&ctx.redis, message.id.get(), &records).await;
         }
 
         let emoji = RequestReactionType::Unicode {
@@ -71,21 +72,21 @@ impl BroadcastService {
         }
     }
 
-    async fn remember(original: u64, records: &Vec<(u64, u64)>) {
+    async fn remember(pool: &Pool, original: u64, records: &Vec<(u64, u64)>) {
         let key = format!("{CACHE_PREFIX}:broadcast:{original}");
-        redis_set_ex(&key, records, TTL).await;
+        redis_set_ex(pool, &key, records, TTL).await;
     }
 
     pub async fn delete_replicas(ctx: Arc<Context>, messages: &[(u64, u64)]) {
         for &(_, msg_id) in messages {
             let key = format!("{CACHE_PREFIX}:broadcast:{msg_id}");
-            if let Some(list) = redis_get::<Vec<(u64, u64)>>(&key).await {
+            if let Some(list) = redis_get::<Vec<(u64, u64)>>(&ctx.redis, &key).await {
                 for (ch, m) in list {
                     if let Err(e) = ctx.http.delete_message(Id::new(ch), Id::new(m)).await {
                         tracing::warn!(channel_id = ch, message_id = m, error = %e, "failed to delete broadcast replica");
                     }
                 }
-                redis_delete(&key).await;
+                redis_delete(&ctx.redis, &key).await;
             }
         }
     }

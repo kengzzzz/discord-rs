@@ -1,4 +1,5 @@
 use chrono::Utc;
+use deadpool_redis::Pool;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::channel::message::{Embed, embed::EmbedField};
 use twilight_model::id::{Id, marker::GuildMarker};
@@ -27,27 +28,34 @@ fn ttl_from_expiry(expiry: &str) -> usize {
     }
 }
 
-async fn cached_or_request<T, F, Fut, G>(key: &str, fetcher: F, ttl_calc: G) -> anyhow::Result<T>
+async fn cached_or_request<T, F, Fut, G>(
+    pool: &Pool,
+    key: &str,
+    fetcher: F,
+    ttl_calc: G,
+) -> anyhow::Result<T>
 where
     T: Serialize + DeserializeOwned + Send + Sync,
     F: FnOnce() -> Fut,
     Fut: Future<Output = anyhow::Result<T>>,
     G: Fn(&T) -> usize,
 {
-    if let Some(val) = redis_get::<T>(key).await {
+    if let Some(val) = redis_get(pool, key).await {
         return Ok(val);
     }
     let val = fetcher().await?;
     let ttl = ttl_calc(&val);
-    redis_set_ex(key, &val, ttl).await;
+    redis_set_ex(pool, key, &val, ttl).await;
     Ok(val)
 }
 
 async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
     let key = format!("{CACHE_PREFIX}:wf:news");
+    let client = ctx.reqwest.clone();
     match cached_or_request(
+        &ctx.redis,
         &key,
-        || async move { api::news(ctx.reqwest.as_ref()).await },
+        move || async move { api::news(client.as_ref()).await },
         |_| MIN_CACHE_TTL,
     )
     .await
@@ -62,9 +70,11 @@ async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
 
 async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
     let key = format!("{CACHE_PREFIX}:wf:cycle:{endpoint}");
+    let client = ctx.reqwest.clone();
     let data = cached_or_request(
+        &ctx.redis,
         &key,
-        || async move { api::cycle(ctx.reqwest.as_ref(), endpoint).await },
+        move || async move { api::cycle(client.as_ref(), endpoint).await },
         |d| ttl_from_expiry(&d.expiry),
     )
     .await?;
@@ -84,9 +94,11 @@ async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::R
 
 pub async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
     let key = format!("{CACHE_PREFIX}:wf:steel-path");
+    let client = ctx.reqwest.clone();
     let data = cached_or_request(
+        &ctx.redis,
         &key,
-        || async move { api::steel_path(ctx.reqwest.as_ref()).await },
+        move || async move { api::steel_path(client.as_ref()).await },
         |d| ttl_from_expiry(&d.expiry),
     )
     .await?;

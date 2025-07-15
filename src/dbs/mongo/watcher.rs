@@ -12,9 +12,12 @@ use tokio_util::sync::CancellationToken;
 
 use crate::dbs::redis::{redis_get, redis_set};
 
+use deadpool_redis::Pool;
+
 pub async fn spawn_watcher<T, F, Fut>(
     coll: Collection<T>,
     options: ChangeStreamOptions,
+    pool: Pool,
     mut handler: F,
     token: CancellationToken,
 ) -> anyhow::Result<()>
@@ -27,7 +30,7 @@ where
     tokio::spawn(async move {
         while !token.is_cancelled() {
             let mut builder = coll.watch().with_options(options.clone());
-            if let Some(token_str) = redis_get::<String>(&redis_key).await {
+            if let Some(token_str) = redis_get::<String>(&pool, &redis_key).await {
                 match serde_json::from_str::<ResumeToken>(&token_str) {
                     Ok(token) => builder = builder.resume_after(token),
                     Err(e) => {
@@ -74,7 +77,7 @@ where
                         let resume_token = evt.id.clone();
                         handler(evt).await;
                         if let Ok(token_str) = serde_json::to_string(&resume_token) {
-                            redis_set(&redis_key, &token_str).await;
+                            redis_set(&pool, &redis_key, &token_str).await;
                         } else {
                             tracing::warn!(
                                 collection = coll.name(),

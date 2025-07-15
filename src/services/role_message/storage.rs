@@ -1,3 +1,4 @@
+use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
 use std::sync::Arc;
 
@@ -13,7 +14,7 @@ use crate::{
 pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
     let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
 
-    if let Some(msg) = redis_get(&redis_key).await {
+    if let Some(msg) = redis_get(&ctx.redis, &redis_key).await {
         return Some(msg);
     }
 
@@ -25,7 +26,7 @@ pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
         )
         .await
     {
-        redis_set(&redis_key, &msg).await;
+        redis_set(&ctx.redis, &redis_key, &msg).await;
         return Some(msg);
     }
 
@@ -47,7 +48,7 @@ pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: 
     }
 }
 
-pub async fn purge_cache(guild_id: u64) {
+pub async fn purge_cache(pool: &Pool, guild_id: u64) {
     let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
-    redis_delete(&redis_key).await;
+    redis_delete(pool, &redis_key).await;
 }

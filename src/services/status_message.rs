@@ -6,6 +6,7 @@ use crate::{
         redis::{redis_delete, redis_get, redis_set},
     },
 };
+use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
 use std::sync::Arc;
 
@@ -15,7 +16,7 @@ impl StatusMessageService {
     pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
         let redis_key = format!("{CACHE_PREFIX}:status-message:{guild_id}");
 
-        if let Some(msg) = redis_get(&redis_key).await {
+        if let Some(msg) = redis_get(&ctx.redis, &redis_key).await {
             return Some(msg);
         }
 
@@ -24,7 +25,7 @@ impl StatusMessageService {
             .find_one(doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()})
             .await
         {
-            redis_set(&redis_key, &msg).await;
+            redis_set(&ctx.redis, &redis_key, &msg).await;
             return Some(msg);
         }
 
@@ -45,8 +46,8 @@ impl StatusMessageService {
         }
     }
 
-    pub async fn purge_cache(guild_id: u64) {
+    pub async fn purge_cache(pool: &Pool, guild_id: u64) {
         let redis_key = format!("{CACHE_PREFIX}:status-message:{guild_id}");
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 }

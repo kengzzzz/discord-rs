@@ -1,3 +1,4 @@
+use deadpool_redis::Pool;
 use mongodb::bson::doc;
 
 use crate::{
@@ -16,7 +17,7 @@ impl RoleService {
     pub async fn get(ctx: Arc<Context>, role_id: u64) -> Option<Role> {
         let redis_key = format!("{CACHE_PREFIX}:role:{role_id}");
 
-        if let Some(role) = redis_get(&redis_key).await {
+        if let Some(role) = redis_get(&ctx.redis, &redis_key).await {
             return Some(role);
         }
 
@@ -28,16 +29,16 @@ impl RoleService {
             })
             .await
         {
-            redis_set(&redis_key, &role).await;
+            redis_set(&ctx.redis, &redis_key, &role).await;
             return Some(role);
         }
 
         None
     }
 
-    pub async fn purge_cache(role_id: u64) {
+    pub async fn purge_cache(pool: &Pool, role_id: u64) {
         let redis_key = format!("{CACHE_PREFIX}:role:{role_id}");
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 
     pub async fn get_by_type(
@@ -52,7 +53,7 @@ impl RoleService {
             role_type.value()
         );
 
-        if let Some(role) = redis_get(&redis_key).await {
+        if let Some(role) = redis_get(&ctx.redis, &redis_key).await {
             return Some(role);
         }
 
@@ -62,20 +63,20 @@ impl RoleService {
             .find_one(doc! {"guild_id": guild_id as i64, "role_type": role_type.value()})
             .await
         {
-            redis_set(&redis_key, &role).await;
+            redis_set(&ctx.redis, &redis_key, &role).await;
             return Some(role);
         }
 
         None
     }
 
-    pub async fn purge_cache_by_type(guild_id: u64, role_type: &RoleEnum) {
+    pub async fn purge_cache_by_type(pool: &Pool, guild_id: u64, role_type: &RoleEnum) {
         let redis_key = format!(
             "{}:role-type:{}:{}",
             CACHE_PREFIX,
             guild_id,
             role_type.value()
         );
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 }

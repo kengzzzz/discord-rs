@@ -40,7 +40,7 @@ async fn test_prompt_and_history() {
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
     set_generate_override(|_| mock_response("ok"));
 
-    AiService::clear_history(user).await;
+    AiService::clear_history(&ctx.redis, user).await;
     AiService::set_prompt(ctx.clone(), user, "hi".to_string()).await;
 
     let text = AiService::handle_interaction(
@@ -57,7 +57,7 @@ async fn test_prompt_and_history() {
     .unwrap();
     assert_eq!(text, "ok");
 
-    let hist = history::load_history(user).await;
+    let hist = history::load_history(&ctx.redis, user).await;
     assert_eq!(hist.len(), 2);
     assert_eq!(hist[0].role, "user".to_string());
 
@@ -71,7 +71,7 @@ async fn test_reply_fields() {
     let ctx = std::sync::Arc::new(crate::context::Context::test().await);
     set_generate_override(|_| mock_response("ok"));
 
-    AiService::clear_history(user).await;
+    AiService::clear_history(&ctx.redis, user).await;
 
     let _ = AiService::handle_interaction(
         ctx.clone(),
@@ -85,7 +85,7 @@ async fn test_reply_fields() {
     )
     .await;
 
-    let hist = history::load_history(user).await;
+    let hist = history::load_history(&ctx.redis, user).await;
     assert_eq!(hist.len(), 2);
     assert_eq!(hist[0].ref_text, Some("hello".to_string()));
     assert!(hist[0].ref_attachments.is_none());
@@ -111,7 +111,7 @@ async fn test_summary_rotation() {
             )
         })
         .collect::<VecDeque<_>>();
-    history::store_history(user, &history).await;
+    history::store_history(&ctx.redis, user, &history).await;
 
     let _ = AiService::handle_interaction(
         ctx.clone(),
@@ -124,7 +124,7 @@ async fn test_summary_rotation() {
         None,
     )
     .await;
-    let hist = history::load_history(user).await;
+    let hist = history::load_history(&ctx.redis, user).await;
     assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
     assert_eq!(hist[0].role, "user".to_string());
     assert!(hist[0].text.contains("SUM"));
@@ -138,7 +138,7 @@ async fn test_purge_prompt_cache() {
     let prompt = history::get_prompt(ctx.clone(), user).await;
     assert_eq!(prompt, Some("hello".to_string()));
 
-    AiService::purge_prompt_cache(user.get()).await;
+    AiService::purge_prompt_cache(&ctx.redis, user.get()).await;
     let prompt = history::get_prompt(ctx.clone(), user).await;
     assert!(prompt.is_none());
 }

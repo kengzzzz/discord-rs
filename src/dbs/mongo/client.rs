@@ -1,3 +1,4 @@
+use deadpool_redis::Pool;
 use mongodb::{
     Client, Collection, IndexModel,
     bson::doc,
@@ -30,7 +31,7 @@ pub struct MongoDB {
 }
 
 impl MongoDB {
-    pub async fn init() -> anyhow::Result<Arc<Self>> {
+    pub async fn init(redis: Pool) -> anyhow::Result<Arc<Self>> {
         let mut opts = ClientOptions::parse(&MONGO_CONFIGS.uri).await?;
         opts.credential = Some(
             Credential::builder()
@@ -178,18 +179,41 @@ impl MongoDB {
             .build();
 
         let token = shutdown::get_token();
-        watchers::spawn_channel_watcher(repo.channels.clone(), options.clone(), token.clone())
-            .await?;
-        watchers::spawn_role_watcher(repo.roles.clone(), options.clone(), token.clone()).await?;
-        watchers::spawn_quarantine_watcher(
-            repo.quarantines.clone(),
+        watchers::spawn_channel_watcher(
+            repo.channels.clone(),
             options.clone(),
+            redis.clone(),
             token.clone(),
         )
         .await?;
-        watchers::spawn_message_watcher(repo.messages.clone(), options.clone(), token.clone())
-            .await?;
-        watchers::spawn_ai_prompt_watcher(repo.ai_prompts.clone(), options, token.clone()).await?;
+        watchers::spawn_role_watcher(
+            repo.roles.clone(),
+            options.clone(),
+            redis.clone(),
+            token.clone(),
+        )
+        .await?;
+        watchers::spawn_quarantine_watcher(
+            repo.quarantines.clone(),
+            options.clone(),
+            redis.clone(),
+            token.clone(),
+        )
+        .await?;
+        watchers::spawn_message_watcher(
+            repo.messages.clone(),
+            options.clone(),
+            redis.clone(),
+            token.clone(),
+        )
+        .await?;
+        watchers::spawn_ai_prompt_watcher(
+            repo.ai_prompts.clone(),
+            options,
+            redis.clone(),
+            token.clone(),
+        )
+        .await?;
         monitor::spawn_monitor(repo.clone());
 
         Ok(repo)

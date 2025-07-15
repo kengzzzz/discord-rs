@@ -32,7 +32,7 @@ static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 impl MarketService {
     pub async fn init(ctx: Arc<Context>) {
-        if let Some(data) = client::load_from_redis(REDIS_KEY).await {
+        if let Some(data) = client::load_from_redis(&ctx.redis, REDIS_KEY).await {
             *ITEMS.write().await = data;
             LAST_UPDATE.store(
                 SystemTime::now()
@@ -41,8 +41,14 @@ impl MarketService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) =
-            client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+        } else if let Err(e) = client::update_items(
+            ctx.reqwest.as_ref(),
+            REDIS_KEY,
+            &ITEMS,
+            &LAST_UPDATE,
+            &ctx.redis,
+        )
+        .await
         {
             tracing::warn!(error = %e, "failed to update market items");
         }
@@ -66,8 +72,14 @@ impl MarketService {
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS as u64 {
-            if let Err(e) =
-                client::update_items(ctx.reqwest.as_ref(), REDIS_KEY, &ITEMS, &LAST_UPDATE).await
+            if let Err(e) = client::update_items(
+                ctx.reqwest.as_ref(),
+                REDIS_KEY,
+                &ITEMS,
+                &LAST_UPDATE,
+                &ctx.redis,
+            )
+            .await
             {
                 tracing::warn!(error = %e, "failed to update market items");
             }

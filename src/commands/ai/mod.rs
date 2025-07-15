@@ -110,7 +110,7 @@ impl AiCommand {
                 }
                 AiCommand::Clear(_) => {
                     if let Some(user) = interaction.author() {
-                        AiService::clear_history(user.id).await;
+                        AiService::clear_history(&ctx.redis, user.id).await;
                         let embeds = AiService::ai_embeds("History cleared")?;
                         ctx.http
                             .interaction(interaction.application_id)

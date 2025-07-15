@@ -1,4 +1,5 @@
 use chrono::Utc;
+use deadpool_redis::Pool;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use twilight_model::{channel::Message, id::Id};
@@ -20,16 +21,16 @@ struct SpamRecord {
     timestamp: i64,
 }
 
-pub async fn clear_log(guild_id: u64, user_id: u64) {
+pub async fn clear_log(pool: &Pool, guild_id: u64, user_id: u64) {
     let key = format!("spam:log:{guild_id}:{user_id}");
-    redis_delete(&key).await;
+    redis_delete(pool, &key).await;
 }
 
 pub async fn log_message(ctx: Arc<Context>, guild_id: u64, message: &Message) -> Option<String> {
     let hash = hash_message(message).await;
     let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
     let now = Utc::now().timestamp();
-    let mut record = redis_get::<SpamRecord>(&key).await.unwrap_or(SpamRecord {
+    let mut record = redis_get(&ctx.redis, &key).await.unwrap_or(SpamRecord {
         hash: hash.clone(),
         histories: Vec::with_capacity(SPAM_LIMIT),
         timestamp: now,
@@ -68,7 +69,7 @@ pub async fn log_message(ctx: Arc<Context>, guild_id: u64, message: &Message) ->
         return Some(token);
     }
 
-    redis_set_ex(&key, &record, LOG_TTL).await;
+    redis_set_ex(&ctx.redis, &key, &record, LOG_TTL).await;
 
     None
 }

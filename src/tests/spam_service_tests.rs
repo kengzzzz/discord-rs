@@ -83,7 +83,8 @@ async fn test_spam_log_threshold() {
     }
     assert!(token.is_some());
     assert_eq!(token.unwrap().len(), 6);
-    spam::quarantine::purge_cache(1, 5).await;
+    let pool = crate::dbs::redis::new_pool();
+    spam::quarantine::purge_cache(&pool, 1, 5).await;
 }
 
 #[tokio::test]
@@ -117,5 +118,6 @@ async fn test_spam_log_reset() {
     let msg5 = make_message(5, 104, 6, "hi");
     let tok = spam::log::log_message(ctx.clone(), 1, &msg5).await;
     assert!(tok.is_none());
-    spam::quarantine::purge_cache(1, 6).await;
+    let pool = crate::dbs::redis::new_pool();
+    spam::quarantine::purge_cache(&pool, 1, 6).await;
 }

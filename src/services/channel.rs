@@ -1,3 +1,4 @@
+use deadpool_redis::Pool;
 use futures::StreamExt;
 use mongodb::bson::doc;
 
@@ -17,7 +18,7 @@ impl ChannelService {
     pub async fn get(ctx: Arc<Context>, channel_id: u64) -> Vec<Channel> {
         let redis_key = format!("{CACHE_PREFIX}:channel:{channel_id}");
 
-        if let Some(Some(channels)) = redis_get::<Option<Vec<Channel>>>(&redis_key).await {
+        if let Some(Some(channels)) = redis_get(&ctx.redis, &redis_key).await {
             return channels;
         }
 
@@ -35,15 +36,15 @@ impl ChannelService {
                 channels.push(channel);
             }
 
-            redis_set(&redis_key, &channels).await;
+            redis_set(&ctx.redis, &redis_key, &channels).await;
         }
 
         channels
     }
 
-    pub async fn purge_cache(channel_id: u64) {
+    pub async fn purge_cache(pool: &Pool, channel_id: u64) {
         let redis_key = format!("{CACHE_PREFIX}:channel:{channel_id}");
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 
     pub async fn get_by_type(
@@ -58,7 +59,7 @@ impl ChannelService {
             channel_type.value()
         );
 
-        if let Some(channel) = redis_get(&redis_key).await {
+        if let Some(channel) = redis_get(&ctx.redis, &redis_key).await {
             return Some(channel);
         }
 
@@ -68,32 +69,32 @@ impl ChannelService {
             .find_one(doc! {"guild_id": guild_id as i64, "channel_type": channel_type.value()})
             .await
         {
-            redis_set(&redis_key, &ch).await;
+            redis_set(&ctx.redis, &redis_key, &ch).await;
             return Some(ch);
         }
 
         None
     }
 
-    pub async fn purge_cache_by_type(guild_id: u64, channel_type: &ChannelEnum) {
+    pub async fn purge_cache_by_type(pool: &Pool, guild_id: u64, channel_type: &ChannelEnum) {
         let redis_key = format!(
             "{}:channel-type:{}:{}",
             CACHE_PREFIX,
             guild_id,
             channel_type.value()
         );
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 
-    pub async fn purge_list_cache(channel_type: &ChannelEnum) {
+    pub async fn purge_list_cache(pool: &Pool, channel_type: &ChannelEnum) {
         let redis_key = format!("{}:channels-by-type:{}", CACHE_PREFIX, channel_type.value());
-        redis_delete(&redis_key).await;
+        redis_delete(pool, &redis_key).await;
     }
 
     pub async fn list_by_type(ctx: Arc<Context>, channel_type: &ChannelEnum) -> Vec<Channel> {
         let redis_key = format!("{}:channels-by-type:{}", CACHE_PREFIX, channel_type.value());
 
-        if let Some(Some(channels)) = redis_get(&redis_key).await {
+        if let Some(Some(channels)) = redis_get(&ctx.redis, &redis_key).await {
             return channels;
         }
 
@@ -108,7 +109,7 @@ impl ChannelService {
                 channels.push(channel);
             }
 
-            redis_set(&redis_key, &channels).await;
+            redis_set(&ctx.redis, &redis_key, &channels).await;
         }
 
         channels

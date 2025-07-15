@@ -4,6 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -58,8 +59,8 @@ fn filter(item: &Item) -> bool {
     false
 }
 
-async fn load_from_redis() -> Option<Vec<ItemEntry>> {
-    if let Some(names) = redis_get::<Vec<String>>(REDIS_KEY).await {
+async fn load_from_redis(pool: &Pool) -> Option<Vec<ItemEntry>> {
+    if let Some(names) = redis_get::<Vec<String>>(pool, REDIS_KEY).await {
         let entries = names
             .into_iter()
             .map(|n| {
@@ -72,7 +73,7 @@ async fn load_from_redis() -> Option<Vec<ItemEntry>> {
     None
 }
 
-async fn update_items(client: &Client) -> anyhow::Result<()> {
+async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result<()> {
     let resp = HttpService::get(client, ITEMS_URL).await?;
     let fetched: Vec<Item> = resp.json().await?;
     let mut set = HashSet::new();
@@ -90,7 +91,7 @@ async fn update_items(client: &Client) -> anyhow::Result<()> {
     names.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     original.sort_unstable();
     *ITEMS.write().await = names;
-    redis_set(REDIS_KEY, &original).await;
+    redis_set(pool, REDIS_KEY, &original).await;
     LAST_UPDATE.store(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -105,7 +106,7 @@ use super::BuildService;
 
 impl BuildService {
     pub async fn init(ctx: Arc<Context>) {
-        if let Some(data) = load_from_redis().await {
+        if let Some(data) = load_from_redis(&ctx.redis).await {
             *ITEMS.write().await = data;
             LAST_UPDATE.store(
                 SystemTime::now()
@@ -114,7 +115,7 @@ impl BuildService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = update_items(ctx.reqwest.as_ref()).await {
+        } else if let Err(e) = update_items(ctx.reqwest.as_ref(), &ctx.redis).await {
             tracing::warn!(error = %e, "failed to update build items");
         }
     }
@@ -130,23 +131,23 @@ impl BuildService {
             .collect()
     }
 
-    async fn maybe_refresh(client: &Client) {
+    async fn maybe_refresh(client: &Client, pool: &Pool) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS as u64 {
-            if let Err(e) = update_items(client).await {
+            if let Err(e) = update_items(client, pool).await {
                 tracing::warn!(error = %e, "failed to update build items");
             }
         }
     }
 
-    pub async fn search_with_update(client: &Client, prefix: &str) -> Vec<String> {
+    pub async fn search_with_update(client: &Client, pool: &Pool, prefix: &str) -> Vec<String> {
         let mut results = Self::search(prefix).await;
         if results.is_empty() {
-            Self::maybe_refresh(client).await;
+            Self::maybe_refresh(client, pool).await;
             results = Self::search(prefix).await;
         }
         results
