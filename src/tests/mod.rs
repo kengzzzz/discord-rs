@@ -1,7 +1,9 @@
 mod ai_service_tests;
+pub mod build_cache_utils;
 mod build_market_tests;
 mod command_parsing_tests;
 mod context_startup_tests;
+mod etag_cache_tests;
 mod health_service_tests;
 mod intro_service_tests;
 mod market_service_tests;
