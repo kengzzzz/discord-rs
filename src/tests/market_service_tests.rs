@@ -21,6 +21,8 @@ fn test_market_components_pagination() {
         rank: 0,
         page: 1,
         max_rank: None,
+        last_used: std::time::Instant::now(),
+        expire_token: tokio_util::sync::CancellationToken::new(),
     };
     let comps = MarketService::components(&session);
     assert_eq!(comps.len(), 1);
@@ -60,6 +62,8 @@ fn test_market_components_rank_buttons() {
         rank: 0,
         page: 1,
         max_rank: Some(2),
+        last_used: std::time::Instant::now(),
+        expire_token: tokio_util::sync::CancellationToken::new(),
     };
     let comps = MarketService::components(&session);
     let row = match &comps[0] {

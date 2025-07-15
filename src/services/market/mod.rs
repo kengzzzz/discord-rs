@@ -6,11 +6,14 @@ pub mod session;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
+    time::Instant,
 };
 
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, time::sleep};
 
 use once_cell::sync::Lazy;
+use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use twilight_cache_inmemory::{Reference, model::CachedGuild};
 use twilight_model::{
     application::interaction::{Interaction, message_component::MessageComponentInteractionData},
@@ -65,6 +68,19 @@ impl MarketKind {
 pub struct MarketService;
 
 impl MarketService {
+    const SESSION_TTL: Duration = Duration::from_secs(900);
+
+    fn spawn_expiration(message_id: Id<MessageMarker>, token: CancellationToken) {
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = token.cancelled() => {},
+                _ = sleep(Self::SESSION_TTL) => {
+                    SESSIONS.write().await.remove(&message_id);
+                }
+            }
+        });
+    }
+
     pub fn embed_for_session(
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         session: &MarketSession,
@@ -101,6 +117,8 @@ impl MarketService {
                     rank: 0,
                     page: 1,
                     max_rank,
+                    last_used: Instant::now(),
+                    expire_token: CancellationToken::new(),
                 };
                 Ok(Some(session))
             }
@@ -166,15 +184,24 @@ impl MarketService {
     }
 
     pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        let mut session = session;
+        session.touch();
+        let token = session.expire_token.clone();
         SESSIONS.write().await.insert(message_id, session);
+        Self::spawn_expiration(message_id, token);
     }
 
     async fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
-        SESSIONS.write().await.remove(&message_id)
+        SESSIONS.write().await.remove(&message_id).map(|mut s| {
+            s.touch();
+            s
+        })
     }
 
     async fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
+        let token = session.expire_token.clone();
         SESSIONS.write().await.insert(message_id, session);
+        Self::spawn_expiration(message_id, token);
     }
 
     async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
