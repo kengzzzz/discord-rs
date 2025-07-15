@@ -86,7 +86,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     let guild_ref = match ctx.cache.guild(guild_id) {
         Some(g) => g,
         None => {
-            tracing::debug!(guild_id = guild_id.get(), "guild not found in cache");
+            tracing::warn!(guild_id = guild_id.get(), "guild not found in cache");
             return;
         }
     };

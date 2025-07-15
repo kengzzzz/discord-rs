@@ -60,7 +60,7 @@ impl MongoDB {
 
         for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts"] {
             if let Err(e) = database.create_collection(coll).await {
-                tracing::debug!(collection = coll, error = %e, "failed to create collection (might already exist)");
+                tracing::warn!(collection = coll, error = %e, "failed to create collection (might already exist)");
             }
         }
 
@@ -72,7 +72,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
+                tracing::warn!(collection = "channels", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -81,7 +81,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
+                tracing::warn!(collection = "roles", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -90,7 +90,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
+                tracing::warn!(collection = "quarantines", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -99,7 +99,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
+                tracing::warn!(collection = "messages", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -108,7 +108,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
+                tracing::warn!(collection = "ai_prompts", error = %e, "failed to update collection options");
             }
         }
 
@@ -124,7 +124,7 @@ impl MongoDB {
             .build();
         let idx2 = IndexModel::builder().keys(doc! { "channel_id": 1 }).build();
         if let Err(e) = channels.create_indexes([idx1, idx2]).await {
-            tracing::debug!(collection = "channels", error = %e, "failed to create indexes");
+            tracing::warn!(collection = "channels", error = %e, "failed to create indexes");
         }
 
         let idx1 = IndexModel::builder()
@@ -136,7 +136,7 @@ impl MongoDB {
             .options(IndexOptions::builder().unique(true).build())
             .build();
         if let Err(e) = roles.create_indexes([idx1, idx2]).await {
-            tracing::debug!(collection = "roles", error = %e, "failed to create indexes");
+            tracing::warn!(collection = "roles", error = %e, "failed to create indexes");
         }
 
         let idx = IndexModel::builder()
@@ -144,7 +144,7 @@ impl MongoDB {
             .options(IndexOptions::builder().unique(true).build())
             .build();
         if let Err(e) = quarantines.create_index(idx).await {
-            tracing::debug!(collection = "quarantines", error = %e, "failed to create index");
+            tracing::warn!(collection = "quarantines", error = %e, "failed to create index");
         }
 
         let idx = IndexModel::builder()
@@ -152,7 +152,7 @@ impl MongoDB {
             .options(IndexOptions::builder().unique(true).build())
             .build();
         if let Err(e) = messages.create_index(idx).await {
-            tracing::debug!(collection = "messages", error = %e, "failed to create index");
+            tracing::warn!(collection = "messages", error = %e, "failed to create index");
         }
 
         let idx = IndexModel::builder()
@@ -160,7 +160,7 @@ impl MongoDB {
             .options(IndexOptions::builder().unique(true).build())
             .build();
         if let Err(e) = ai_prompts.create_index(idx).await {
-            tracing::debug!(collection = "ai_prompts", error = %e, "failed to create index");
+            tracing::warn!(collection = "ai_prompts", error = %e, "failed to create index");
         }
 
         let repo = Arc::new(Self {
