@@ -7,6 +7,7 @@ use self::client::{MODELS, extract_text};
 use self::history as hist;
 use self::models::ChatEntry;
 use crate::{configs::google::GOOGLE_CONFIGS, context::Context};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub mod attachments;
@@ -33,11 +34,11 @@ impl AiService {
         hist::purge_prompt_cache(user_id).await;
     }
 
-    async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
+    async fn load_history(user: Id<UserMarker>) -> VecDeque<ChatEntry> {
         hist::load_history(user).await
     }
 
-    async fn store_history(user: Id<UserMarker>, histv: &[ChatEntry]) {
+    async fn store_history(user: Id<UserMarker>, histv: &VecDeque<ChatEntry>) {
         hist::store_history(user, histv).await;
     }
 
@@ -59,10 +60,11 @@ impl AiService {
         let mut history = Self::load_history(user_id).await;
 
         if history.len() > MAX_HISTORY {
-            if let Ok(summary) = client::summarize(&history).await {
-                let start = history.len().saturating_sub(KEEP_RECENT);
-                let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
-                new_history.push(ChatEntry::new(
+            if let Ok(summary) = client::summarize(history.make_contiguous()).await {
+                while history.len() > KEEP_RECENT {
+                    history.pop_front();
+                }
+                history.push_front(ChatEntry::new(
                     "user".to_string(),
                     format!("Summary so far: {summary}"),
                     Vec::new(),
@@ -70,8 +72,6 @@ impl AiService {
                     None,
                     None,
                 ));
-                new_history.extend(history[start..].to_vec());
-                history = new_history;
             }
         }
 
@@ -155,7 +155,7 @@ impl AiService {
 
         let text = extract_text(response);
 
-        history.push(ChatEntry::new(
+        history.push_back(ChatEntry::new(
             "user".into(),
             message.to_owned(),
             attachment_urls,
@@ -167,7 +167,7 @@ impl AiService {
             },
             ref_author.map(|t| t.to_string()),
         ));
-        history.push(ChatEntry::new(
+        history.push_back(ChatEntry::new(
             "model".into(),
             text.clone(),
             Vec::new(),

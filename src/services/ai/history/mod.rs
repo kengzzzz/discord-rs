@@ -3,6 +3,7 @@ use twilight_model::id::{Id, marker::UserMarker};
 #[cfg(test)]
 use self::tests::{HISTORY_STORE, PROMPT_STORE};
 use super::models::ChatEntry;
+use std::collections::VecDeque;
 
 #[cfg(not(test))]
 use crate::configs::CACHE_PREFIX;
@@ -21,7 +22,7 @@ async fn prompt_key(user: Id<UserMarker>) -> String {
     format!("{CACHE_PREFIX}:ai:prompt:{}", user.get())
 }
 
-pub(crate) async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
+pub(crate) async fn load_history(user: Id<UserMarker>) -> VecDeque<ChatEntry> {
     #[cfg(test)]
     {
         return HISTORY_STORE
@@ -34,22 +35,21 @@ pub(crate) async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
     #[cfg(not(test))]
     {
         let key = history_key(user).await;
-        redis_get::<Vec<ChatEntry>>(&key).await.unwrap_or_default()
+        redis_get::<VecDeque<ChatEntry>>(&key)
+            .await
+            .unwrap_or_default()
     }
 }
 
-pub(crate) async fn store_history(user: Id<UserMarker>, hist: &[ChatEntry]) {
+pub(crate) async fn store_history(user: Id<UserMarker>, hist: &VecDeque<ChatEntry>) {
     #[cfg(test)]
     {
-        HISTORY_STORE
-            .write()
-            .await
-            .insert(user.get(), hist.to_vec());
+        HISTORY_STORE.write().await.insert(user.get(), hist.clone());
     }
     #[cfg(not(test))]
     {
         let key = history_key(user).await;
-        redis_set(&key, &hist.to_vec()).await;
+        redis_set(&key, hist).await;
     }
 }
 

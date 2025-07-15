@@ -7,6 +7,7 @@ use twilight_model::id::{Id, marker::UserMarker};
 
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
 use crate::services::ai::{AiService, history, models::ChatEntry};
+use std::collections::VecDeque;
 
 fn mock_response(text: &str) -> Response {
     Response {
@@ -98,7 +99,7 @@ async fn test_summary_rotation() {
     set_generate_override(|_| mock_response("ok"));
     set_summarize_override(|_| "SUM".to_string());
 
-    let history: Vec<_> = (0..21)
+    let history: VecDeque<_> = (0..21)
         .map(|i| {
             ChatEntry::new(
                 "user".to_string(),
@@ -109,7 +110,7 @@ async fn test_summary_rotation() {
                 None,
             )
         })
-        .collect();
+        .collect::<VecDeque<_>>();
     history::store_history(user, &history).await;
 
     let _ = AiService::handle_interaction(
