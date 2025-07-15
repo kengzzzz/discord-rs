@@ -2,7 +2,7 @@ use std::slice;
 use std::sync::Arc;
 
 use twilight_http::request::channel::reaction::RequestReactionType;
-use twilight_model::channel::message::Message;
+use twilight_model::channel::message::{Embed, Message, embed::EmbedFooter};
 use twilight_model::id::{Id, marker::GuildMarker};
 
 use crate::{
@@ -13,6 +13,29 @@ use crate::{
 };
 
 use super::storage;
+
+fn embed_equals(a: &Embed, b: &Embed) -> bool {
+    a.color == b.color
+        && a.title == b.title
+        && a.description == b.description
+        && a.fields == b.fields
+        && match (&a.footer, &b.footer) {
+            (
+                Some(EmbedFooter {
+                    text: at,
+                    icon_url: ai,
+                    ..
+                }),
+                Some(EmbedFooter {
+                    text: bt,
+                    icon_url: bi,
+                    ..
+                }),
+            ) => at == bt && ai == bi,
+            (None, None) => true,
+            _ => false,
+        }
+}
 
 pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     let Some(channel) = ChannelService::get_by_type(
@@ -60,28 +83,30 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         }
     }
 
-    let mut embed_opt = None;
-    let mut content_opt = None;
-    if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-        if let Ok(embed) = embed::role_message_embed(&guild_ref, &info) {
-            embed_opt = Some(embed);
-        } else {
-            content_opt = Some("กดอีโมจิเพื่อรับหรือลบ role");
+    let guild_ref = match ctx.cache.guild(guild_id) {
+        Some(g) => g,
+        None => {
+            tracing::debug!(guild_id = guild_id.get(), "guild not found in cache");
+            return;
         }
-    }
+    };
 
-    let embed_slice = embed_opt.as_ref().map(slice::from_ref);
-    let content_opt = content_opt.as_ref().map(|e| *e);
+    let embed = match embed::role_message_embed(&guild_ref, &info) {
+        Ok(embed) => embed,
+        Err(e) => {
+            tracing::error!(guild_id = guild_id.get(), error = %e, "failed to build role message embed");
+            return;
+        }
+    };
+
+    let embed_slice = slice::from_ref(&embed);
 
     if let Some((msg_id, msg)) = existing_message {
         let mut correct = true;
-        if let Some(embed) = embed_slice {
-            correct &= msg.embeds.first() == Some(&(*embed)[0]);
+        if let Some(existing) = msg.embeds.first() {
+            correct &= embed_equals(existing, &embed_slice[0]);
             correct &= msg.embeds.len() == 1;
             correct &= msg.content.is_empty();
-        } else if let Some(content) = content_opt {
-            correct &= msg.content == content;
-            correct &= msg.embeds.is_empty();
         } else {
             correct = false;
         }
@@ -91,13 +116,8 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         }
 
         let mut update = ctx.http.update_message(channel_id, Id::new(msg_id));
-        if let Some(embed) = embed_slice {
-            update = update.embeds(Some(embed));
-            update = update.content(None);
-        } else if let Some(content) = content_opt {
-            update = update.content(Some(content));
-            update = update.embeds(None);
-        }
+        update = update.embeds(Some(embed_slice));
+        update = update.content(None);
         if update.await.is_ok() {
             if let Err(e) = ctx
                 .http
@@ -121,11 +141,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         return;
     }
     let mut create = ctx.http.create_message(channel_id);
-    if let Some(embed) = embed_slice {
-        create = create.embeds(embed);
-    } else if let Some(content) = content_opt {
-        create = create.content(content);
-    }
+    create = create.embeds(embed_slice);
 
     if let Ok(response) = create.await {
         if let Ok(msg) = response.model().await {
