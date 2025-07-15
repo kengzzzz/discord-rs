@@ -1,3 +1,4 @@
+use axum::http::HeaderMap;
 use reqwest::{Client, Error, IntoUrl, RequestBuilder, Response};
 
 pub struct HttpService;
@@ -5,6 +6,19 @@ pub struct HttpService;
 impl HttpService {
     pub async fn get(client: &Client, url: impl IntoUrl) -> Result<Response, Error> {
         client.get(url).send().await?.error_for_status()
+    }
+
+    pub async fn get_with_headers(
+        client: &Client,
+        url: impl IntoUrl,
+        headers: HeaderMap,
+    ) -> Result<Response, Error> {
+        client
+            .get(url)
+            .headers(headers)
+            .send()
+            .await?
+            .error_for_status()
     }
 
     pub fn post(client: &Client, url: impl IntoUrl) -> RequestBuilder {

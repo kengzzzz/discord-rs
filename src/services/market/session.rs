@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Instant};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct OrderInfo {
@@ -16,6 +17,8 @@ pub struct MarketSession {
     pub rank: u8,
     pub page: usize,
     pub max_rank: Option<u8>,
+    pub last_used: Instant,
+    pub expire_token: CancellationToken,
 }
 
 impl MarketSession {
@@ -41,5 +44,11 @@ impl MarketSession {
         } else {
             &orders[start..end]
         }
+    }
+
+    pub fn touch(&mut self) {
+        self.last_used = Instant::now();
+        self.expire_token.cancel();
+        self.expire_token = CancellationToken::new();
     }
 }

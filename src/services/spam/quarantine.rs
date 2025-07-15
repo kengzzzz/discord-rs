@@ -1,3 +1,4 @@
+use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
 use twilight_model::id::{
     Id,
@@ -22,7 +23,7 @@ pub async fn verify(
 ) -> bool {
     let key = format!("spam:quarantine:{}:{}", guild_id.get(), user_id.get());
 
-    if let Some(stored) = redis_get::<String>(&key).await {
+    if let Some(stored) = redis_get::<String>(&ctx.redis, &key).await {
         if stored != token {
             return false;
         }
@@ -79,7 +80,7 @@ pub async fn verify(
 
 pub async fn get_token(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> Option<String> {
     let key = format!("spam:quarantine:{guild_id}:{user_id}");
-    if let Some(token) = redis_get::<String>(&key).await {
+    if let Some(token) = redis_get::<String>(&ctx.redis, &key).await {
         return Some(token);
     }
 
@@ -92,7 +93,7 @@ pub async fn get_token(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> Option
         .flatten()
         .map(|r| r.token);
 
-    redis_set(&key, &token).await;
+    redis_set(&ctx.redis, &key, &token).await;
 
     token
 }
@@ -149,9 +150,9 @@ pub async fn quarantine_member(
     }
 }
 
-pub async fn purge_cache(guild_id: u64, user_id: u64) {
+pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
     let log_key = format!("spam:log:{guild_id}:{user_id}");
     let quarantine_key = format!("spam:quarantine:{guild_id}:{user_id}");
-    redis_delete(&log_key).await;
-    redis_delete(&quarantine_key).await;
+    redis_delete(pool, &log_key).await;
+    redis_delete(pool, &quarantine_key).await;
 }

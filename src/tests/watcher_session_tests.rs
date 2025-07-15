@@ -61,6 +61,8 @@ fn test_market_session_pages() {
         rank: 0,
         page: 1,
         max_rank: None,
+        last_used: std::time::Instant::now(),
+        expire_token: tokio_util::sync::CancellationToken::new(),
     };
     assert_eq!(session.lpage(), 3);
     assert_eq!(session.slice().len(), 5);

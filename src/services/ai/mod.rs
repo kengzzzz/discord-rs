@@ -1,5 +1,6 @@
 #[cfg(test)]
 use self::tests::GENERATE_OVERRIDE;
+use deadpool_redis::Pool;
 use google_ai_rs::{Content, Part};
 use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
@@ -7,6 +8,7 @@ use self::client::{MODELS, extract_text};
 use self::history as hist;
 use self::models::ChatEntry;
 use crate::{configs::google::GOOGLE_CONFIGS, context::Context};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub mod attachments;
@@ -21,24 +23,24 @@ const KEEP_RECENT: usize = 6;
 pub struct AiService;
 
 impl AiService {
-    pub async fn clear_history(user: Id<UserMarker>) {
-        hist::clear_history(user).await;
+    pub async fn clear_history(pool: &Pool, user: Id<UserMarker>) {
+        hist::clear_history(pool, user).await;
     }
 
     pub async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
         hist::set_prompt(ctx, user, prompt).await;
     }
 
-    pub async fn purge_prompt_cache(user_id: u64) {
-        hist::purge_prompt_cache(user_id).await;
+    pub async fn purge_prompt_cache(pool: &Pool, user_id: u64) {
+        hist::purge_prompt_cache(pool, user_id).await;
     }
 
-    async fn load_history(user: Id<UserMarker>) -> Vec<ChatEntry> {
-        hist::load_history(user).await
+    async fn load_history(pool: &Pool, user: Id<UserMarker>) -> VecDeque<ChatEntry> {
+        hist::load_history(pool, user).await
     }
 
-    async fn store_history(user: Id<UserMarker>, histv: &[ChatEntry]) {
-        hist::store_history(user, histv).await;
+    async fn store_history(pool: &Pool, user: Id<UserMarker>, histv: &VecDeque<ChatEntry>) {
+        hist::store_history(pool, user, histv).await;
     }
 
     async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
@@ -56,13 +58,14 @@ impl AiService {
         ref_attachments: Vec<Attachment>,
         ref_author: Option<&str>,
     ) -> anyhow::Result<String> {
-        let mut history = Self::load_history(user_id).await;
+        let mut history = Self::load_history(&ctx.redis, user_id).await;
 
         if history.len() > MAX_HISTORY {
-            if let Ok(summary) = client::summarize(&history).await {
-                let start = history.len().saturating_sub(KEEP_RECENT);
-                let mut new_history = Vec::with_capacity(MAX_HISTORY + 1);
-                new_history.push(ChatEntry::new(
+            if let Ok(summary) = client::summarize(history.make_contiguous()).await {
+                while history.len() > KEEP_RECENT {
+                    history.pop_front();
+                }
+                history.push_front(ChatEntry::new(
                     "user".to_string(),
                     format!("Summary so far: {summary}"),
                     Vec::new(),
@@ -70,8 +73,6 @@ impl AiService {
                     None,
                     None,
                 ));
-                new_history.extend(history[start..].to_vec());
-                history = new_history;
             }
         }
 
@@ -155,7 +156,7 @@ impl AiService {
 
         let text = extract_text(response);
 
-        history.push(ChatEntry::new(
+        history.push_back(ChatEntry::new(
             "user".into(),
             message.to_owned(),
             attachment_urls,
@@ -167,7 +168,7 @@ impl AiService {
             },
             ref_author.map(|t| t.to_string()),
         ));
-        history.push(ChatEntry::new(
+        history.push_back(ChatEntry::new(
             "model".into(),
             text.clone(),
             Vec::new(),
@@ -175,7 +176,7 @@ impl AiService {
             None,
             None,
         ));
-        Self::store_history(user_id, &history).await;
+        Self::store_history(&ctx.redis, user_id, &history).await;
 
         Ok(text)
     }

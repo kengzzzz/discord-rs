@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, sync::atomic::AtomicU64};
 
+use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -61,17 +62,19 @@ pub(super) struct Order {
     pub mod_rank: Option<u8>,
 }
 
-pub(super) async fn load_from_redis(key: &str) -> Option<Vec<ItemEntry>> {
-    if let Some(stored) = redis_get::<Vec<StoredEntry>>(key).await {
-        let entries = stored
-            .into_iter()
-            .map(|s| ItemEntry {
-                lower: s.name.to_lowercase(),
-                name: s.name,
-                url: s.url,
-            })
-            .collect();
-        return Some(entries);
+pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<BTreeMap<String, ItemEntry>> {
+    if let Some(stored) = redis_get::<Vec<StoredEntry>>(pool, key).await {
+        let mut map = BTreeMap::new();
+        for s in stored {
+            map.insert(
+                s.name.to_lowercase(),
+                ItemEntry {
+                    name: s.name,
+                    url: s.url,
+                },
+            );
+        }
+        return Some(map);
     }
     None
 }
@@ -79,27 +82,29 @@ pub(super) async fn load_from_redis(key: &str) -> Option<Vec<ItemEntry>> {
 pub(super) async fn update_items(
     client: &Client,
     key: &str,
-    items: &Lazy<RwLock<Vec<ItemEntry>>>,
+    items: &Lazy<RwLock<BTreeMap<String, ItemEntry>>>,
     last_update: &Lazy<AtomicU64>,
+    pool: &Pool,
 ) -> anyhow::Result<()> {
     let resp = HttpService::get(client, ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
     let mut stored = Vec::new();
-    let mut new_items = Vec::new();
+    let mut new_items = BTreeMap::new();
     for item in data.payload.items {
         stored.push(StoredEntry {
             name: item.item_name.clone(),
             url: item.url_name.clone(),
         });
-        new_items.push(ItemEntry {
-            lower: item.item_name.to_lowercase(),
-            name: item.item_name,
-            url: item.url_name,
-        });
+        new_items.insert(
+            item.item_name.to_lowercase(),
+            ItemEntry {
+                name: item.item_name,
+                url: item.url_name,
+            },
+        );
     }
     stored.sort_by(|a, b| a.name.cmp(&b.name));
-    new_items.sort_by(|a, b| a.name.cmp(&b.name));
-    redis_set(key, &stored).await;
+    redis_set(pool, key, &stored).await;
     *items.write().await = new_items;
     last_update.store(
         std::time::SystemTime::now()
