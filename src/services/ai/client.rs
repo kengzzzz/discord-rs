@@ -2,6 +2,7 @@ use super::models::ChatEntry;
 #[cfg(test)]
 use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;
+use chrono::{Duration, Utc};
 use google_ai_rs::Client;
 use google_ai_rs::{Content, Part, genai::Response};
 use tokio::sync::OnceCell;
@@ -56,13 +57,19 @@ pub(super) async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
     }
 
     let client = client().await?;
+    let now = Utc::now();
     let contents: Vec<Content> = history
         .iter()
         .map(|c| {
             let mut parts = vec![Part::text(&c.text)];
+            let expired = now - c.created_at > Duration::hours(48);
             for url in &c.attachments {
-                parts.push(Part::text("Attachment:"));
-                parts.push(Part::file_data("", url));
+                if expired {
+                    parts.push(Part::text("Attachment expired and no longer accessible."));
+                } else {
+                    parts.push(Part::text("Attachment:"));
+                    parts.push(Part::file_data("", url));
+                }
             }
             if let Some(ref_text) = &c.ref_text {
                 let owner = c.ref_author.as_deref().unwrap_or("another user");
@@ -73,9 +80,15 @@ pub(super) async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
             if let Some(ref_urls) = &c.ref_attachments {
                 let owner = c.ref_author.as_deref().unwrap_or("another user");
                 for url in ref_urls {
-                    let label = format!("Attachment from {owner}:");
-                    parts.push(Part::text(&label));
-                    parts.push(Part::file_data("", url));
+                    if expired {
+                        let label =
+                            format!("Attachment from {owner} is expired and no longer accessible.");
+                        parts.push(Part::text(&label));
+                    } else {
+                        let label = format!("Attachment from {owner}:");
+                        parts.push(Part::text(&label));
+                        parts.push(Part::file_data("", url));
+                    }
                 }
             }
             Content {
