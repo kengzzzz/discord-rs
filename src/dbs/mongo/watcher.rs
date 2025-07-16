@@ -42,7 +42,7 @@ where
             let mut stream = match builder.await {
                 Ok(stream) => stream,
                 Err(e) => {
-                    if e.to_string().to_lowercase().contains("resume") {
+                    if e.to_string().to_ascii_lowercase().contains("resume") {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
                         match coll.watch().with_options(options.clone()).await {
                             Ok(stream) => stream,

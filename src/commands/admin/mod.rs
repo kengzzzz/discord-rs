@@ -81,7 +81,7 @@ impl AdminCommand {
 
             let mut choices = Vec::new();
 
-            let prefix = focused.1.to_lowercase();
+            let prefix = focused.1.to_ascii_lowercase();
 
             if focused.0 == "role_name" {
                 if let Some(role_ids) = ctx.cache.guild_roles(guild_id) {
@@ -90,7 +90,7 @@ impl AdminCommand {
                             .iter()
                             .filter_map(|role_id| {
                                 ctx.cache.role(*role_id).and_then(|role| {
-                                    if role.name.to_lowercase().contains(&prefix) {
+                                    if role.name.to_ascii_lowercase().contains(&prefix) {
                                         Some(CommandOptionChoice {
                                             name: role.name.clone(),
                                             value: CommandOptionChoiceValue::String(

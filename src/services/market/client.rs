@@ -67,7 +67,7 @@ pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<BTreeMap<S
         let mut map = BTreeMap::new();
         for s in stored {
             map.insert(
-                s.name.to_lowercase(),
+                s.name.to_ascii_lowercase(),
                 ItemEntry {
                     name: s.name,
                     url: s.url,
@@ -96,7 +96,7 @@ pub(super) async fn update_items(
             url: item.url_name.clone(),
         });
         new_items.insert(
-            item.item_name.to_lowercase(),
+            item.item_name.to_ascii_lowercase(),
             ItemEntry {
                 name: item.item_name,
                 url: item.url_name,

@@ -57,7 +57,7 @@ impl MarketService {
     }
 
     pub async fn search(prefix: &str) -> Vec<String> {
-        let p = prefix.to_lowercase();
+        let p = prefix.to_ascii_lowercase();
         let items = ITEMS.read().await;
         let mut results = Vec::with_capacity(25);
         for (key, entry) in items.range(p.clone()..) {
@@ -100,7 +100,7 @@ impl MarketService {
     }
 
     pub(super) async fn find_url(name: &str) -> Option<String> {
-        let lower = name.to_lowercase();
+        let lower = name.to_ascii_lowercase();
         let items = ITEMS.read().await;
         items.get(lower.as_str()).map(|e| e.url.clone())
     }

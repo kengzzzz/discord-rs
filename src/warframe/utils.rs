@@ -16,8 +16,8 @@ pub fn title_case(s: &str) -> String {
         if let Some(f) = chars.next() {
             out.push_str(&format!(
                 "**{}{}",
-                f.to_uppercase(),
-                chars.as_str().to_lowercase()
+                f.to_ascii_uppercase(),
+                chars.as_str().to_ascii_lowercase()
             ));
         }
     }

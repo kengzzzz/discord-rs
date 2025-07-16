@@ -13,7 +13,7 @@ pub struct BuildService;
 
 impl BuildService {
     pub(crate) fn sanitize_item_name(s: &str) -> String {
-        s.to_lowercase().replace(' ', "-").replace('&', "%26")
+        s.to_ascii_lowercase().replace(' ', "-").replace('&', "%26")
     }
 
     pub async fn build_embeds(
