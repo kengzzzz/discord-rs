@@ -1,53 +1,83 @@
 # Discord Bot
 
-This repository contains a simple Discord bot written in Rust.
+A Discord bot written in Rust providing a handful of slash commands and
+background tasks. The project uses the
+[Twilight](https://twilight.rs/) ecosystem and can be developed entirely in a
+container.
 
-## Requirements
+## Prerequisites
 
-- [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
-- Rust toolchain (only required when running the bot without Docker)
+* [Docker](https://www.docker.com/) and
+  [Docker Compose](https://docs.docker.com/compose/) – recommended way to run the
+  bot.
+* Rust toolchain – only required when running without Docker.
 
-## Quick Start
+## Installation
 
-1. Copy `.env.example` to `.env` and fill in the required values.
-2. Run `docker-compose up` to build containers and start the bot in watch mode.
+1. Copy `.env.example` to `.env` and fill in your credentials.
+2. Start the development stack:
 
-The bot reloads automatically whenever sources change. Use the Rust toolchain only if you want to run it without Docker.
+   ```bash
+   docker-compose up
+   ```
 
-## Setup
+   The bot will rebuild automatically whenever source files change. If you wish
+   to run the binary directly use `cargo run` and ensure the environment
+   variables below are exported.
 
-If you prefer running the bot directly with the Rust toolchain, make sure the environment variables are available in your shell. Set `APP_ENV=production` in the production file.
+## Usage
 
-### Environment Variables
+### Running with Docker
 
-- The following variables are used by the bot (see `.env.example`):
+```bash
+# build containers and start the stack
+docker-compose up
+```
 
-- `APP_ENV` – Name of the environment. Set to `production` to skip database setup commands.
-- `DISCORD_TOKEN` – Discord bot token.
-- `GOOGLE_API_KEY` – Google GenAI API key.
-- `AI_BASE_PROMPT` – Base system prompt for the AI.
-- `REDIS_URL` – Redis connection string.
-- `MONGO_URI` – MongoDB connection URI.
-- `MONGO_USERNAME` – MongoDB user name.
-- `MONGO_PASSWORD` – MongoDB password.
-- `MONGO_AUTH_SOURCE` – Authentication database (defaults to `admin`).
-- `MONGO_DATABASE` – Database name (defaults to `develop`).
-- `MONGO_MAX_POOL_SIZE` – MongoDB max pool size (defaults to `30`).
-- `MONGO_MIN_POOL_SIZE` – MongoDB min pool size (defaults to `10`).
-- `MONGO_SSL` – Enable TLS connections when set to `true`.
-- `MONGO_TLS_CA_FILE` – Path to CA certificate file.
-- `MONGO_TLS_CERT_KEY_FILE` – Path to client certificate and key file.
-- `MONGO_TLS_INSECURE` – Allow invalid certificates when set to `true`.
-- The bot exposes a health check on port `8080` at `/healthz`.
-- The health endpoint reports unhealthy if the Discord connection drops or
-  MongoDB stops responding.
-- The bot listens for termination signals and shuts down gracefully.
+### Running with the Rust toolchain
 
-### MongoDB Pre/Post Images
+```bash
+cargo run
+```
 
-Change stream watchers require pre and post images to be enabled on these
-collections: `channels`, `roles`, `quarantines`, `messages` and
-`ai_prompts`. Enable them with:
+For production builds you can create a release image:
+
+```bash
+docker build -f Dockerfile.production -t discord-bot .
+docker run --env-file .env discord-bot
+```
+
+## Configuration
+
+The bot is configured entirely through environment variables. The most important
+ones are listed below; see `.env.example` for the full list.
+
+| Variable | Description |
+|----------|-------------|
+| `APP_ENV` | Environment name (`development`, `production`, etc.). Set to `production` to skip DB setup. |
+| `DISCORD_TOKEN` | Discord bot token. |
+| `GOOGLE_API_KEY` | Google GenAI API key. |
+| `AI_BASE_PROMPT` | Base system prompt for the AI. |
+| `REDIS_URL` | Redis connection string. |
+| `MONGO_URI` | MongoDB connection URI. |
+| `MONGO_USERNAME` | MongoDB user name. |
+| `MONGO_PASSWORD` | MongoDB password. |
+| `MONGO_AUTH_SOURCE` | Authentication database (default `admin`). |
+| `MONGO_DATABASE` | Database name (default `develop`). |
+| `MONGO_MAX_POOL_SIZE` | MongoDB max pool size (default `30`). |
+| `MONGO_MIN_POOL_SIZE` | MongoDB min pool size (default `10`). |
+| `MONGO_SSL` | Enable TLS connections when `true`. |
+| `MONGO_TLS_CA_FILE` | Path to CA certificate file. |
+| `MONGO_TLS_CERT_KEY_FILE` | Path to client certificate/key file. |
+| `MONGO_TLS_INSECURE` | Allow invalid certificates when `true`. |
+
+The bot exposes a health check on port `8080` at `/healthz` and shuts down
+gracefully on termination signals.
+
+### MongoDB pre/post images
+
+Change stream watchers require pre and post images on certain collections.
+Enable them with:
 
 ```javascript
 db.runCommand({ collMod: "channels", changeStreamPreAndPostImages: { enabled: true } })
@@ -57,45 +87,33 @@ db.runCommand({ collMod: "messages", changeStreamPreAndPostImages: { enabled: tr
 db.runCommand({ collMod: "ai_prompts", changeStreamPreAndPostImages: { enabled: true } })
 ```
 
-## Development
+## Project Structure
 
-The project provides a `docker-compose.yml` that starts MongoDB, Redis and the bot in watch mode.
-
-```bash
-# build containers and start the stack
-docker-compose up
+```
+src/
+  commands/       # slash command implementations
+  configs/        # configuration modules
+  context/        # shared application state
+  events/         # Discord event handlers
+  services/       # background tasks and utilities
+tests/            # integration tests
+scripts/          # helper scripts (e.g. MongoDB replica set init)
+Dockerfile.*      # development and production images
 ```
 
-The bot source is mounted into the container and `cargo watch -x run` keeps it running whenever files change.
+The [`Context`](src/context/mod.rs) struct bundles shared services (HTTP client,
+database connections, caches, etc.) and is passed around using
+`Arc<Context>` to avoid global state.
 
-## Architecture
+## Contributing
 
-Shared services such as the Discord HTTP client, reqwest client, in-memory
-cache, MongoDB connection and Redis pool are bundled into a
-[`Context`](src/context/mod.rs) struct. Create a `Context` when the bot starts and
-pass `Arc<Context>` references to tasks and handlers. This avoids global state
-and makes testing easier by allowing mocked services.
+Pull requests are welcome! Please ensure:
 
-## Production
+1. Code is formatted with `cargo fmt`.
+2. `cargo clippy --all-targets -- -D warnings` runs without errors.
+3. All tests pass with `cargo test --all-features`.
 
-To build a production image and run it:
-
-```bash
-# build the production image
-docker build -f Dockerfile.production -t discord-bot .
-
-# run using the production environment file
-docker run --env-file .env discord-bot
-```
-
-Alternatively you can build and run the binary directly with the Rust toolchain:
-
-```bash
-cargo build --release
-./target/release/discord-bot
-```
-
-Make sure the required environment variables are available in your shell when running the binary directly.
+Issues and feature requests are also appreciated.
 
 ## License
 
