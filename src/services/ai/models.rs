@@ -1,4 +1,9 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+fn utc_now() -> DateTime<Utc> {
+    Utc::now()
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ChatEntry {
@@ -12,6 +17,8 @@ pub(crate) struct ChatEntry {
     pub ref_attachments: Option<Vec<String>>,
     #[serde(default)]
     pub ref_author: Option<String>,
+    #[serde(default = "utc_now", with = "chrono::serde::ts_seconds")]
+    pub created_at: DateTime<Utc>,
 }
 
 impl ChatEntry {
@@ -30,6 +37,7 @@ impl ChatEntry {
             ref_text,
             ref_attachments,
             ref_author,
+            created_at: Utc::now(),
         }
     }
 }

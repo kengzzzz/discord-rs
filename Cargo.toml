@@ -28,7 +28,7 @@ twilight-util = { version = "0.16", features = ["builder"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 fastrand = "2.3"
 futures = "0.3"
-chrono = { version = "0.4", features = ["std", "clock"] }
+chrono = { version = "0.4", features = ["std", "clock", "serde"] }
 sha2 = "0.10"
 hex = "0.4"
 google-ai-rs = { version = "0.1", features = ["serde"] }
