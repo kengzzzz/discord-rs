@@ -1,3 +1,5 @@
+#![cfg(feature = "mock-redis")]
+
 mod utils;
 use std::sync::Arc;
 use utils::context::test_context;

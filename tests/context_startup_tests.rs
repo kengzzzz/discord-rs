@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![cfg(feature = "mock-redis")]
+
 use tokio_util::sync::CancellationToken;
 
 mod utils;
