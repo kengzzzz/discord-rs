@@ -1,6 +1,6 @@
 use crate::utils::ascii::{
-    ascii_eq_ignore_case, ascii_fold, ascii_lower, ascii_starts_with_icase, ascii_upper,
-    cmp_ignore_ascii_case, collect_prefix_icase,
+    ascii_contains_icase, ascii_eq_ignore_case, ascii_fold, ascii_lower, ascii_starts_with_icase,
+    ascii_upper, cmp_ignore_ascii_case, collect_prefix_icase,
 };
 
 #[test]
@@ -40,6 +40,9 @@ fn prefix_search_helpers() {
 
     assert!(ascii_starts_with_icase("Discord", "dis"));
     assert!(!ascii_starts_with_icase("Discord", "cord"));
+
+    assert!(ascii_contains_icase("Hello World", "wor"));
+    assert!(!ascii_contains_icase("Hello World", "dog"));
 
     let result = collect_prefix_icase(&data, "ap", |s| s);
     assert_eq!(result, vec!["Apple".to_string(), "Apricot".to_string()]);
