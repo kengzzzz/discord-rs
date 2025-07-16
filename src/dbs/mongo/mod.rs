@@ -4,5 +4,5 @@ pub mod monitor;
 pub mod watcher;
 pub mod watchers;
 
-#[cfg(test)]
-pub(crate) mod tests;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod tests;

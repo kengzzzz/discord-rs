@@ -36,7 +36,7 @@ impl HealthService {
         MONGO_CONNECTED.store(state, Ordering::Relaxed);
     }
 
-    pub(crate) async fn health() -> StatusCode {
+    pub async fn health() -> StatusCode {
         if READY.load(Ordering::Relaxed)
             && DISCORD_CONNECTED.load(Ordering::Relaxed)
             && MONGO_CONNECTED.load(Ordering::Relaxed)

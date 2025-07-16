@@ -88,3 +88,6 @@ impl IntroductionService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

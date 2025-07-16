@@ -1,3 +1,5 @@
+#![cfg(feature = "mock-redis")]
+
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
 use serde::{Serialize, de::DeserializeOwned};

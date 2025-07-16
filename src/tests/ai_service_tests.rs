@@ -5,6 +5,7 @@ use google_ai_rs::{
 };
 use twilight_model::id::{Id, marker::UserMarker};
 
+use crate::context::Context;
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
 use crate::services::ai::{AiService, history, models::ChatEntry};
 use std::collections::VecDeque;
@@ -37,7 +38,7 @@ fn mock_response(text: &str) -> Response {
 #[tokio::test]
 async fn test_prompt_and_history() {
     let user = Id::<UserMarker>::new(1);
-    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    let ctx = std::sync::Arc::new(Context::test().await);
     set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(&ctx.redis, user).await;
@@ -68,7 +69,7 @@ async fn test_prompt_and_history() {
 #[tokio::test]
 async fn test_reply_fields() {
     let user = Id::<UserMarker>::new(10);
-    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    let ctx = std::sync::Arc::new(Context::test().await);
     set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(&ctx.redis, user).await;
@@ -95,7 +96,7 @@ async fn test_reply_fields() {
 #[tokio::test]
 async fn test_summary_rotation() {
     let user = Id::<UserMarker>::new(2);
-    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    let ctx = std::sync::Arc::new(Context::test().await);
     set_generate_override(|_| mock_response("ok"));
     set_summarize_override(|_| "SUM".to_string());
 
@@ -133,7 +134,7 @@ async fn test_summary_rotation() {
 #[tokio::test]
 async fn test_purge_prompt_cache() {
     let user = Id::<UserMarker>::new(3);
-    let ctx = std::sync::Arc::new(crate::context::Context::test().await);
+    let ctx = std::sync::Arc::new(Context::test().await);
     AiService::set_prompt(ctx.clone(), user, "hello".to_string()).await;
     let prompt = history::get_prompt(ctx.clone(), user).await;
     assert_eq!(prompt, Some("hello".to_string()));

@@ -3,11 +3,10 @@ use mongodb::change_stream::event::ChangeStreamEvent;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    services::market::{MarketKind, MarketSession, OrderInfo},
-    tests::mock_db::{init_mock, spawn_watcher_mock},
-};
+mod utils;
+use discord_bot::services::market::{MarketKind, MarketSession, OrderInfo};
 use std::collections::BTreeMap;
+use utils::mock_db::{init_mock, spawn_watcher_mock};
 
 #[tokio::test]
 async fn test_watcher_mock() {

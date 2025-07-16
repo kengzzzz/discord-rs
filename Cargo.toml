@@ -40,3 +40,8 @@ tokio-util = "0.7"
 httpmock = "0.7"
 mockall = "0.13"
 tokio-stream = "0.1"
+serial_test = "3.2"
+
+[features]
+mock-redis = []
+test-utils = []

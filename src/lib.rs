@@ -9,4 +9,6 @@ pub mod utils;
 pub mod warframe;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
+#[cfg(test)]
+extern crate self as discord_bot;

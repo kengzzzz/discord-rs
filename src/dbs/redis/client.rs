@@ -13,7 +13,7 @@ pub fn new_pool() -> Pool {
         .expect("create redis pool")
 }
 
-#[cfg(not(test))]
+#[cfg(not(feature = "mock-redis"))]
 pub async fn redis_get<T>(pool: &Pool, key: &str) -> Option<T>
 where
     T: DeserializeOwned + Send + Sync,
@@ -27,7 +27,7 @@ where
         .ok()
 }
 
-#[cfg(not(test))]
+#[cfg(not(feature = "mock-redis"))]
 pub async fn redis_set<T>(pool: &Pool, key: &str, value: &T)
 where
     T: Serialize + Sync,
@@ -49,7 +49,7 @@ where
     }
 }
 
-#[cfg(not(test))]
+#[cfg(not(feature = "mock-redis"))]
 pub async fn redis_set_ex<T>(pool: &Pool, key: &str, value: &T, ttl: usize)
 where
     T: Serialize + Sync,
@@ -73,7 +73,7 @@ where
     }
 }
 
-#[cfg(not(test))]
+#[cfg(not(feature = "mock-redis"))]
 pub async fn redis_delete(pool: &Pool, key: &str) {
     if let Err(e) = async {
         let mut conn = pool.get().await?;

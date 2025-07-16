@@ -132,6 +132,3 @@ impl NotificationService {
         }
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests;
