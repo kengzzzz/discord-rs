@@ -59,6 +59,37 @@ pub fn ascii_starts_with_icase(hay: &str, needle: &str) -> bool {
     true
 }
 
+pub fn ascii_contains_icase(hay: &str, needle: &str) -> bool {
+    let hb = hay.as_bytes();
+    let nb = needle.as_bytes();
+    let nlen = nb.len();
+    if nlen == 0 {
+        return true;
+    }
+    if nlen > hb.len() {
+        return false;
+    }
+    let first = ascii_fold(nb[0]);
+    let mut i = 0;
+    let end = hb.len() - nlen;
+    while i <= end {
+        if ascii_fold(hb[i]) == first {
+            let mut ok = true;
+            for j in 1..nlen {
+                if ascii_fold(hb[i + j]) != ascii_fold(nb[j]) {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
 pub fn collect_prefix_icase<T>(data: &[T], prefix: &str, get: impl Fn(&T) -> &str) -> Vec<String> {
     let start = data.partition_point(|e| cmp_ignore_ascii_case(get(e), prefix) == Ordering::Less);
     if start == data.len() || !ascii_starts_with_icase(get(&data[start]), prefix) {
