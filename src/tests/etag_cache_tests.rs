@@ -1,6 +1,6 @@
+use super::build_cache_utils::ITEMS_URL_OVERRIDE as BUILD_URL;
 use crate::context::Context;
 use crate::services::build::cache::{ITEMS, update_items as update_build_items};
-use crate::tests::build_cache_utils::ITEMS_URL_OVERRIDE as BUILD_URL;
 use httpmock::{Method::GET, MockServer};
 use serde_json::json;
 use std::sync::Arc;

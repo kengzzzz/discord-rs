@@ -1,18 +1,17 @@
 use mongodb::bson::Document;
 use mongodb::change_stream::event::ChangeStreamEvent;
+use serial_test::serial;
 use std::time::Duration;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    services::notification::tests::notify_loop_mock,
-    tests::{
-        mock_db::{init_mock, spawn_watcher_mock},
-        mock_http::MockHttp,
-    },
-};
+mod utils;
+use utils::mock_db::{init_mock, spawn_watcher_mock};
+use utils::mock_http::MockHttp;
+use utils::notify_mock::notify_loop_mock;
 
 #[tokio::test]
+#[serial]
 async fn test_watcher_reconnect_and_shutdown() {
     let map = init_mock();
     let (tx, rx) = tokio::sync::mpsc::channel(4);
@@ -55,6 +54,7 @@ async fn test_watcher_reconnect_and_shutdown() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_watcher_ignores_after_shutdown() {
     let map = init_mock();
     let (tx, rx) = tokio::sync::mpsc::channel(4);
@@ -97,6 +97,7 @@ async fn test_watcher_ignores_after_shutdown() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_notify_loop_shutdown() {
     use twilight_model::id::{Id, marker::ChannelMarker};
     let http = std::sync::Arc::new(MockHttp::new());

@@ -15,6 +15,7 @@ use crate::{
     commands::admin::{channel::AdminChannelCommand, role::AdminRoleCommand},
     context::Context,
     handle_ephemeral,
+    utils::ascii::ascii_starts_with_icase,
 };
 use std::sync::Arc;
 
@@ -79,9 +80,7 @@ impl AdminCommand {
             let focused = extract_focused(&data).context("parse focused field failed")?;
             let guild_id = interaction.guild_id.context("parse guild_id failed")?;
 
-            let mut choices = Vec::new();
-
-            let prefix = focused.1.to_lowercase();
+            let mut choices = Vec::with_capacity(25);
 
             if focused.0 == "role_name" {
                 if let Some(role_ids) = ctx.cache.guild_roles(guild_id) {
@@ -90,7 +89,7 @@ impl AdminCommand {
                             .iter()
                             .filter_map(|role_id| {
                                 ctx.cache.role(*role_id).and_then(|role| {
-                                    if role.name.to_lowercase().contains(&prefix) {
+                                    if ascii_starts_with_icase(&role.name, focused.1) {
                                         Some(CommandOptionChoice {
                                             name: role.name.clone(),
                                             value: CommandOptionChoiceValue::String(

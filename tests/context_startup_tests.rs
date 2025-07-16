@@ -1,14 +1,17 @@
+#![allow(unused_imports)]
+#![cfg(feature = "mock-redis")]
+
 use tokio_util::sync::CancellationToken;
 
-use crate::tests::redis_setup;
-use crate::{context::Context, services::shutdown};
+mod utils;
+use discord_bot::services::shutdown;
+use utils::context::test_context;
 
 #[tokio::test]
 async fn test_startup_and_shutdown() {
-    redis_setup::start().await;
     let token = CancellationToken::new();
     shutdown::set_token(token.clone());
-    let ctx = Context::test().await;
+    let ctx = test_context().await;
 
     assert_eq!(ctx.cache.stats().guilds(), 0);
 
@@ -18,5 +21,4 @@ async fn test_startup_and_shutdown() {
     });
     token.cancel();
     assert_eq!(handle.await.unwrap(), 1u8);
-    redis_setup::stop();
 }

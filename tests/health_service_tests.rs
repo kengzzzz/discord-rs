@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::services::health::HealthService;
+use discord_bot::services::health::HealthService;
 
 #[tokio::test]
 async fn test_health_status() {

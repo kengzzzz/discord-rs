@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use futures::Stream;
 use futures::StreamExt;
 use mongodb::change_stream::event::ChangeStreamEvent;

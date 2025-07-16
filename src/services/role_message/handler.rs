@@ -63,13 +63,13 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         }
     }
 
-    let mut info = Vec::new();
     let roles = [
         RoleEnum::RivenSilver,
         RoleEnum::Helminth,
         RoleEnum::UmbralForma,
         RoleEnum::Eidolon,
     ];
+    let mut info = Vec::with_capacity(roles.len());
     for role_type in roles.iter() {
         if let Some(role) = RoleService::get_by_type(ctx.clone(), guild_id.get(), role_type).await {
             if role.self_assignable {

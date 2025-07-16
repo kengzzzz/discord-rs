@@ -1,4 +1,4 @@
-use crate::commands::{ai::AiCommand, verify::VerifyCommand};
+use discord_bot::commands::{ai::AiCommand, verify::VerifyCommand};
 use twilight_interactions::command::CommandModel;
 use twilight_model::application::{
     command::CommandType,

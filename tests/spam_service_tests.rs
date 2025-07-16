@@ -1,7 +1,10 @@
-use crate::tests::redis_setup;
-use std::sync::Arc;
+#![cfg(feature = "mock-redis")]
 
-use crate::{context::Context, services::spam};
+mod utils;
+use std::sync::Arc;
+use utils::context::test_context;
+
+use discord_bot::services::spam;
 use twilight_model::{
     channel::{Message, message::MessageType},
     id::{Id, marker::GuildMarker},
@@ -74,8 +77,7 @@ fn make_message(channel: u64, id: u64, user: u64, content: &str) -> Message {
 
 #[tokio::test]
 async fn test_spam_log_threshold() {
-    redis_setup::start().await;
-    let ctx = Arc::new(Context::test().await);
+    let ctx = Arc::new(test_context().await);
     let mut token = None;
     for i in 0..4u64 {
         let msg = make_message(i + 1, i + 10, 5, "hello");
@@ -83,14 +85,13 @@ async fn test_spam_log_threshold() {
     }
     assert!(token.is_some());
     assert_eq!(token.unwrap().len(), 6);
-    let pool = crate::dbs::redis::new_pool();
+    let pool = discord_bot::dbs::redis::new_pool();
     spam::quarantine::purge_cache(&pool, 1, 5).await;
 }
 
 #[tokio::test]
 async fn test_spam_log_reset() {
-    redis_setup::start().await;
-    let ctx = Arc::new(Context::test().await);
+    let ctx = Arc::new(test_context().await);
     let msg1 = make_message(1, 100, 6, "hi");
     assert!(
         spam::log::log_message(ctx.clone(), 1, &msg1)
@@ -118,6 +119,6 @@ async fn test_spam_log_reset() {
     let msg5 = make_message(5, 104, 6, "hi");
     let tok = spam::log::log_message(ctx.clone(), 1, &msg5).await;
     assert!(tok.is_none());
-    let pool = crate::dbs::redis::new_pool();
+    let pool = discord_bot::dbs::redis::new_pool();
     spam::quarantine::purge_cache(&pool, 1, 6).await;
 }

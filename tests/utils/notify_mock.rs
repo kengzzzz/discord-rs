@@ -1,9 +1,12 @@
-use super::*;
+use super::mock_http::MockHttp;
 use std::time::Duration;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use twilight_model::id::{Id, marker::ChannelMarker};
 
+#[allow(dead_code)]
 pub(crate) fn notify_loop_mock(
-    http: std::sync::Arc<crate::tests::mock_http::MockHttp>,
+    http: std::sync::Arc<MockHttp>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     message: &str,

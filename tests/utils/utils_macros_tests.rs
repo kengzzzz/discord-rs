@@ -1,14 +1,15 @@
-use crate::configs::Reaction;
-use crate::dbs::mongo::models::role::RoleEnum;
-use crate::services::ai::AiService;
-use crate::tests::mock_http::MockHttp;
-use crate::utils::{env as env_util, reaction};
-use crate::{defer_interaction, send_with_fallback};
+use discord_bot::configs::Reaction;
+use discord_bot::dbs::mongo::models::role::RoleEnum;
+use discord_bot::services::ai::AiService;
+mod util;
+use discord_bot::utils::{env as env_util, reaction};
+use discord_bot::{defer_interaction, send_with_fallback};
 use twilight_model::channel::message::EmojiReactionType;
 use twilight_model::id::{
     Id,
     marker::{ApplicationMarker, ChannelMarker, InteractionMarker, UserMarker},
 };
+use util::mock_http::MockHttp;
 
 struct TestInteraction {
     application_id: Id<ApplicationMarker>,

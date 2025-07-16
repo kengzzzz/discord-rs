@@ -12,4 +12,5 @@ pub async fn start() {
     let _ = REDIS_STARTED.set(());
 }
 
+#[allow(dead_code)]
 pub fn stop() {}

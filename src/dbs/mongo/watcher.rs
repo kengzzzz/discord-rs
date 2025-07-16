@@ -10,7 +10,10 @@ use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
-use crate::dbs::redis::{redis_get, redis_set};
+use crate::{
+    dbs::redis::{redis_get, redis_set},
+    utils::ascii::ascii_starts_with_icase,
+};
 
 use deadpool_redis::Pool;
 
@@ -42,7 +45,7 @@ where
             let mut stream = match builder.await {
                 Ok(stream) => stream,
                 Err(e) => {
-                    if e.to_string().to_lowercase().contains("resume") {
+                    if ascii_starts_with_icase(&e.to_string(), "resume") {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
                         match coll.watch().with_options(options.clone()).await {
                             Ok(stream) => stream,

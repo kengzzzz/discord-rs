@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(any(test, feature = "mock-redis"))]
 use self::tests::BASE_URL_OVERRIDE;
 use serde::{Deserialize, Serialize};
 
@@ -36,7 +36,7 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
     path: &str,
 ) -> anyhow::Result<T> {
     let base = {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "mock-redis"))]
         {
             if let Some(url) = BASE_URL_OVERRIDE.get() {
                 url.as_str()
@@ -44,7 +44,7 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
                 BASE_URL
             }
         }
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "mock-redis")))]
         {
             BASE_URL
         }
@@ -65,5 +65,5 @@ pub async fn steel_path(client: &reqwest::Client) -> anyhow::Result<SteelPathDat
     fetch_json(client, "steelPath").await
 }
 
-#[cfg(test)]
-pub(crate) mod tests;
+#[cfg(any(test, feature = "mock-redis"))]
+pub mod tests;

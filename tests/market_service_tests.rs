@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::services::market::{MarketKind, MarketService, MarketSession, OrderInfo};
+use discord_bot::services::market::{MarketKind, MarketService, MarketSession, OrderInfo};
 
 #[test]
 fn test_market_components_pagination() {

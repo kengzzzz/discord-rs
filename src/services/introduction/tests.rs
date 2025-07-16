@@ -1,9 +1,8 @@
+use super::form;
 use twilight_model::application::interaction::modal::{
     ModalInteractionData, ModalInteractionDataActionRow, ModalInteractionDataComponent,
 };
 use twilight_model::channel::message::component::ComponentType;
-
-use crate::services::introduction::form;
 
 fn build_modal(values: &[(&str, &str)]) -> ModalInteractionData {
     let rows = values
