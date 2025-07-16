@@ -1,5 +1,3 @@
-use once_cell::sync::OnceCell;
-use regex::Regex;
 use twilight_model::{
     channel::{Attachment, Message},
     id::{Id, marker::UserMarker},
@@ -25,8 +23,6 @@ pub(crate) fn build_ai_input<'a>(content: &'a str, referenced: Option<&'a str>) 
 #[cfg_attr(test, allow(dead_code))]
 const MAX_ATTACHMENTS: usize = 5;
 
-static BOT_MENTION_RE: OnceCell<Regex> = OnceCell::new();
-
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<Attachment>) {
     let mut main = message.attachments.clone();
@@ -44,14 +40,53 @@ pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<At
     (main, refs)
 }
 
-pub(crate) fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
-    let re = BOT_MENTION_RE.get_or_init(|| {
-        let id = id.get();
-        let pattern = format!(r"<@!?(?:{id})>");
-        Regex::new(&pattern).expect("failed to compile bot mention regex")
-    });
+pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
+    let bot_id = id.get();
+    let bytes = raw.as_bytes();
+    let len = bytes.len();
+    if !raw.as_bytes().windows(2).any(|w| w == b"<@") {
+        return Cow::Borrowed(raw);
+    }
+    let mut out: Option<String> = None;
+    let mut last_copy = 0;
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'<' && i + 1 < len && bytes[i + 1] == b'@' {
+            let mut j = i + 2;
+            if j < len && bytes[j] == b'!' {
+                j += 1;
+            }
+            let mut n: u64 = 0;
+            let mut has_digit = false;
+            while j < len {
+                let b = bytes[j];
+                if b.is_ascii_digit() {
+                    has_digit = true;
+                    n = n.saturating_mul(10).saturating_add((b - b'0') as u64);
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            if has_digit && j < len && bytes[j] == b'>' && n == bot_id {
+                let buf = out.get_or_insert_with(|| String::with_capacity(raw.len()));
+                buf.push_str(&raw[last_copy..i]);
+                last_copy = j + 1;
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
 
-    re.replace_all(raw, "")
+    if let Some(mut buf) = out {
+        if last_copy < len {
+            buf.push_str(&raw[last_copy..]);
+        }
+        Cow::Owned(buf)
+    } else {
+        Cow::Borrowed(raw)
+    }
 }
 
 pub async fn handle_ai(ctx: Arc<Context>, message: &Message) {
