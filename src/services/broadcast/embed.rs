@@ -13,7 +13,7 @@ use super::BroadcastService;
 
 const COLOR: u32 = 0x6495ED;
 impl BroadcastService {
-    pub(super) fn broadcast_embeds(
+    pub fn broadcast_embeds(
         guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
         message: &Message,
     ) -> anyhow::Result<Vec<Embed>> {
