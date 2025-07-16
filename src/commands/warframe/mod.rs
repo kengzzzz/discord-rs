@@ -63,7 +63,7 @@ impl WarframeCommand {
 
     pub async fn autocomplete(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         if let Some((sub, name, user_input)) = extract_focused(&data) {
-            let mut choices = Vec::new();
+            let mut choices = Vec::with_capacity(25);
             if name == "item" {
                 let results = if sub == "build" {
                     BuildService::search_with_update(ctx.reqwest.as_ref(), &ctx.redis, user_input)

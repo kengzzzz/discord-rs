@@ -86,7 +86,7 @@ pub async fn append_attachments(
         }
     }
 
-    let mut urls = Vec::new();
+    let mut urls = Vec::with_capacity(results.len());
     for res in results.into_iter().flatten() {
         let (ct, uri) = res;
         let label = format!("Attachment from {owner}:");

@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     context::Context,
-    utils::comparator::{cmp_ignore_ascii_case, collect_prefix_icase},
+    utils::ascii::{cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
 use super::{MarketService, client};

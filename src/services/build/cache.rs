@@ -14,7 +14,7 @@ use crate::{
     context::Context,
     dbs::redis::{redis_get, redis_set},
     services::http::HttpService,
-    utils::comparator::{ascii_eq_ignore_case, cmp_ignore_ascii_case, collect_prefix_icase},
+    utils::ascii::{ascii_eq_ignore_case, cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
 use reqwest::Client;

@@ -2,12 +2,20 @@ use std::cmp::Ordering;
 
 const LIMIT: usize = 25;
 
-fn ascii_fold(b: u8) -> u8 {
+pub fn ascii_fold(b: u8) -> u8 {
     if b.is_ascii_uppercase() {
         b + (b'a' - b'A')
     } else {
         b
     }
+}
+
+pub fn ascii_lower(b: u8) -> u8 {
+    if b.is_ascii_uppercase() { b | 0x20 } else { b }
+}
+
+pub fn ascii_upper(b: u8) -> u8 {
+    if b.is_ascii_lowercase() { b & !0x20 } else { b }
 }
 
 pub fn ascii_eq_ignore_case(a: &str, b: &str) -> bool {

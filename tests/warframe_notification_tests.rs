@@ -10,7 +10,7 @@ use utils::context::test_context;
 #[tokio::test]
 async fn test_title_and_time() {
     let title = warframe::utils::title_case("cetus day");
-    assert_eq!(title, "**Cetus **Day** ends");
+    assert_eq!(title, "**Cetus Day** ends");
 
     let formatted = warframe::utils::format_time("2025-01-01T00:00:00Z");
     assert_eq!(formatted, "<t:1735689600:R>");

@@ -130,7 +130,7 @@ impl MarketService {
     }
 
     pub fn components(session: &MarketSession) -> Vec<Component> {
-        let mut buttons = Vec::new();
+        let mut buttons = Vec::with_capacity(5);
         buttons.push(Component::Button(Button {
             custom_id: Some("market_prev_page".into()),
             disabled: session.page <= 1,

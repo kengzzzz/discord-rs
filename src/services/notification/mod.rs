@@ -32,7 +32,7 @@ impl NotificationService {
         ch: Channel,
         token: CancellationToken,
     ) -> Vec<JoinHandle<()>> {
-        let mut handles = Vec::new();
+        let mut handles = Vec::with_capacity(3);
         let channel_id = Id::new(ch.channel_id);
         if let Some(role) =
             RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::Helminth).await

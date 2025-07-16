@@ -13,7 +13,17 @@ pub struct BuildService;
 
 impl BuildService {
     pub(crate) fn sanitize_item_name(s: &str) -> String {
-        s.to_ascii_lowercase().replace(' ', "-").replace('&', "%26")
+        let extra = s.bytes().filter(|&b| b == b'&').count() * 2;
+        let mut out = String::with_capacity(s.len() + extra);
+        for &b in s.as_bytes() {
+            match b {
+                b'A'..=b'Z' => out.push((b | 0x20) as char),
+                b' ' => out.push('-'),
+                b'&' => out.push_str("%26"),
+                _ => out.push(b as char),
+            }
+        }
+        out
     }
 
     pub async fn build_embeds(

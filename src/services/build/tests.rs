@@ -1,5 +1,5 @@
 use super::cache::ITEMS;
-use crate::utils::comparator::cmp_ignore_ascii_case;
+use crate::utils::ascii::cmp_ignore_ascii_case;
 
 pub(crate) async fn set_items(mut items: Vec<String>) {
     items.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
