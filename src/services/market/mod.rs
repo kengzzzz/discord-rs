@@ -317,9 +317,9 @@ impl MarketService {
                 }
                 for vec in by_rank.values_mut() {
                     if kind.target_type() == "sell" {
-                        vec.sort_by_key(|o| o.platinum);
+                        vec.sort_unstable_by_key(|o| o.platinum);
                     } else {
-                        vec.sort_by(|a, b| b.platinum.cmp(&a.platinum));
+                        vec.sort_unstable_by(|a, b| b.platinum.cmp(&a.platinum));
                     }
                 }
                 let Some((&rank, orders)) = by_rank.iter().next() else {

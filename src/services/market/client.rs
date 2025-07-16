@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::atomic::AtomicU64};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::atomic::AtomicU64,
+};
 
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
@@ -12,10 +15,7 @@ use crate::{
 
 use reqwest::Client;
 
-use super::{
-    MarketKind,
-    cache::{ItemEntry, StoredEntry},
-};
+use super::{MarketKind, cache::MarketEntry};
 
 const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
 pub(super) const ITEM_URL: &str = "https://warframe.market/items/";
@@ -62,19 +62,21 @@ pub(super) struct Order {
     pub mod_rank: Option<u8>,
 }
 
-pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<BTreeMap<String, ItemEntry>> {
-    if let Some(stored) = redis_get::<Vec<StoredEntry>>(pool, key).await {
-        let mut map = BTreeMap::new();
+pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<Vec<MarketEntry>> {
+    if let Some(stored) = redis_get::<Vec<MarketEntry>>(pool, key).await {
+        let mut seen = HashMap::new();
+        let mut entries = Vec::new();
         for s in stored {
-            map.insert(
-                s.name.to_ascii_lowercase(),
-                ItemEntry {
+            let lower = s.name.to_ascii_lowercase();
+            if seen.insert(lower, ()).is_none() {
+                entries.push(MarketEntry {
                     name: s.name,
                     url: s.url,
-                },
-            );
+                });
+            }
         }
-        return Some(map);
+        entries.sort_unstable_by_key(|entry| entry.name.to_ascii_lowercase());
+        return Some(entries);
     }
     None
 }
@@ -82,30 +84,26 @@ pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<BTreeMap<S
 pub(super) async fn update_items(
     client: &Client,
     key: &str,
-    items: &Lazy<RwLock<BTreeMap<String, ItemEntry>>>,
+    items: &Lazy<RwLock<Vec<MarketEntry>>>,
     last_update: &Lazy<AtomicU64>,
     pool: &Pool,
 ) -> anyhow::Result<()> {
     let resp = HttpService::get(client, ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
-    let mut stored = Vec::new();
-    let mut new_items = BTreeMap::new();
+    let mut seen = HashMap::new();
+    let mut entries = Vec::new();
     for item in data.payload.items {
-        stored.push(StoredEntry {
-            name: item.item_name.clone(),
-            url: item.url_name.clone(),
-        });
-        new_items.insert(
-            item.item_name.to_ascii_lowercase(),
-            ItemEntry {
+        let lower = item.item_name.to_ascii_lowercase();
+        if seen.insert(lower, ()).is_none() {
+            entries.push(MarketEntry {
                 name: item.item_name,
                 url: item.url_name,
-            },
-        );
+            });
+        }
     }
-    stored.sort_by(|a, b| a.name.cmp(&b.name));
-    redis_set(pool, key, &stored).await;
-    *items.write().await = new_items;
+    entries.sort_unstable_by_key(|entry| entry.name.to_ascii_lowercase());
+    redis_set(pool, key, &entries).await;
+    *items.write().await = entries;
     last_update.store(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -157,9 +155,9 @@ pub(super) async fn fetch_orders_map(
     }
     for vec in by_rank.values_mut() {
         if kind.target_type() == "sell" {
-            vec.sort_by_key(|o| o.platinum);
+            vec.sort_unstable_by_key(|o| o.platinum);
         } else {
-            vec.sort_by(|a, b| b.platinum.cmp(&a.platinum));
+            vec.sort_unstable_by(|a, b| b.platinum.cmp(&a.platinum));
         }
     }
     Ok((by_rank, max_rank))

@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -16,26 +15,22 @@ use std::sync::Arc;
 const REDIS_KEY: &str = "discord-bot:market-items";
 const UPDATE_SECS: u16 = 60 * 60;
 
-#[derive(Serialize, Deserialize)]
-pub(super) struct StoredEntry {
+#[derive(Clone, Serialize, Deserialize)]
+pub(super) struct MarketEntry {
     pub name: String,
     pub url: String,
 }
 
-#[derive(Clone)]
-pub(super) struct ItemEntry {
-    pub name: String,
-    pub url: String,
-}
-
-static ITEMS: Lazy<RwLock<BTreeMap<String, ItemEntry>>> =
-    Lazy::new(|| RwLock::new(BTreeMap::new()));
+static ITEMS: Lazy<RwLock<Vec<MarketEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
 static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 impl MarketService {
+    async fn set_items(data: Vec<MarketEntry>) {
+        *ITEMS.write().await = data;
+    }
     pub async fn init(ctx: Arc<Context>) {
         if let Some(data) = client::load_from_redis(&ctx.redis, REDIS_KEY).await {
-            *ITEMS.write().await = data;
+            Self::set_items(data).await;
             LAST_UPDATE.store(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -59,9 +54,15 @@ impl MarketService {
     pub async fn search(prefix: &str) -> Vec<String> {
         let p = prefix.to_ascii_lowercase();
         let items = ITEMS.read().await;
+        if items.is_empty() {
+            return Vec::new();
+        }
+        let idx = match items.binary_search_by(|e| e.name.to_ascii_lowercase().cmp(&p)) {
+            Ok(i) | Err(i) => i,
+        };
         let mut results = Vec::with_capacity(25);
-        for (key, entry) in items.range(p.clone()..) {
-            if !key.starts_with(&p) || results.len() == 25 {
+        for entry in items[idx..].iter() {
+            if !entry.name.to_ascii_lowercase().starts_with(&p) || results.len() == 25 {
                 break;
             }
             results.push(entry.name.clone());
@@ -102,6 +103,9 @@ impl MarketService {
     pub(super) async fn find_url(name: &str) -> Option<String> {
         let lower = name.to_ascii_lowercase();
         let items = ITEMS.read().await;
-        items.get(lower.as_str()).map(|e| e.url.clone())
+        match items.binary_search_by(|e| e.name.to_ascii_lowercase().cmp(&lower)) {
+            Ok(i) => items.get(i).map(|e| e.url.clone()),
+            Err(_) => None,
+        }
     }
 }

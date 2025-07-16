@@ -1,5 +1,3 @@
-#![allow(clippy::unnecessary_sort_by)]
-
 use super::cache::ITEMS;
 
 pub(crate) async fn set_items(mut items: Vec<String>) {

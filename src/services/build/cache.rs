@@ -1,4 +1,3 @@
-#![allow(clippy::unnecessary_sort_by)]
 use std::{
     collections::HashSet,
     sync::atomic::{AtomicU64, Ordering},
