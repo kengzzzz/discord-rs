@@ -1,4 +1,5 @@
 mod ai_service_tests;
+mod ascii_tests;
 #[path = "../../tests/utils/build_cache_utils.rs"]
 pub mod build_cache_utils;
 #[path = "../../tests/utils/context.rs"]
