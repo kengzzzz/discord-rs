@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -15,6 +14,7 @@ use crate::{
     context::Context,
     dbs::redis::{redis_get, redis_set},
     services::http::HttpService,
+    utils::comparator::{ascii_eq_ignore_case, cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
 use reqwest::Client;
@@ -81,7 +81,8 @@ async fn load_from_redis(pool: &Pool) -> Option<Vec<String>> {
     if let Some(stored) = redis_get::<StoredItems>(pool, REDIS_KEY).await {
         *ITEMS_ETAG.write().await = stored.etag;
         let mut names = stored.names;
-        names.sort_unstable_by_key(|k| k.to_ascii_lowercase());
+        names.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
+        names.dedup_by(|a, b| ascii_eq_ignore_case(a, b));
         return Some(names);
     }
     None
@@ -112,26 +113,19 @@ pub(crate) async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
     let fetched: Vec<Item> = resp.json().await?;
-    let mut set = HashSet::new();
-    let mut names = Vec::new();
-    let mut original = Vec::new();
-    for item in fetched {
-        if filter(&item) {
-            let lower = item.name.to_ascii_lowercase();
-            if set.insert(lower) {
-                original.push(item.name.clone());
-                names.push(item.name);
-            }
-        }
-    }
-    names.sort_unstable_by_key(|k| k.to_ascii_lowercase());
-    original.sort_unstable();
-    *ITEMS.write().await = names;
+    let mut names: Vec<String> = fetched
+        .into_iter()
+        .filter(filter)
+        .map(|item| item.name)
+        .collect();
+    names.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
+    names.dedup_by(|a, b| ascii_eq_ignore_case(a, b));
+    *ITEMS.write().await = names.clone();
     redis_set(
         pool,
         REDIS_KEY,
         &StoredItems {
-            names: original.clone(),
+            names,
             etag: new_etag.clone(),
         },
     )
@@ -166,22 +160,11 @@ impl BuildService {
     }
 
     pub async fn search(prefix: &str) -> Vec<String> {
-        let p = prefix.to_ascii_lowercase();
         let items = ITEMS.read().await;
         if items.is_empty() {
             return Vec::new();
         }
-        let idx = match items.binary_search_by(|n| n.to_ascii_lowercase().cmp(&p)) {
-            Ok(i) | Err(i) => i,
-        };
-        let mut results = Vec::with_capacity(25);
-        for name in items[idx..].iter() {
-            if !name.to_ascii_lowercase().starts_with(&p) || results.len() == 25 {
-                break;
-            }
-            results.push(name.clone());
-        }
-        results
+        collect_prefix_icase(&items, prefix, |s| s)
     }
 
     async fn maybe_refresh(client: &Client, pool: &Pool) {
