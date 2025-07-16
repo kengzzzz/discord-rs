@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::atomic::AtomicU64,
-};
+use std::{collections::BTreeMap, sync::atomic::AtomicU64};
 
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
@@ -11,6 +8,7 @@ use tokio::sync::RwLock;
 use crate::{
     dbs::redis::{redis_get, redis_set},
     services::http::HttpService,
+    utils::comparator::{ascii_eq_ignore_case, cmp_ignore_ascii_case},
 };
 
 use reqwest::Client;
@@ -63,20 +61,10 @@ pub(super) struct Order {
 }
 
 pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<Vec<MarketEntry>> {
-    if let Some(stored) = redis_get::<Vec<MarketEntry>>(pool, key).await {
-        let mut seen = HashMap::new();
-        let mut entries = Vec::new();
-        for s in stored {
-            let lower = s.name.to_ascii_lowercase();
-            if seen.insert(lower, ()).is_none() {
-                entries.push(MarketEntry {
-                    name: s.name,
-                    url: s.url,
-                });
-            }
-        }
-        entries.sort_unstable_by_key(|entry| entry.name.to_ascii_lowercase());
-        return Some(entries);
+    if let Some(mut stored) = redis_get::<Vec<MarketEntry>>(pool, key).await {
+        stored.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
+        stored.dedup_by(|a, b| ascii_eq_ignore_case(&a.name, &b.name));
+        return Some(stored);
     }
     None
 }
@@ -90,20 +78,20 @@ pub(super) async fn update_items(
 ) -> anyhow::Result<()> {
     let resp = HttpService::get(client, ITEMS_URL).await?;
     let data: ItemsResponse = resp.json().await?;
-    let mut seen = HashMap::new();
-    let mut entries = Vec::new();
-    for item in data.payload.items {
-        let lower = item.item_name.to_ascii_lowercase();
-        if seen.insert(lower, ()).is_none() {
-            entries.push(MarketEntry {
-                name: item.item_name,
-                url: item.url_name,
-            });
-        }
-    }
-    entries.sort_unstable_by_key(|entry| entry.name.to_ascii_lowercase());
+    let mut entries: Vec<MarketEntry> = data
+        .payload
+        .items
+        .into_iter()
+        .map(|item| MarketEntry {
+            name: item.item_name,
+            url: item.url_name,
+        })
+        .collect();
+    entries.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
+    entries.dedup_by(|a, b| ascii_eq_ignore_case(&a.name, &b.name));
     redis_set(pool, key, &entries).await;
-    *items.write().await = entries;
+    let mut guard = items.write().await;
+    *guard = entries;
     last_update.store(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

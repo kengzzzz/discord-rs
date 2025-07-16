@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -7,7 +8,10 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::context::Context;
+use crate::{
+    context::Context,
+    utils::comparator::{cmp_ignore_ascii_case, collect_prefix_icase},
+};
 
 use super::{MarketService, client};
 use std::sync::Arc;
@@ -52,22 +56,11 @@ impl MarketService {
     }
 
     pub async fn search(prefix: &str) -> Vec<String> {
-        let p = prefix.to_ascii_lowercase();
         let items = ITEMS.read().await;
         if items.is_empty() {
             return Vec::new();
         }
-        let idx = match items.binary_search_by(|e| e.name.to_ascii_lowercase().cmp(&p)) {
-            Ok(i) | Err(i) => i,
-        };
-        let mut results = Vec::with_capacity(25);
-        for entry in items[idx..].iter() {
-            if !entry.name.to_ascii_lowercase().starts_with(&p) || results.len() == 25 {
-                break;
-            }
-            results.push(entry.name.clone());
-        }
-        results
+        collect_prefix_icase(&items, prefix, |e| &e.name)
     }
 
     async fn maybe_refresh(ctx: Arc<Context>) {
@@ -101,11 +94,15 @@ impl MarketService {
     }
 
     pub(super) async fn find_url(name: &str) -> Option<String> {
-        let lower = name.to_ascii_lowercase();
         let items = ITEMS.read().await;
-        match items.binary_search_by(|e| e.name.to_ascii_lowercase().cmp(&lower)) {
-            Ok(i) => items.get(i).map(|e| e.url.clone()),
-            Err(_) => None,
+        let idx =
+            items.partition_point(|e| cmp_ignore_ascii_case(&e.name, name) == cmp::Ordering::Less);
+        if idx < items.len()
+            && cmp_ignore_ascii_case(&items[idx].name, name) == cmp::Ordering::Equal
+        {
+            Some(items[idx].url.clone())
+        } else {
+            None
         }
     }
 }
