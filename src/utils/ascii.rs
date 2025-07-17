@@ -2,16 +2,6 @@ use std::cmp::Ordering;
 
 const LIMIT: usize = 25;
 
-#[inline]
-pub fn ascii_lower(b: u8) -> u8 {
-    if b.is_ascii_uppercase() { b | 0x20 } else { b }
-}
-
-#[inline]
-pub fn ascii_upper(b: u8) -> u8 {
-    if b.is_ascii_lowercase() { b & !0x20 } else { b }
-}
-
 pub fn cmp_ignore_ascii_case(a: &str, b: &str) -> Ordering {
     let mut ai = a.bytes();
     let mut bi = b.bytes();
@@ -21,10 +11,10 @@ pub fn cmp_ignore_ascii_case(a: &str, b: &str) -> Ordering {
                 if x == y {
                     continue;
                 }
-                let fx = ascii_lower(x);
-                let fy = ascii_lower(y);
-                if fx != fy {
-                    return fx.cmp(&fy);
+                let x = x.to_ascii_lowercase();
+                let y = y.to_ascii_lowercase();
+                if x != y {
+                    return x.cmp(&y);
                 }
             }
             (None, Some(_)) => return Ordering::Less,
@@ -54,13 +44,13 @@ pub fn ascii_contains_icase(hay: &str, needle: &str) -> bool {
     if nlen > hb.len() {
         return false;
     }
-    let first = ascii_lower(nb[0]);
+    let first = nb[0].to_ascii_lowercase();
     let mut i = 0;
     let end = hb.len() - nlen;
     while i <= end {
-        if ascii_lower(hb[i]) == first {
+        if hb[i].to_ascii_lowercase() == first {
             let mut j = 1;
-            while j < nlen && ascii_lower(hb[i + j]) == ascii_lower(nb[j]) {
+            while j < nlen && hb[i + j].eq_ignore_ascii_case(&nb[j]) {
                 j += 1;
             }
             if j == nlen {

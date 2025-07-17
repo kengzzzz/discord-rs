@@ -1,15 +1,6 @@
 use crate::utils::ascii::{
-    ascii_contains_icase, ascii_lower, ascii_starts_with_icase, cmp_ignore_ascii_case,
-    collect_prefix_icase,
+    ascii_contains_icase, ascii_starts_with_icase, cmp_ignore_ascii_case, collect_prefix_icase,
 };
-
-#[test]
-fn ascii_fold_lowercases() {
-    assert_eq!(ascii_lower(b'A'), b'a');
-    assert_eq!(ascii_lower(b'Z'), b'z');
-    assert_eq!(ascii_lower(b'a'), b'a');
-    assert_eq!(ascii_lower(b'!'), b'!');
-}
 
 #[test]
 fn ignore_case_comparisons() {
