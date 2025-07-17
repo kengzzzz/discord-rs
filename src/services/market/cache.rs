@@ -42,14 +42,8 @@ impl MarketService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = client::update_items(
-            ctx.reqwest.as_ref(),
-            REDIS_KEY,
-            &ITEMS,
-            &LAST_UPDATE,
-            &ctx.redis,
-        )
-        .await
+        } else if let Err(e) =
+            client::update_items(&ctx.reqwest, REDIS_KEY, &ITEMS, &LAST_UPDATE, &ctx.redis).await
         {
             tracing::warn!(error = %e, "failed to update market items");
         }
@@ -70,14 +64,9 @@ impl MarketService {
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
         if now.saturating_sub(last) > UPDATE_SECS as u64 {
-            if let Err(e) = client::update_items(
-                ctx.reqwest.as_ref(),
-                REDIS_KEY,
-                &ITEMS,
-                &LAST_UPDATE,
-                &ctx.redis,
-            )
-            .await
+            if let Err(e) =
+                client::update_items(&ctx.reqwest, REDIS_KEY, &ITEMS, &LAST_UPDATE, &ctx.redis)
+                    .await
             {
                 tracing::warn!(error = %e, "failed to update market items");
             }
@@ -87,7 +76,7 @@ impl MarketService {
     pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
         let mut results = Self::search(prefix).await;
         if results.is_empty() {
-            Self::maybe_refresh(ctx.clone()).await;
+            Self::maybe_refresh(ctx).await;
             results = Self::search(prefix).await;
         }
         results

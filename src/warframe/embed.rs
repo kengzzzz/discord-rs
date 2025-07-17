@@ -55,7 +55,7 @@ async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
     match cached_or_request(
         &ctx.redis,
         &key,
-        move || async move { api::news(client.as_ref()).await },
+        move || async move { api::news(&client).await },
         |_| MIN_CACHE_TTL,
     )
     .await
@@ -74,7 +74,7 @@ async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::R
     let data = cached_or_request(
         &ctx.redis,
         &key,
-        move || async move { api::cycle(client.as_ref(), endpoint).await },
+        move || async move { api::cycle(&client, endpoint).await },
         |d| ttl_from_expiry(&d.expiry),
     )
     .await?;
@@ -98,7 +98,7 @@ pub async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, 
     let data = cached_or_request(
         &ctx.redis,
         &key,
-        move || async move { api::steel_path(client.as_ref()).await },
+        move || async move { api::steel_path(&client).await },
         |d| ttl_from_expiry(&d.expiry),
     )
     .await?;
@@ -145,7 +145,7 @@ pub async fn status_embed(
     let cetus_fut = cycle_field(ctx.clone(), "cetusCycle", "Cetus");
     let vallis_fut = cycle_field(ctx.clone(), "vallisCycle", "Vallis");
     let cambion_fut = cycle_field(ctx.clone(), "cambionCycle", "Cambion");
-    let zariman_fut = cycle_field(ctx.clone(), "zarimanCycle", "Zariman");
+    let zariman_fut = cycle_field(ctx, "zarimanCycle", "Zariman");
 
     let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(
         image_fut,

@@ -24,7 +24,7 @@ pub async fn test_context() -> Context {
             cache: Arc::new(DefaultInMemoryCache::builder().build()),
             redis: new_pool(),
             mongo: MongoDB::init(new_pool()).await.unwrap(),
-            reqwest: Arc::new(ReqwestClient::new()),
+            reqwest: ReqwestClient::new(),
         }
     }
 }

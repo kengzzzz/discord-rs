@@ -21,7 +21,7 @@ impl Context {
             cache: Arc::new(DefaultInMemoryCache::builder().build()),
             redis: new_pool(),
             mongo: MongoDB::empty().await,
-            reqwest: Arc::new(ReqwestClient::new()),
+            reqwest: ReqwestClient::new(),
         }
     }
 }

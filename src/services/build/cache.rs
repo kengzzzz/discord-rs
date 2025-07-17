@@ -154,7 +154,7 @@ impl BuildService {
                     .as_secs(),
                 Ordering::Relaxed,
             );
-        } else if let Err(e) = update_items(ctx.reqwest.as_ref(), &ctx.redis).await {
+        } else if let Err(e) = update_items(&ctx.reqwest, &ctx.redis).await {
             tracing::warn!(error = %e, "failed to update build items");
         }
     }

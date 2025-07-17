@@ -104,7 +104,7 @@ impl NotificationService {
     pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
         tokio::spawn(async move {
             let token = shutdown::get_token();
-            let map = Self::init_all(ctx.clone(), token.clone()).await;
+            let map = Self::init_all(ctx, token.clone()).await;
             *HANDLES.write().await = map;
 
             token.cancelled().await;

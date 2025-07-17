@@ -16,7 +16,7 @@ pub struct Context {
     pub cache: Arc<DefaultInMemoryCache>,
     pub redis: Pool,
     pub mongo: Arc<MongoDB>,
-    pub reqwest: Arc<ReqwestClient>,
+    pub reqwest: ReqwestClient,
 }
 
 impl Context {
@@ -39,14 +39,12 @@ impl Context {
 
         let mongo = MongoDB::init(redis.clone()).await?;
 
-        let reqwest = Arc::new(
-            ReqwestClient::builder()
-                .pool_max_idle_per_host(10)
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(60))
-                .build()
-                .expect("Failed to build Client"),
-        );
+        let reqwest = ReqwestClient::builder()
+            .pool_max_idle_per_host(10)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("Failed to build Client");
 
         Ok(Self {
             http,

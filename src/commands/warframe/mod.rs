@@ -55,8 +55,8 @@ impl WarframeCommand {
             let command = WarframeCommand::from_interaction(data.into())
                 .context("failed to parse command data")?;
             match command {
-                WarframeCommand::Build(cmd) => cmd.run(ctx.clone(), interaction).await?,
-                WarframeCommand::Market(cmd) => cmd.run(ctx.clone(), interaction).await?,
+                WarframeCommand::Build(cmd) => cmd.run(ctx, interaction).await?,
+                WarframeCommand::Market(cmd) => cmd.run(ctx, interaction).await?,
             }
         });
     }
@@ -66,8 +66,7 @@ impl WarframeCommand {
             let mut choices = Vec::with_capacity(25);
             if name == "item" {
                 let results = if sub == "build" {
-                    BuildService::search_with_update(ctx.reqwest.as_ref(), &ctx.redis, user_input)
-                        .await
+                    BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await
                 } else {
                     MarketService::search_with_update(ctx.clone(), user_input).await
                 };

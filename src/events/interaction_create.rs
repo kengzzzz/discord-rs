@@ -27,10 +27,8 @@ pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
         Some(InteractionData::ApplicationCommand(data)) => {
             if interaction.kind == InteractionType::ApplicationCommandAutocomplete {
                 match &*data.name {
-                    "admin" => AdminCommand::autocomplete(ctx.clone(), interaction, *data).await,
-                    "warframe" => {
-                        WarframeCommand::autocomplete(ctx.clone(), interaction, *data).await
-                    }
+                    "admin" => AdminCommand::autocomplete(ctx, interaction, *data).await,
+                    "warframe" => WarframeCommand::autocomplete(ctx, interaction, *data).await,
                     _ => {}
                 }
                 return;
@@ -38,16 +36,16 @@ pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
             *data
         }
         Some(InteractionData::MessageComponent(data)) => {
-            MarketService::handle_component(ctx.clone(), interaction, *data).await;
+            MarketService::handle_component(ctx, interaction, *data).await;
             return;
         }
         Some(InteractionData::ModalSubmit(data)) => {
             match data.custom_id.as_str() {
                 "intro_modal" => {
-                    IntroductionService::handle_modal(ctx.clone(), interaction, data).await;
+                    IntroductionService::handle_modal(ctx, interaction, data).await;
                 }
                 "verify_modal" => {
-                    VerificationService::handle_modal(ctx.clone(), interaction, data).await;
+                    VerificationService::handle_modal(ctx, interaction, data).await;
                 }
                 _ => {}
             }
@@ -61,22 +59,22 @@ pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
 
     match &*data.name {
         "admin" => {
-            AdminCommand::handle(ctx.clone(), interaction, data).await;
+            AdminCommand::handle(ctx, interaction, data).await;
         }
         "verify" => {
-            VerifyCommand::handle(ctx.clone(), interaction, data).await;
+            VerifyCommand::handle(ctx, interaction, data).await;
         }
         "warframe" => {
-            WarframeCommand::handle(ctx.clone(), interaction, data).await;
+            WarframeCommand::handle(ctx, interaction, data).await;
         }
         "ai" => {
-            AiCommand::handle(ctx.clone(), interaction, data).await;
+            AiCommand::handle(ctx, interaction, data).await;
         }
         "ping" => {
-            PingCommand::handle(ctx.clone(), interaction, data).await;
+            PingCommand::handle(ctx, interaction, data).await;
         }
         "intro" => {
-            IntroCommand::handle(ctx.clone(), interaction, data).await;
+            IntroCommand::handle(ctx, interaction, data).await;
         }
         "help" => {
             HelpCommand::handle(ctx, interaction, data).await;

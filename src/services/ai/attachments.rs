@@ -17,7 +17,7 @@ async fn handle_attachment(
 ) -> anyhow::Result<Option<(String, String)>> {
     if let (Some(ct), Ok(resp)) = (
         a.content_type.clone(),
-        HttpService::get(ctx.reqwest.as_ref(), &a.url).await,
+        HttpService::get(&ctx.reqwest, &a.url).await,
     ) {
         let stream = Body::wrap_stream(resp.bytes_stream());
         let upload_url = reqwest::Url::parse_with_params(
@@ -32,7 +32,7 @@ async fn handle_attachment(
         if let Some(content_type) = &a.content_type {
             headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
         }
-        let resp = HttpService::post(ctx.reqwest.as_ref(), upload_url)
+        let resp = HttpService::post(&ctx.reqwest, upload_url)
             .headers(headers)
             .body(stream)
             .send()

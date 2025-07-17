@@ -117,7 +117,7 @@ async fn test_spam_log_reset() {
             .is_none()
     );
     let msg5 = make_message(5, 104, 6, "hi");
-    let tok = spam::log::log_message(ctx.clone(), 1, &msg5).await;
+    let tok = spam::log::log_message(ctx, 1, &msg5).await;
     assert!(tok.is_none());
     let pool = discord_bot::dbs::redis::new_pool();
     spam::quarantine::purge_cache(&pool, 1, 6).await;
