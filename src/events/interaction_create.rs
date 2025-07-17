@@ -7,7 +7,9 @@ use crate::{
         ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
     },
     context::Context,
-    services::{introduction::IntroductionService, market::MarketService},
+    services::{
+        introduction::IntroductionService, market::MarketService, verification::VerificationService,
+    },
 };
 use std::sync::Arc;
 
@@ -40,7 +42,15 @@ pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
             return;
         }
         Some(InteractionData::ModalSubmit(data)) => {
-            IntroductionService::handle_modal(ctx.clone(), interaction, data).await;
+            match data.custom_id.as_str() {
+                "intro_modal" => {
+                    IntroductionService::handle_modal(ctx.clone(), interaction, data).await;
+                }
+                "verify_modal" => {
+                    VerificationService::handle_modal(ctx.clone(), interaction, data).await;
+                }
+                _ => {}
+            }
             return;
         }
         _ => {

@@ -10,9 +10,10 @@ use crate::{
     context::Context,
     dbs::mongo::models::{channel::Channel, role::RoleEnum},
     send_with_fallback,
-    utils::embed,
+    utils::embed::welcome_embed,
 };
 
+use super::embed;
 use super::form::IntroDetails;
 
 pub async fn handle_valid_intro(
@@ -51,7 +52,7 @@ pub async fn handle_valid_intro(
         let intro_embed = embed::intro_details_embed(&guild_ref, member_tag, details)?;
         let http = ctx.http.clone();
         send_with_fallback!(http, user_id, Id::new(intro_channel.channel_id), |msg| {
-            let welcome = embed::welcome_embed(&guild_ref, member_tag, &details.name)?;
+            let welcome = welcome_embed(&guild_ref, member_tag, &details.name)?;
             msg.embeds(&[welcome]).await?;
             Ok::<_, anyhow::Error>(())
         });

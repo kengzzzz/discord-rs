@@ -29,20 +29,15 @@ pub fn guild_only_embed() -> anyhow::Result<Embed> {
     Ok(embed)
 }
 
-pub fn pinging_embed() -> anyhow::Result<Embed> {
-    let embed = EmbedBuilder::new()
-        .color(COLOR)
-        .title("Pinging...")
-        .validate()?
-        .build();
-    Ok(embed)
-}
-
-pub fn pong_embed(latency_ms: u128) -> anyhow::Result<Embed> {
+pub fn pong_embed(latency_ms: Option<u64>) -> anyhow::Result<Embed> {
+    let desc = match latency_ms {
+        Some(ms) => format!("Latency: {ms}ms"),
+        None => "Latency: N/A".to_string(),
+    };
     let embed = EmbedBuilder::new()
         .color(COLOR)
         .title("Pong!")
-        .description(format!("Latency: {latency_ms}ms"))
+        .description(desc)
         .validate()?
         .build();
     Ok(embed)

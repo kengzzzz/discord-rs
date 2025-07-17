@@ -13,15 +13,11 @@ fn test_verify_command_parse() {
         id: Id::<CommandMarker>::new(1),
         name: "verify".into(),
         kind: CommandType::ChatInput,
-        options: vec![CommandDataOption {
-            name: "token".into(),
-            value: CommandOptionValue::String("abc".into()),
-        }],
+        options: vec![],
         resolved: None,
         target_id: None,
     };
-    let cmd = VerifyCommand::from_interaction(data.into()).unwrap();
-    assert_eq!(cmd.token, "abc");
+    VerifyCommand::from_interaction(data.into()).unwrap();
 }
 
 #[test]
