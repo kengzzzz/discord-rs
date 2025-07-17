@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use deadpool_redis::Pool;
@@ -10,43 +9,38 @@ use crate::configs::discord::DISCORD_CONFIGS;
 use crate::dbs::mongo::client::MongoDB;
 use crate::dbs::redis::{self, new_pool};
 
-#[derive(Clone)]
 pub struct Context {
-    pub http: Arc<Client>,
-    pub cache: Arc<DefaultInMemoryCache>,
+    pub http: Client,
+    pub cache: DefaultInMemoryCache,
     pub redis: Pool,
-    pub mongo: Arc<MongoDB>,
-    pub reqwest: Arc<ReqwestClient>,
+    pub mongo: MongoDB,
+    pub reqwest: ReqwestClient,
 }
 
 impl Context {
     pub async fn new() -> anyhow::Result<Self> {
-        let http = Arc::new(Client::new(DISCORD_CONFIGS.discord_token.clone()));
-        let cache = Arc::new(
-            DefaultInMemoryCache::builder()
-                .resource_types(
-                    ResourceType::GUILD
-                        | ResourceType::CHANNEL
-                        | ResourceType::MESSAGE
-                        | ResourceType::ROLE
-                        | ResourceType::MEMBER
-                        | ResourceType::USER_CURRENT,
-                )
-                .build(),
-        );
+        let http = Client::new(DISCORD_CONFIGS.discord_token.clone());
+        let cache = DefaultInMemoryCache::builder()
+            .resource_types(
+                ResourceType::GUILD
+                    | ResourceType::CHANNEL
+                    | ResourceType::MESSAGE
+                    | ResourceType::ROLE
+                    | ResourceType::MEMBER
+                    | ResourceType::USER_CURRENT,
+            )
+            .build();
 
         let redis = new_pool();
 
         let mongo = MongoDB::init(redis.clone()).await?;
 
-        let reqwest = Arc::new(
-            ReqwestClient::builder()
-                .pool_max_idle_per_host(10)
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(60))
-                .build()
-                .expect("Failed to build Client"),
-        );
+        let reqwest = ReqwestClient::builder()
+            .pool_max_idle_per_host(10)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("Failed to build Client");
 
         Ok(Self {
             http,

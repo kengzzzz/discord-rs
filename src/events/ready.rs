@@ -37,7 +37,7 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
             MarketService::init(market_ctx).await;
         });
 
-        NotificationService::spawn(ctx.clone());
+        NotificationService::spawn(ctx);
     }
 
     tracing::info!(

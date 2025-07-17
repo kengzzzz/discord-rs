@@ -131,16 +131,14 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle_event(ctx: Arc<Context>, event: Event) {
     match event {
-        Event::MessageCreate(r#box) => message_create::handle(ctx.clone(), (*r#box).0).await,
-        Event::InteractionCreate(r#box) => {
-            interaction_create::handle(ctx.clone(), (*r#box).0).await
-        }
-        Event::Ready(r#box) => ready::handle(ctx.clone(), *r#box).await,
-        Event::MemberAdd(r#box) => member_add::handle(ctx.clone(), *r#box).await,
-        Event::MemberRemove(event) => member_remove::handle(ctx.clone(), event).await,
-        Event::ReactionAdd(r#box) => reaction_add::handle(ctx.clone(), *r#box).await,
-        Event::ReactionRemove(r#box) => reaction_remove::handle(ctx.clone(), *r#box).await,
-        Event::MessageDelete(event) => message_delete::handle_single(ctx.clone(), event).await,
+        Event::MessageCreate(r#box) => message_create::handle(ctx, (*r#box).0).await,
+        Event::InteractionCreate(r#box) => interaction_create::handle(ctx, (*r#box).0).await,
+        Event::Ready(r#box) => ready::handle(ctx, *r#box).await,
+        Event::MemberAdd(r#box) => member_add::handle(ctx, *r#box).await,
+        Event::MemberRemove(event) => member_remove::handle(ctx, event).await,
+        Event::ReactionAdd(r#box) => reaction_add::handle(ctx, *r#box).await,
+        Event::ReactionRemove(r#box) => reaction_remove::handle(ctx, *r#box).await,
+        Event::MessageDelete(event) => message_delete::handle_single(ctx, event).await,
         Event::MessageDeleteBulk(event) => message_delete::handle_bulk(ctx, event).await,
         _ => {}
     }

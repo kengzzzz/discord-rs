@@ -104,7 +104,7 @@ impl MarketService {
         let Some(url) = Self::find_url(item).await else {
             return Ok(None);
         };
-        match client::fetch_orders_map(ctx.reqwest.as_ref(), &url, &kind).await {
+        match client::fetch_orders_map(&ctx.reqwest, &url, &kind).await {
             Ok((orders, max_rank)) => {
                 if orders.is_empty() {
                     return Ok(None);
@@ -206,7 +206,7 @@ impl MarketService {
 
     async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
         if let Ok((orders, max)) =
-            client::fetch_orders_map(ctx.reqwest.as_ref(), &session.url, &session.kind).await
+            client::fetch_orders_map(&ctx.reqwest, &session.url, &session.kind).await
         {
             if !orders.is_empty() {
                 session.orders = orders;
@@ -268,8 +268,8 @@ impl MarketService {
                     .embeds([embed])
                     .components(components.clone())
                     .build();
-                let http = ctx.http.clone();
-                if let Err(e) = http
+                if let Err(e) = ctx
+                    .http
                     .interaction(interaction.application_id)
                     .create_response(
                         interaction.id,
@@ -298,7 +298,7 @@ impl MarketService {
         let Some(url) = Self::find_url(item).await else {
             return Self::not_found_embed(guild);
         };
-        match client::fetch_orders(ctx.reqwest.as_ref(), &url).await {
+        match client::fetch_orders(&ctx.reqwest, &url).await {
             Ok(orders) => {
                 let mut by_rank: BTreeMap<u8, Vec<session::OrderInfo>> = BTreeMap::new();
                 for o in orders {

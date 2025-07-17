@@ -41,18 +41,18 @@ impl AdminChannelCommand {
         let channel_id = channel.id.get() as i64;
         let channel_name = channel.name.context("failed to parse channel name")?;
 
-        let db = ctx.mongo.clone();
-
         match self.channel_type {
             ChannelEnum::None => {
-                db.channels
+                ctx.mongo
+                    .channels
                     .delete_many(doc! {
                         "channel_id": &channel_id,
                     })
                     .await?;
             }
             _ => {
-                db.channels
+                ctx.mongo
+                    .channels
                     .update_one(
                         doc! {
                             "guild_id": guild_id.get() as i64,

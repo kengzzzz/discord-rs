@@ -4,10 +4,9 @@ use chrono::{DateTime, Datelike, Utc};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use twilight_http::Client;
 use twilight_model::id::{Id, marker::ChannelMarker};
 
-use crate::configs::notifications::NOTIFICATIONS;
+use crate::{configs::notifications::NOTIFICATIONS, context::Context};
 
 pub(crate) fn next_monday_duration() -> Duration {
     let now = Utc::now();
@@ -21,7 +20,7 @@ pub(crate) fn next_monday_duration() -> Duration {
 }
 
 pub(crate) fn notify_loop(
-    http: Arc<Client>,
+    ctx: Arc<Context>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     message: &str,
@@ -35,7 +34,7 @@ pub(crate) fn notify_loop(
             tokio::select! {
                 _ = token.cancelled() => break,
                 _ = tokio::time::sleep(delay) => {
-                    if let Err(e) = http
+                    if let Err(e) = ctx.http
                         .create_message(channel_id)
                         .content(&format!("{msg} <@&{role_id}>"))
                         .await
@@ -54,7 +53,7 @@ pub(crate) fn notify_loop(
 }
 
 pub(crate) fn notify_umbra_loop(
-    http: Arc<Client>,
+    ctx: Arc<Context>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     mut rx: watch::Receiver<bool>,
@@ -71,7 +70,7 @@ pub(crate) fn notify_umbra_loop(
                     }
                     let now_state = *rx.borrow();
                     if now_state && !last {
-                        if let Err(e) = http
+                        if let Err(e) = ctx.http
                             .create_message(channel_id)
                             .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
                             .await

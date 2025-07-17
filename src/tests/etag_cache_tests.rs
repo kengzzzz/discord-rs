@@ -22,9 +22,7 @@ async fn test_build_items_not_modified() {
         })
         .await;
     let ctx = Arc::new(Context::test().await);
-    update_build_items(ctx.reqwest.as_ref(), &ctx.redis)
-        .await
-        .unwrap();
+    update_build_items(&ctx.reqwest, &ctx.redis).await.unwrap();
     let first_len = ITEMS.read().await.len();
     assert_eq!(first_len, 2);
     // second request with 304
@@ -36,9 +34,7 @@ async fn test_build_items_not_modified() {
             then.status(304);
         })
         .await;
-    update_build_items(ctx.reqwest.as_ref(), &ctx.redis)
-        .await
-        .unwrap();
+    update_build_items(&ctx.reqwest, &ctx.redis).await.unwrap();
     let second_len = ITEMS.read().await.len();
     assert_eq!(second_len, first_len);
 }

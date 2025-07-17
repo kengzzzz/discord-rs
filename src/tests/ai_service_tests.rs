@@ -62,7 +62,7 @@ async fn test_prompt_and_history() {
     assert_eq!(hist.len(), 2);
     assert_eq!(hist[0].role, "user".to_string());
 
-    let prompt = history::get_prompt(ctx.clone(), user).await;
+    let prompt = history::get_prompt(ctx, user).await;
     assert_eq!(prompt, Some("hi".to_string()));
 }
 
@@ -140,6 +140,6 @@ async fn test_purge_prompt_cache() {
     assert_eq!(prompt, Some("hello".to_string()));
 
     AiService::purge_prompt_cache(&ctx.redis, user.get()).await;
-    let prompt = history::get_prompt(ctx.clone(), user).await;
+    let prompt = history::get_prompt(ctx, user).await;
     assert!(prompt.is_none());
 }

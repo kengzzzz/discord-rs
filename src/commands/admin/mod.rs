@@ -69,8 +69,8 @@ impl AdminCommand {
                 .context("failed to parse command data")?;
 
             match command {
-                AdminCommand::Channel(command) => command.run(ctx.clone(), interaction).await,
-                AdminCommand::Role(command) => command.run(ctx.clone(), interaction).await,
+                AdminCommand::Channel(command) => command.run(ctx, interaction).await,
+                AdminCommand::Role(command) => command.run(ctx, interaction).await,
             }?;
         });
     }

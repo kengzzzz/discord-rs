@@ -11,7 +11,7 @@ pub async fn build_embed(
     ctx: Arc<Context>,
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> Option<Embed> {
-    match warframe::status_embed(ctx.clone(), guild).await {
+    match warframe::status_embed(ctx, guild).await {
         Ok((e, is_umbra)) => {
             super::StatusService::set_umbra_forma(is_umbra);
             Some(e)
