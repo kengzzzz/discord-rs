@@ -57,10 +57,14 @@ pub async fn log_message(ctx: Arc<Context>, guild_id: u64, message: &Message) ->
     if record.histories.len() >= SPAM_LIMIT {
         let to_delete = record.histories.clone();
         BroadcastService::delete_replicas(ctx.clone(), &to_delete).await;
-        let http = ctx.http.clone();
+        let ctx_clone = ctx.clone();
         tokio::spawn(async move {
             for (c_id, m_id) in to_delete {
-                if let Err(e) = http.delete_message(Id::new(c_id), Id::new(m_id)).await {
+                if let Err(e) = ctx_clone
+                    .http
+                    .delete_message(Id::new(c_id), Id::new(m_id))
+                    .await
+                {
                     tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
                 }
             }

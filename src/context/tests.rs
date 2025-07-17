@@ -17,8 +17,8 @@ impl Context {
     pub async fn test() -> Self {
         redis_start().await;
         Self {
-            http: Arc::new(Client::new(String::new())),
-            cache: Arc::new(DefaultInMemoryCache::builder().build()),
+            http: Client::new(String::new()),
+            cache: DefaultInMemoryCache::builder().build(),
             redis: new_pool(),
             mongo: MongoDB::empty().await,
             reqwest: ReqwestClient::new(),

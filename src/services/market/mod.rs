@@ -268,8 +268,8 @@ impl MarketService {
                     .embeds([embed])
                     .components(components.clone())
                     .build();
-                let http = ctx.http.clone();
-                if let Err(e) = http
+                if let Err(e) = ctx
+                    .http
                     .interaction(interaction.application_id)
                     .create_response(
                         interaction.id,

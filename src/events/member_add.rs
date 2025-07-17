@@ -30,8 +30,7 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-            let http = ctx.http.clone();
-            send_with_fallback!(http, event.user.id, Id::new(q_channel.channel_id), |msg| {
+            send_with_fallback!(ctx, event.user.id, Id::new(q_channel.channel_id), |msg| {
                 let embed = spam::embed::quarantine_reminder_embed(
                     &guild_ref,
                     q_channel.channel_id,
@@ -60,8 +59,7 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-            let http = ctx.http.clone();
-            send_with_fallback!(http, event.user.id, Id::new(channel.channel_id), |msg| {
+            send_with_fallback!(ctx, event.user.id, Id::new(channel.channel_id), |msg| {
                 let embed =
                     introduction::embed::intro_prompt_embed(&guild_ref, channel.channel_id)?;
                 msg.embeds(&[embed]).await?;

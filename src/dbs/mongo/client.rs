@@ -7,7 +7,6 @@ use mongodb::{
         FullDocumentType, IndexOptions, Tls, TlsOptions,
     },
 };
-use std::sync::Arc;
 
 use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
@@ -21,6 +20,7 @@ use crate::{
     services::shutdown,
 };
 
+#[derive(Clone)]
 pub struct MongoDB {
     pub(crate) client: Client,
     pub channels: Collection<Channel>,
@@ -31,7 +31,7 @@ pub struct MongoDB {
 }
 
 impl MongoDB {
-    pub async fn init(redis: Pool) -> anyhow::Result<Arc<Self>> {
+    pub async fn init(redis: Pool) -> anyhow::Result<Self> {
         let mut opts = ClientOptions::parse(&MONGO_CONFIGS.uri).await?;
         opts.credential = Some(
             Credential::builder()
@@ -164,14 +164,14 @@ impl MongoDB {
             tracing::warn!(collection = "ai_prompts", error = %e, "failed to create index");
         }
 
-        let repo = Arc::new(Self {
+        let repo = Self {
             client,
             channels,
             roles,
             quarantines,
             messages,
             ai_prompts,
-        });
+        };
 
         let options = ChangeStreamOptions::builder()
             .full_document(Some(FullDocumentType::UpdateLookup))

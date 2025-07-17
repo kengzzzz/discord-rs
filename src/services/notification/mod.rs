@@ -38,7 +38,7 @@ impl NotificationService {
             RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::Helminth).await
         {
             handles.push(notify_loop(
-                ctx.http.clone(),
+                ctx.clone(),
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.helminth,
@@ -50,7 +50,7 @@ impl NotificationService {
             RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::RivenSilver).await
         {
             handles.push(notify_loop(
-                ctx.http.clone(),
+                ctx.clone(),
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.riven_sliver,
@@ -62,7 +62,7 @@ impl NotificationService {
             RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::UmbralForma).await
         {
             handles.push(notify_umbra_loop(
-                ctx.http.clone(),
+                ctx,
                 channel_id,
                 role.role_id,
                 StatusService::subscribe_umbra_forma(),

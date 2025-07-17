@@ -55,18 +55,18 @@ impl AdminRoleCommand {
 
         let author = interaction.author().context("failed to parse author")?;
 
-        let db = ctx.mongo.clone();
-
         match self.role_type {
             RoleEnum::None => {
-                db.roles
+                ctx.mongo
+                    .roles
                     .delete_many(doc! {
                         "role_id": role_id.get() as i64,
                     })
                     .await?;
             }
             _ => {
-                db.roles
+                ctx.mongo
+                    .roles
                     .update_one(
                         doc! {
                             "guild_id": guild_id.get() as i64,
