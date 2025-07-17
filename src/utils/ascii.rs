@@ -78,7 +78,7 @@ where
 {
     if prefix.is_empty() {
         let mut out = Vec::with_capacity(LIMIT);
-        for s in data.iter().take(LIMIT).map(|e| get(e)) {
+        for s in data.iter().take(LIMIT).map(&get) {
             out.push(s.to_owned());
         }
         return out;

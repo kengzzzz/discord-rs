@@ -76,5 +76,5 @@ fn prefix_search_helpers() {
     assert!(empty.is_empty());
 
     let all_prefix = collect_prefix_icase(&data, "", |s| s);
-    assert_eq!(all_prefix, data.iter().cloned().collect::<Vec<_>>());
+    assert_eq!(all_prefix, data);
 }
