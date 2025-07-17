@@ -8,6 +8,7 @@ use crate::{
 
 pub struct SpamService;
 
+pub mod embed;
 pub mod log;
 pub mod quarantine;
 

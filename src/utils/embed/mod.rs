@@ -13,8 +13,7 @@ pub(super) const COLOR_INVALID: u32 = 0xE74C3C;
 
 pub mod general;
 
-pub use crate::services::introduction::embed::*;
-pub use general::{footer_with_icon, guild_only_embed, pinging_embed, pong_embed};
+pub use general::{footer_with_icon, guild_only_embed, pong_embed};
 
 pub fn welcome_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
@@ -126,10 +125,17 @@ pub fn role_message_embed(
 
 pub fn help_embed(guild: &Reference<'_, Id<GuildMarker>, CachedGuild>) -> anyhow::Result<Embed> {
     let footer = footer_with_icon(guild)?;
-    let description = "Available commands:\n/ping - Show bot latency\n/verify <token> - Verify yourself\n/warframe market <item> - Check market prices\n/warframe build <item> - Lookup builds\n/ai prompt <text> - Set personal prompt\n/ai talk <message> - Chat with AI\n/ai clear - Clear AI history";
+    let description = "**คำสั่งที่สามารถใช้ได้:**\n\
+**/ping** - ดูความหน่วงของบอท\n\
+**/intro** - แนะนำตัวคุณ\n\
+**/warframe market <item>** - ตรวจสอบราคาตลาด\n\
+**/warframe build <item>** - ค้นหา build\n\
+**/ai prompt <text>** - ตั้งค่า prompt ส่วนตัว\n\
+**/ai talk <message>** - สนทนากับ AI\n\
+**/ai clear** - ล้างประวัติการคุยกับ AI";
     let embed = EmbedBuilder::new()
         .color(COLOR)
-        .title("Help")
+        .title("คำสั่งบอท")
         .description(description)
         .footer(footer)
         .validate()?

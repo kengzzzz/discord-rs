@@ -9,7 +9,7 @@ use discord_bot::{
         interaction_create, member_add, member_remove, message_create, message_delete,
         reaction_add, reaction_remove, ready,
     },
-    services::{health::HealthService, shutdown},
+    services::{health::HealthService, latency::LatencyService, shutdown},
 };
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
@@ -114,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
 
                 failure_count = 0;
                 ctx.cache.update(&event);
+                LatencyService::update(shard.latency().average());
                 if tx.send(event).await.is_err() {
                     break;
                 }

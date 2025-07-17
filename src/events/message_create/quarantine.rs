@@ -1,8 +1,11 @@
 use crate::{
     context::Context,
     dbs::mongo::models::{channel::ChannelEnum, role::RoleEnum},
-    services::{channel::ChannelService, role::RoleService, spam::SpamService},
-    utils::embed,
+    services::{
+        channel::ChannelService,
+        role::RoleService,
+        spam::{self, SpamService},
+    },
 };
 use std::sync::Arc;
 use twilight_model::{channel::Message, id::Id};
@@ -38,9 +41,11 @@ pub async fn handle_quarantine(ctx: Arc<Context>, message: &Message) -> bool {
             .await
             {
                 if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-                    if let Ok(embed) =
-                        embed::quarantine_reminder_embed(&guild_ref, channel.channel_id, &token)
-                    {
+                    if let Ok(embed) = spam::embed::quarantine_reminder_embed(
+                        &guild_ref,
+                        channel.channel_id,
+                        &token,
+                    ) {
                         let channel_id = Id::new(channel.channel_id);
                         if let Err(e) = ctx
                             .http
@@ -65,7 +70,7 @@ pub async fn handle_quarantine(ctx: Arc<Context>, message: &Message) -> bool {
         {
             if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 if let Ok(embeds) =
-                    embed::quarantine_embed(&guild_ref, message, channel.channel_id, &token)
+                    spam::embed::quarantine_embed(&guild_ref, message, channel.channel_id, &token)
                 {
                     let channel_id = Id::new(channel.channel_id);
                     if let Err(e) = ctx

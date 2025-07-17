@@ -6,6 +6,7 @@ use twilight_model::channel::message::component::{
 };
 
 use crate::guild_command;
+use crate::services::introduction;
 use crate::{
     context::Context, dbs::mongo::models::channel::ChannelEnum, services::channel::ChannelService,
 };
@@ -28,7 +29,7 @@ impl IntroCommand {
                 .await
                 .is_none()
             {
-                let embed = embed::intro_unavailable_embed(&guild_ref)?;
+                let embed = introduction::embed::intro_unavailable_embed(&guild_ref)?;
                 let data = InteractionResponseData {
                     allowed_mentions: None,
                     attachments: None,

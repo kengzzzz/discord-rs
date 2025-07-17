@@ -3,11 +3,10 @@ use twilight_model::id::Id;
 
 use crate::context::Context;
 use crate::send_with_fallback;
-use crate::services::spam;
+use crate::services::{introduction, spam};
 use crate::{
     dbs::mongo::models::{channel::ChannelEnum, role::RoleEnum},
     services::{channel::ChannelService, role::RoleService},
-    utils::embed,
 };
 use std::sync::Arc;
 
@@ -33,8 +32,11 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let http = ctx.http.clone();
             send_with_fallback!(http, event.user.id, Id::new(q_channel.channel_id), |msg| {
-                let embed =
-                    embed::quarantine_reminder_embed(&guild_ref, q_channel.channel_id, &token)?;
+                let embed = spam::embed::quarantine_reminder_embed(
+                    &guild_ref,
+                    q_channel.channel_id,
+                    &token,
+                )?;
                 msg.embeds(&[embed]).await?;
                 Ok::<_, anyhow::Error>(())
             });
@@ -60,7 +62,8 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let http = ctx.http.clone();
             send_with_fallback!(http, event.user.id, Id::new(channel.channel_id), |msg| {
-                let embed = embed::intro_prompt_embed(&guild_ref, channel.channel_id)?;
+                let embed =
+                    introduction::embed::intro_prompt_embed(&guild_ref, channel.channel_id)?;
                 msg.embeds(&[embed]).await?;
                 Ok::<_, anyhow::Error>(())
             });

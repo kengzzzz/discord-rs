@@ -33,7 +33,7 @@ impl IntroductionService {
             )
             .await
             else {
-                if let Ok(embed) = embed::intro_unavailable_embed(&guild_ref) {
+                if let Ok(embed) = self::embed::intro_unavailable_embed(&guild_ref) {
                     ctx.http
                         .interaction(interaction.application_id)
                         .update_response(&interaction.token)
@@ -44,7 +44,7 @@ impl IntroductionService {
             };
 
             let Some(details) = form::parse_modal(&data) else {
-                let embed = embed::intro_error_embed()?;
+                let embed = self::embed::intro_error_embed()?;
                 ctx.http
                     .interaction(interaction.application_id)
                     .update_response(&interaction.token)
@@ -62,7 +62,7 @@ impl IntroductionService {
                 &user.name,
             )
             .await?;
-            let embed = embed::intro_success_embed(&guild_ref)?;
+            let embed = self::embed::intro_success_embed(&guild_ref)?;
             ctx.http
                 .interaction(interaction.application_id)
                 .update_response(&interaction.token)
