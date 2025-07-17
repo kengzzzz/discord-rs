@@ -61,7 +61,7 @@ impl MongoDB {
 
         for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts"] {
             if let Err(e) = database.create_collection(coll).await {
-                tracing::warn!(collection = coll, error = %e, "failed to create collection (might already exist)");
+                tracing::debug!(collection = coll, error = %e, "failed to create collection (might already exist)");
             }
         }
 
@@ -73,7 +73,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::warn!(collection = "channels", error = %e, "failed to update collection options");
+                tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -82,7 +82,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::warn!(collection = "roles", error = %e, "failed to update collection options");
+                tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -91,7 +91,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::warn!(collection = "quarantines", error = %e, "failed to update collection options");
+                tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -100,7 +100,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::warn!(collection = "messages", error = %e, "failed to update collection options");
+                tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
             }
             if let Err(e) = database
                 .run_command(doc! {
@@ -109,7 +109,7 @@ impl MongoDB {
                 })
                 .await
             {
-                tracing::warn!(collection = "ai_prompts", error = %e, "failed to update collection options");
+                tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
             }
         }
 
