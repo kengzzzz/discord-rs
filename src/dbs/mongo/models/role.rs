@@ -23,6 +23,9 @@ pub enum RoleEnum {
     #[option(name = "Eidolon", value = "eidolon")]
     Eidolon,
 
+    #[option(name = "Live", value = "live")]
+    Live,
+
     #[option(name = "Quarantine", value = "quarantine")]
     Quarantine,
 

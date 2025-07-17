@@ -9,6 +9,7 @@ pub fn emoji_to_role_enum(emoji: &EmojiReactionType) -> Option<RoleEnum> {
             e if e == Reaction::Helminth.emoji() => Some(RoleEnum::Helminth),
             e if e == Reaction::UmbraForma.emoji() => Some(RoleEnum::UmbralForma),
             e if e == Reaction::Eidolon.emoji() => Some(RoleEnum::Eidolon),
+            e if e == Reaction::Live.emoji() => Some(RoleEnum::Live),
             _ => None,
         },
         _ => None,
@@ -21,6 +22,7 @@ pub fn role_enum_to_emoji(role: &RoleEnum) -> Option<&'static str> {
         RoleEnum::Helminth => Some(Reaction::Helminth.emoji()),
         RoleEnum::UmbralForma => Some(Reaction::UmbraForma.emoji()),
         RoleEnum::Eidolon => Some(Reaction::Eidolon.emoji()),
+        RoleEnum::Live => Some(Reaction::Live.emoji()),
         _ => None,
     }
 }
