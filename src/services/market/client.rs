@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use crate::{
     dbs::redis::{redis_get, redis_set},
     services::http::HttpService,
-    utils::ascii::{ascii_eq_ignore_case, cmp_ignore_ascii_case},
+    utils::ascii::cmp_ignore_ascii_case,
 };
 
 use reqwest::Client;
@@ -63,7 +63,7 @@ pub(super) struct Order {
 pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<Vec<MarketEntry>> {
     if let Some(mut stored) = redis_get::<Vec<MarketEntry>>(pool, key).await {
         stored.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
-        stored.dedup_by(|a, b| ascii_eq_ignore_case(&a.name, &b.name));
+        stored.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
         return Some(stored);
     }
     None
@@ -88,7 +88,7 @@ pub(super) async fn update_items(
         })
         .collect();
     entries.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
-    entries.dedup_by(|a, b| ascii_eq_ignore_case(&a.name, &b.name));
+    entries.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
     redis_set(pool, key, &entries).await;
     let mut guard = items.write().await;
     *guard = entries;

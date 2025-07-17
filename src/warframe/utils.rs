@@ -1,5 +1,3 @@
-use crate::utils::ascii::{ascii_lower, ascii_upper};
-
 pub fn format_time(s: &str) -> String {
     if let Ok(t) = chrono::DateTime::parse_from_rfc3339(s) {
         format!("<t:{}:R>", t.timestamp())
@@ -23,9 +21,9 @@ pub fn title_case(s: &str) -> String {
 
         let mut bytes = part.bytes();
         if let Some(first) = bytes.next() {
-            out.push(ascii_upper(first) as char);
+            out.push(first.to_ascii_uppercase() as char);
             for b in bytes {
-                out.push(ascii_lower(b) as char);
+                out.push(b.to_ascii_lowercase() as char);
             }
         }
     }

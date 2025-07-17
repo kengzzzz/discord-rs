@@ -14,7 +14,7 @@ use crate::{
     context::Context,
     dbs::redis::{redis_get, redis_set},
     services::http::HttpService,
-    utils::ascii::{ascii_eq_ignore_case, cmp_ignore_ascii_case, collect_prefix_icase},
+    utils::ascii::{cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
 use reqwest::Client;
@@ -82,7 +82,7 @@ async fn load_from_redis(pool: &Pool) -> Option<Vec<String>> {
         *ITEMS_ETAG.write().await = stored.etag;
         let mut names = stored.names;
         names.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
-        names.dedup_by(|a, b| ascii_eq_ignore_case(a, b));
+        names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
         return Some(names);
     }
     None
@@ -119,7 +119,7 @@ pub(crate) async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result
         .map(|item| item.name)
         .collect();
     names.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
-    names.dedup_by(|a, b| ascii_eq_ignore_case(a, b));
+    names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
     *ITEMS.write().await = names.clone();
     redis_set(
         pool,
