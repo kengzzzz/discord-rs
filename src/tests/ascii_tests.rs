@@ -1,6 +1,6 @@
 use crate::utils::ascii::{
-    ascii_contains_icase, ascii_eq_ignore_case, ascii_fold, ascii_lower, ascii_starts_with_icase,
-    ascii_upper, cmp_ignore_ascii_case, collect_prefix_icase,
+    ascii_contains_icase, ascii_fold, ascii_lower, ascii_starts_with_icase, ascii_upper,
+    cmp_ignore_ascii_case, collect_prefix_icase,
 };
 
 #[test]
@@ -19,9 +19,6 @@ fn ascii_fold_lowercases() {
 #[test]
 fn ignore_case_comparisons() {
     use std::cmp::Ordering::*;
-
-    assert!(ascii_eq_ignore_case("TeSt", "tEsT"));
-    assert!(!ascii_eq_ignore_case("TeSt", "test1"));
 
     assert_eq!(cmp_ignore_ascii_case("abc", "ABC"), Equal);
     assert_eq!(cmp_ignore_ascii_case("abc", "abd"), Less);

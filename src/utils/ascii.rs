@@ -18,15 +18,6 @@ pub fn ascii_upper(b: u8) -> u8 {
     if b.is_ascii_lowercase() { b & !0x20 } else { b }
 }
 
-pub fn ascii_eq_ignore_case(a: &str, b: &str) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.bytes()
-        .zip(b.bytes())
-        .all(|(x, y)| ascii_fold(x) == ascii_fold(y))
-}
-
 pub fn cmp_ignore_ascii_case(a: &str, b: &str) -> Ordering {
     let ab = a.as_bytes();
     let bb = b.as_bytes();
