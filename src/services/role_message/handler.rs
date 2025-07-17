@@ -68,6 +68,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
         RoleEnum::Helminth,
         RoleEnum::UmbralForma,
         RoleEnum::Eidolon,
+        RoleEnum::Live,
     ];
     let mut info = Vec::with_capacity(roles.len());
     for role_type in roles.iter() {
