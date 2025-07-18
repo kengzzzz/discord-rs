@@ -6,7 +6,6 @@ use twilight_model::{
 use crate::{context::Context, services::ai::AiService};
 use std::{borrow::Cow, sync::Arc};
 
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) fn build_ai_input<'a>(content: &'a str, referenced: Option<&'a str>) -> Cow<'a, str> {
     let trimmed = content.trim();
     if let Some(r) = referenced {
@@ -20,10 +19,8 @@ pub(crate) fn build_ai_input<'a>(content: &'a str, referenced: Option<&'a str>) 
     }
 }
 
-#[cfg_attr(test, allow(dead_code))]
 const MAX_ATTACHMENTS: usize = 5;
 
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<Attachment>) {
     let mut main = message.attachments.clone();
     main.truncate(MAX_ATTACHMENTS);
