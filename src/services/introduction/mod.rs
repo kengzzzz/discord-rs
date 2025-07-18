@@ -50,7 +50,7 @@ impl IntroductionService {
             };
 
             handler::handle_valid_intro(
-                ctx.clone(),
+                &ctx,
                 user.id,
                 guild_id,
                 &intro_channel,

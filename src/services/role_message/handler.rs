@@ -37,9 +37,9 @@ fn embed_equals(a: &Embed, b: &Embed) -> bool {
         }
 }
 
-pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
+pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     let Some(channel) = ChannelService::get_by_type(
-        &ctx,
+        ctx,
         guild_id.get(),
         &crate::dbs::mongo::models::channel::ChannelEnum::UpdateRole,
     )
@@ -51,7 +51,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     let channel_id = Id::new(channel.channel_id);
 
     let mut existing_message: Option<(u64, Message)> = None;
-    if let Some(record) = storage::get(ctx.clone(), guild_id.get()).await {
+    if let Some(record) = storage::get(ctx, guild_id.get()).await {
         if let Ok(resp) = ctx
             .http
             .message(channel_id, Id::new(record.message_id))
@@ -72,7 +72,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     ];
     let mut info = Vec::with_capacity(roles.len());
     for role_type in roles.iter() {
-        if let Some(role) = RoleService::get_by_type(&ctx, guild_id.get(), role_type).await {
+        if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), role_type).await {
             if role.self_assignable {
                 if let (Some(emoji), Some(role_ref)) = (
                     role_enum_to_emoji(role_type),
@@ -137,7 +137,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
                     tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to add reaction");
                 }
             }
-            storage::set(ctx.clone(), guild_id.get(), channel_id.get(), msg_id).await;
+            storage::set(ctx, guild_id.get(), channel_id.get(), msg_id).await;
         }
         return;
     }
@@ -156,7 +156,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
                     tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
                 }
             }
-            storage::set(ctx.clone(), guild_id.get(), channel_id.get(), msg.id.get()).await;
+            storage::set(ctx, guild_id.get(), channel_id.get(), msg.id.get()).await;
         }
     }
 }

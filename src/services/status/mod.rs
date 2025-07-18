@@ -45,7 +45,7 @@ impl StatusService {
             let Some(guild_ref) = ctx.cache.guild(Id::new(channel.guild_id)) else {
                 continue;
             };
-            let Some(embed) = embed::build_embed(ctx.clone(), &guild_ref).await else {
+            let Some(embed) = embed::build_embed(ctx, &guild_ref).await else {
                 continue;
             };
             let channel_id = Id::new(channel.channel_id);
@@ -109,7 +109,8 @@ impl StatusService {
         }
     }
 
-    pub fn spawn(ctx: Arc<Context>) -> JoinHandle<()> {
+    pub fn spawn(ctx: &Arc<Context>) -> JoinHandle<()> {
+        let ctx = ctx.clone();
         tokio::spawn(async move {
             let token = shutdown::get_token();
             Self::update_all(&ctx).await;

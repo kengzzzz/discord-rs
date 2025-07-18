@@ -27,7 +27,7 @@ impl AiService {
         hist::clear_history(pool, user).await;
     }
 
-    pub async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
+    pub async fn set_prompt(ctx: &Arc<Context>, user: Id<UserMarker>, prompt: String) {
         hist::set_prompt(ctx, user, prompt).await;
     }
 
@@ -43,13 +43,13 @@ impl AiService {
         hist::store_history(pool, user, histv).await;
     }
 
-    async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
+    async fn get_prompt(ctx: &Arc<Context>, user: Id<UserMarker>) -> Option<String> {
         hist::get_prompt(ctx, user).await
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn handle_interaction(
-        ctx: Arc<Context>,
+        ctx: &Arc<Context>,
         user_id: Id<UserMarker>,
         user_name: &str,
         message: &str,
@@ -76,7 +76,7 @@ impl AiService {
             }
         }
 
-        let prompt = Self::get_prompt(ctx.clone(), user_id).await;
+        let prompt = Self::get_prompt(ctx, user_id).await;
 
         let mut system = format!(
             "{}\nYou are chatting with {user_name}",
@@ -135,10 +135,10 @@ impl AiService {
 
         let mut parts = vec![Part::text(message)];
         let attachment_urls =
-            attachments::append_attachments(&ctx, &mut parts, attachments, user_name).await?;
+            attachments::append_attachments(ctx, &mut parts, attachments, user_name).await?;
         let ref_owner = ref_author.unwrap_or("referenced user");
         let ref_attachment_urls =
-            attachments::append_attachments(&ctx, &mut parts, ref_attachments, ref_owner).await?;
+            attachments::append_attachments(ctx, &mut parts, ref_attachments, ref_owner).await?;
 
         contents.push(Content::from(parts));
 

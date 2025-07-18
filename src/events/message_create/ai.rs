@@ -89,8 +89,8 @@ pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
     }
 }
 
-pub async fn handle_ai(ctx: Arc<Context>, message: &Message) {
-    if let Some(user) = &ctx.cache.current_user() {
+pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
+    if let Some(user) = ctx.cache.current_user() {
         if message.mentions.iter().any(|m| m.id == user.id) {
             if let Err(e) = ctx.http.create_typing_trigger(message.channel_id).await {
                 tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
@@ -107,7 +107,7 @@ pub async fn handle_ai(ctx: Arc<Context>, message: &Message) {
             let input = build_ai_input(content.as_ref(), ref_text_opt);
             let (attachments, ref_attachments) = collect_attachments(message);
             match AiService::handle_interaction(
-                ctx.clone(),
+                ctx,
                 message.author.id,
                 &message.author.name,
                 input.as_ref(),

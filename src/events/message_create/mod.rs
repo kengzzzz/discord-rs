@@ -14,11 +14,11 @@ pub async fn handle(ctx: Arc<Context>, message: Message) {
         return;
     }
 
-    if quarantine::handle_quarantine(ctx.clone(), &message).await {
+    if quarantine::handle_quarantine(&ctx, &message).await {
         return;
     }
 
-    broadcast::handle_broadcast(ctx.clone(), &message).await;
+    broadcast::handle_broadcast(&ctx, &message).await;
 
-    ai::handle_ai(ctx, &message).await;
+    ai::handle_ai(&ctx, &message).await;
 }

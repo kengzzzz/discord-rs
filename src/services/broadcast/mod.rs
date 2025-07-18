@@ -22,7 +22,7 @@ const TTL: usize = 600;
 const DISPATCH_CONCURRENCY: usize = 5;
 
 impl BroadcastService {
-    pub async fn handle(ctx: Arc<Context>, message: &Message) {
+    pub async fn handle(ctx: &Arc<Context>, message: &Message) {
         let Some(guild_id) = message.guild_id else {
             return;
         };
@@ -35,11 +35,10 @@ impl BroadcastService {
             return;
         };
 
-        let channels = ChannelService::list_by_type(&ctx, &ChannelEnum::Broadcast).await;
+        let channels = ChannelService::list_by_type(ctx, &ChannelEnum::Broadcast).await;
         let records: Vec<(u64, u64)> = stream::iter(channels)
             .filter(|ch| futures::future::ready(ch.channel_id != message.channel_id.get()))
             .map(|channel| {
-                let ctx = ctx.clone();
                 let embeds = embeds.clone();
                 async move {
                     let channel_id = Id::new(channel.channel_id);
@@ -77,7 +76,7 @@ impl BroadcastService {
         redis_set_ex(pool, &key, records, TTL).await;
     }
 
-    pub async fn delete_replicas(ctx: Arc<Context>, messages: &[(u64, u64)]) {
+    pub async fn delete_replicas(ctx: &Arc<Context>, messages: &[(u64, u64)]) {
         for &(_, msg_id) in messages {
             let key = format!("{CACHE_PREFIX}:broadcast:{msg_id}");
             if let Some(list) = redis_get::<Vec<(u64, u64)>>(&ctx.redis, &key).await {

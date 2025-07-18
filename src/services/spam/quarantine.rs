@@ -16,7 +16,7 @@ use crate::{
 use std::sync::Arc;
 
 pub async fn verify(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     guild_id: Id<GuildMarker>,
     user_id: Id<UserMarker>,
     token: &str,
@@ -40,7 +40,7 @@ pub async fn verify(
         .await
     {
         if let Some(role) =
-            RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await
+            RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
         {
             if let Err(e) = ctx
                 .http
@@ -78,7 +78,7 @@ pub async fn verify(
     false
 }
 
-pub async fn get_token(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> Option<String> {
+pub async fn get_token(ctx: &Arc<Context>, guild_id: u64, user_id: u64) -> Option<String> {
     let key = format!("spam:quarantine:{guild_id}:{user_id}");
     if let Some(token) = redis_get::<String>(&ctx.redis, &key).await {
         return Some(token);
@@ -99,7 +99,7 @@ pub async fn get_token(ctx: Arc<Context>, guild_id: u64, user_id: u64) -> Option
 }
 
 pub async fn quarantine_member(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     guild_id: Id<GuildMarker>,
     user_id: Id<UserMarker>,
     token: &str,
@@ -116,7 +116,7 @@ pub async fn quarantine_member(
             }
         }
         if let Some(role) =
-            RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await
+            RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
         {
             if let Err(e) = ctx
                 .http

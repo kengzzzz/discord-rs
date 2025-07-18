@@ -20,7 +20,7 @@ pub(crate) fn next_monday_duration() -> Duration {
 }
 
 pub(crate) fn notify_loop(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     message: &str,
@@ -28,6 +28,7 @@ pub(crate) fn notify_loop(
     token: CancellationToken,
 ) -> JoinHandle<()> {
     let msg = message.to_string();
+    let ctx = ctx.clone();
     tokio::spawn(async move {
         loop {
             let delay = calc_delay();
@@ -53,12 +54,13 @@ pub(crate) fn notify_loop(
 }
 
 pub(crate) fn notify_umbra_loop(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     channel_id: Id<ChannelMarker>,
     role_id: u64,
     mut rx: watch::Receiver<bool>,
     token: CancellationToken,
 ) -> JoinHandle<()> {
+    let ctx = ctx.clone();
     tokio::spawn(async move {
         let mut last = *rx.borrow();
         loop {

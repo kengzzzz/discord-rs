@@ -29,7 +29,7 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionAdd) {
         return;
     }
 
-    if let Some(record) = role_message::storage::get(ctx.clone(), guild_id.get()).await {
+    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await {
         if record.message_id != event.message_id.get() {
             return;
         }

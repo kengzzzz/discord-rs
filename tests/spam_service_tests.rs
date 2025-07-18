@@ -81,7 +81,7 @@ async fn test_spam_log_threshold() {
     let mut token = None;
     for i in 0..4u64 {
         let msg = make_message(i + 1, i + 10, 5, "hello");
-        token = spam::log::log_message(ctx.clone(), 1, &msg).await;
+        token = spam::log::log_message(&ctx, 1, &msg).await;
     }
     assert!(token.is_some());
     assert_eq!(token.unwrap().len(), 6);
@@ -93,31 +93,15 @@ async fn test_spam_log_threshold() {
 async fn test_spam_log_reset() {
     let ctx = Arc::new(test_context().await);
     let msg1 = make_message(1, 100, 6, "hi");
-    assert!(
-        spam::log::log_message(ctx.clone(), 1, &msg1)
-            .await
-            .is_none()
-    );
+    assert!(spam::log::log_message(&ctx, 1, &msg1).await.is_none());
     let msg2 = make_message(2, 101, 6, "hi");
-    assert!(
-        spam::log::log_message(ctx.clone(), 1, &msg2)
-            .await
-            .is_none()
-    );
+    assert!(spam::log::log_message(&ctx, 1, &msg2).await.is_none());
     let msg3 = make_message(3, 102, 6, "bye");
-    assert!(
-        spam::log::log_message(ctx.clone(), 1, &msg3)
-            .await
-            .is_none()
-    );
+    assert!(spam::log::log_message(&ctx, 1, &msg3).await.is_none());
     let msg4 = make_message(4, 103, 6, "hi");
-    assert!(
-        spam::log::log_message(ctx.clone(), 1, &msg4)
-            .await
-            .is_none()
-    );
+    assert!(spam::log::log_message(&ctx, 1, &msg4).await.is_none());
     let msg5 = make_message(5, 104, 6, "hi");
-    let tok = spam::log::log_message(ctx, 1, &msg5).await;
+    let tok = spam::log::log_message(&ctx, 1, &msg5).await;
     assert!(tok.is_none());
     let pool = discord_bot::dbs::redis::new_pool();
     spam::quarantine::purge_cache(&pool, 1, 6).await;

@@ -246,6 +246,6 @@ async fn test_delete_replicas() {
     let ctx = Arc::new(test_context().await);
     let key = format!("{CACHE_PREFIX}:broadcast:1");
     ctx.redis_set(&key, &vec![(2u64, 3u64)]).await;
-    BroadcastService::delete_replicas(ctx.clone(), &[(0, 1)]).await;
+    BroadcastService::delete_replicas(&ctx, &[(0, 1)]).await;
     assert!(ctx.redis_get::<Vec<(u64, u64)>>(&key).await.is_none());
 }

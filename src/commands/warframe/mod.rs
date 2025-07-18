@@ -68,7 +68,7 @@ impl WarframeCommand {
                 let results = if sub == "build" {
                     BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await
                 } else {
-                    MarketService::search_with_update(ctx.clone(), user_input).await
+                    MarketService::search_with_update(&ctx, user_input).await
                 };
                 choices.extend(results.into_iter().map(|item| CommandOptionChoice {
                     name: item.clone(),

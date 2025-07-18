@@ -57,7 +57,7 @@ impl WarframeMarketCommand {
         let guild_id = interaction.guild_id.context("parse guild_id failed")?;
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             if let Some(session) =
-                MarketService::create_session(ctx.clone(), &self.item, self.kind.into()).await?
+                MarketService::create_session(&ctx, &self.item, self.kind.into()).await?
             {
                 let embed = MarketService::embed_for_session(&guild_ref, &session)?;
                 let components = MarketService::components(&session);

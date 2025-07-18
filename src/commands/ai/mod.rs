@@ -76,7 +76,7 @@ impl AiCommand {
             match command {
                 AiCommand::Prompt(c) => {
                     if let Some(user) = interaction.author() {
-                        AiService::set_prompt(ctx.clone(), user.id, c.prompt).await;
+                        AiService::set_prompt(&ctx, user.id, c.prompt).await;
                         let embeds = AiService::ai_embeds("Prompt updated")?;
                         ctx.http
                             .interaction(interaction.application_id)
@@ -89,7 +89,7 @@ impl AiCommand {
                     let user = interaction.author().context("no author")?;
                     let attachments = c.attachment.into_iter().collect();
                     let reply = AiService::handle_interaction(
-                        ctx.clone(),
+                        &ctx,
                         user.id,
                         &user.name,
                         &c.message,

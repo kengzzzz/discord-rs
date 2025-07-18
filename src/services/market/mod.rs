@@ -97,7 +97,7 @@ impl MarketService {
     }
 
     pub async fn create_session(
-        ctx: Arc<Context>,
+        ctx: &Arc<Context>,
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Option<MarketSession>> {
@@ -204,7 +204,7 @@ impl MarketService {
         Self::spawn_expiration(message_id, token);
     }
 
-    async fn refresh(ctx: Arc<Context>, session: &mut MarketSession) {
+    async fn refresh(ctx: &Arc<Context>, session: &mut MarketSession) {
         if let Ok((orders, max)) =
             client::fetch_orders_map(&ctx.reqwest, &session.url, &session.kind).await
         {
@@ -256,7 +256,7 @@ impl MarketService {
                 }
             }
             "market_refresh" => {
-                Self::refresh(ctx.clone(), &mut session).await;
+                Self::refresh(&ctx, &mut session).await;
             }
             _ => {}
         }
