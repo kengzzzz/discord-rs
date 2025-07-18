@@ -2,8 +2,6 @@
 use self::tests::BASE_URL_OVERRIDE;
 use serde::{Deserialize, Serialize};
 
-use crate::services::http::HttpService;
-
 const BASE_URL: &str = "https://api.warframestat.us/pc";
 
 #[derive(Serialize, Deserialize)]
@@ -50,7 +48,14 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
         }
     };
     let url = format!("{base}/{path}");
-    Ok(HttpService::get(client, url).await?.json::<T>().await?)
+    let result = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<T>()
+        .await?;
+    Ok(result)
 }
 
 pub async fn news(client: &reqwest::Client) -> anyhow::Result<Vec<NewsItem>> {

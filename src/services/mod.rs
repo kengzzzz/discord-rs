@@ -3,7 +3,6 @@ pub mod broadcast;
 pub mod build;
 pub mod channel;
 pub mod health;
-pub mod http;
 pub mod introduction;
 pub mod latency;
 pub mod market;

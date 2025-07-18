@@ -13,7 +13,6 @@ use tokio::sync::RwLock;
 use crate::{
     context::Context,
     dbs::redis::{redis_get, redis_set},
-    services::http::HttpService,
     utils::ascii::{cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
@@ -96,7 +95,12 @@ pub(crate) async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result
             headers.insert(IF_NONE_MATCH, v);
         }
     }
-    let resp = HttpService::get_with_headers(client, items_url(), headers).await?;
+    let resp = client
+        .get(items_url())
+        .headers(headers)
+        .send()
+        .await?
+        .error_for_status()?;
     if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
         LAST_UPDATE.store(
             SystemTime::now()

@@ -7,7 +7,6 @@ use tokio::sync::RwLock;
 
 use crate::{
     dbs::redis::{redis_get, redis_set},
-    services::http::HttpService,
     utils::ascii::cmp_ignore_ascii_case,
 };
 
@@ -76,7 +75,7 @@ pub(super) async fn update_items(
     last_update: &Lazy<AtomicU64>,
     pool: &Pool,
 ) -> anyhow::Result<()> {
-    let resp = HttpService::get(client, ITEMS_URL).await?;
+    let resp = client.get(ITEMS_URL).send().await?.error_for_status()?;
     let data: ItemsResponse = resp.json().await?;
     let mut entries: Vec<MarketEntry> = data
         .payload
@@ -103,11 +102,11 @@ pub(super) async fn update_items(
 }
 
 pub(super) async fn fetch_orders(client: &Client, url: &str) -> anyhow::Result<Vec<Order>> {
-    let resp = HttpService::get(
-        client,
-        format!("https://api.warframe.market/v1/items/{url}/orders"),
-    )
-    .await?;
+    let resp = client
+        .get(format!("https://api.warframe.market/v1/items/{url}/orders"))
+        .send()
+        .await?
+        .error_for_status()?;
     let data: OrdersResponse = resp.json().await?;
     Ok(data.payload.orders)
 }
