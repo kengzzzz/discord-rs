@@ -30,7 +30,7 @@ pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>, user_na
             }
             history.push_front(ChatEntry::new(
                 "model".to_string(),
-                format!("Summary so far: {summary}"),
+                format!("Summary so far:\n{summary}"),
                 Vec::new(),
                 None,
                 None,
