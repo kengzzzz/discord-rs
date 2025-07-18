@@ -16,6 +16,7 @@ async fn test_watcher_mock() {
     let calls = std::sync::Arc::new(tokio::sync::Mutex::new(0u32));
     let calls_clone = calls.clone();
     spawn_watcher_mock(
+        &map,
         "test",
         ReceiverStream::new(rx),
         move |_| {
@@ -47,6 +48,7 @@ async fn test_watcher_resume_token_value() {
     let (tx, rx) = tokio::sync::mpsc::channel(2);
     let token = CancellationToken::new();
     spawn_watcher_mock(
+        &map,
         "resume-value",
         ReceiverStream::new(rx),
         |_| async {},
@@ -79,6 +81,7 @@ async fn test_watcher_restarts_after_error() {
     let calls = std::sync::Arc::new(tokio::sync::Mutex::new(0u32));
     let calls_clone = calls.clone();
     spawn_watcher_mock(
+        &map,
         "restart-test",
         ReceiverStream::new(rx),
         move |_| {

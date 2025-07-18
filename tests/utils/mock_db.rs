@@ -3,34 +3,28 @@
 use futures::Stream;
 use futures::StreamExt;
 use mongodb::change_stream::event::ChangeStreamEvent;
-use once_cell::sync::OnceCell;
 use serde::de::DeserializeOwned;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
 use tokio_util::sync::CancellationToken;
 
-static REDIS_MOCK: OnceCell<Arc<Mutex<HashMap<String, String>>>> = OnceCell::new();
-
 pub fn init_mock() -> Arc<Mutex<HashMap<String, String>>> {
-    if let Some(map) = REDIS_MOCK.get() {
-        map.clone()
-    } else {
-        let map = Arc::new(Mutex::new(HashMap::new()));
-        let _ = REDIS_MOCK.set(map.clone());
-        map
-    }
+    Arc::new(Mutex::new(HashMap::new()))
 }
 
-async fn redis_set_mock<T: serde::Serialize + Sync>(key: &str, value: &T) {
-    if let Some(map) = REDIS_MOCK.get() {
-        if let Ok(json) = serde_json::to_string(value) {
-            map.lock().await.insert(key.to_string(), json);
-        }
+async fn redis_set_mock<T: serde::Serialize + Sync>(
+    map: &Arc<Mutex<HashMap<String, String>>>,
+    key: &str,
+    value: &T,
+) {
+    if let Ok(json) = serde_json::to_string(value) {
+        map.lock().await.insert(key.to_string(), json);
     }
 }
 
 pub async fn spawn_watcher_mock<T, St, F, Fut>(
+    map: &Arc<Mutex<HashMap<String, String>>>,
     name: &str,
     mut stream: St,
     mut handler: F,
@@ -43,6 +37,7 @@ where
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
     let redis_key = format!("changestream:resume:{name}");
+    let map = map.clone();
     tokio::spawn(async move {
         while !token.is_cancelled() {
             while let Some(evt_res) = tokio::select! {
@@ -53,7 +48,7 @@ where
                     Ok(evt) => {
                         let resume_token = evt.id.clone();
                         handler(evt).await;
-                        redis_set_mock(&redis_key, &resume_token).await;
+                        redis_set_mock(&map, &redis_key, &resume_token).await;
                     }
                     Err(_) => break,
                 }
