@@ -25,13 +25,9 @@ pub fn cmp_ignore_ascii_case(a: &str, b: &str) -> Ordering {
 }
 
 pub fn ascii_starts_with_icase(hay: &str, needle: &str) -> bool {
-    if needle.len() > hay.len() {
-        return false;
-    }
-    hay.bytes()
-        .take(needle.len())
-        .zip(needle.bytes())
-        .all(|(h, n)| h == n || h.eq_ignore_ascii_case(&n))
+    hay.as_bytes()
+        .get(..needle.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(needle.as_bytes()))
 }
 
 pub fn ascii_contains_icase(hay: &str, needle: &str) -> bool {
