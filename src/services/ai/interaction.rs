@@ -10,6 +10,18 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use twilight_model::channel::Attachment;
 
+pub(super) struct BuildRequest<'a> {
+    pub ctx: &'a Arc<Context>,
+    pub prompt: Option<String>,
+    pub user_name: &'a str,
+    pub message: &'a str,
+    pub history: &'a VecDeque<ChatEntry>,
+    pub attachments: Vec<Attachment>,
+    pub ref_text: Option<&'a str>,
+    pub ref_attachments: Vec<Attachment>,
+    pub ref_author: Option<&'a str>,
+}
+
 pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>) {
     if history.len() > MAX_HISTORY {
         if let Ok(summary) = client::summarize(history.make_contiguous()).await {
@@ -28,18 +40,21 @@ pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn build_request(
-    ctx: &Arc<Context>,
-    prompt: Option<String>,
-    user_name: &str,
-    message: &str,
-    history: &VecDeque<ChatEntry>,
-    attachments: Vec<Attachment>,
-    _ref_text: Option<&str>,
-    ref_attachments: Vec<Attachment>,
-    ref_author: Option<&str>,
+    args: BuildRequest<'_>,
 ) -> anyhow::Result<(String, Vec<Content>, Vec<String>, Vec<String>)> {
+    let BuildRequest {
+        ctx,
+        prompt,
+        user_name,
+        message,
+        history,
+        attachments,
+        ref_text: _ref_text,
+        ref_attachments,
+        ref_author,
+    } = args;
+
     let mut system = format!(
         "{}\nYou are chatting with {user_name}",
         GOOGLE_CONFIGS.base_prompt

@@ -74,18 +74,19 @@ impl AiService {
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 
-        let (system, contents, attachment_urls, ref_attachment_urls) = interaction::build_request(
+        let args = interaction::BuildRequest {
             ctx,
             prompt,
             user_name,
             message,
-            &history,
+            history: &history,
             attachments,
             ref_text,
             ref_attachments,
             ref_author,
-        )
-        .await?;
+        };
+        let (system, contents, attachment_urls, ref_attachment_urls) =
+            interaction::build_request(args).await?;
 
         let text = interaction::process_response(&system, contents).await?;
 
