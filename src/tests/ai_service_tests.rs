@@ -7,7 +7,7 @@ use twilight_model::id::{Id, marker::UserMarker};
 
 use crate::context::Context;
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
-use crate::services::ai::{AiService, history, models::ChatEntry};
+use crate::services::ai::{AiInteraction, AiService, history, models::ChatEntry};
 use std::collections::VecDeque;
 
 fn mock_response(text: &str) -> Response {
@@ -46,13 +46,15 @@ async fn test_prompt_and_history() {
 
     let text = AiService::handle_interaction(
         &ctx,
-        user,
-        "Tester",
-        "hello",
-        Vec::new(),
-        None,
-        Vec::new(),
-        None,
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "hello",
+            attachments: Vec::new(),
+            ref_text: None,
+            ref_attachments: Vec::new(),
+            ref_author: None,
+        },
     )
     .await
     .unwrap();
@@ -76,13 +78,15 @@ async fn test_reply_fields() {
 
     let _ = AiService::handle_interaction(
         &ctx,
-        user,
-        "Tester",
-        "hi",
-        Vec::new(),
-        Some("hello"),
-        Vec::new(),
-        Some("Tester2"),
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "hi",
+            attachments: Vec::new(),
+            ref_text: Some("hello"),
+            ref_attachments: Vec::new(),
+            ref_author: Some("Tester2"),
+        },
     )
     .await;
 
@@ -116,13 +120,15 @@ async fn test_summary_rotation() {
 
     let _ = AiService::handle_interaction(
         &ctx,
-        user,
-        "Tester",
-        "msg",
-        Vec::new(),
-        None,
-        Vec::new(),
-        None,
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "msg",
+            attachments: Vec::new(),
+            ref_text: None,
+            ref_attachments: Vec::new(),
+            ref_author: None,
+        },
     )
     .await;
     let hist = history::load_history(&ctx.redis, user).await;

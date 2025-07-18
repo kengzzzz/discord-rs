@@ -5,7 +5,11 @@ use twilight_model::{
     channel::message::MessageFlags,
 };
 
-use crate::{context::Context, defer_interaction, services::ai::AiService};
+use crate::{
+    context::Context,
+    defer_interaction,
+    services::ai::{AiInteraction, AiService},
+};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -90,13 +94,15 @@ impl AiCommand {
                     let attachments = c.attachment.into_iter().collect();
                     let reply = AiService::handle_interaction(
                         &ctx,
-                        user.id,
-                        &user.name,
-                        &c.message,
-                        attachments,
-                        None,
-                        Vec::new(),
-                        None,
+                        AiInteraction {
+                            user_id: user.id,
+                            user_name: &user.name,
+                            message: &c.message,
+                            attachments,
+                            ref_text: None,
+                            ref_attachments: Vec::new(),
+                            ref_author: None,
+                        },
                     )
                     .await?;
                     for embed in AiService::ai_embeds(&reply)? {

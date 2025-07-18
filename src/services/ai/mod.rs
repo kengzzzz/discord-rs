@@ -17,6 +17,16 @@ pub mod models;
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 6;
 
+pub struct AiInteraction<'a> {
+    pub user_id: Id<UserMarker>,
+    pub user_name: &'a str,
+    pub message: &'a str,
+    pub attachments: Vec<Attachment>,
+    pub ref_text: Option<&'a str>,
+    pub ref_attachments: Vec<Attachment>,
+    pub ref_author: Option<&'a str>,
+}
+
 pub struct AiService;
 
 impl AiService {
@@ -44,17 +54,20 @@ impl AiService {
         hist::get_prompt(ctx, user).await
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn handle_interaction(
         ctx: &Arc<Context>,
-        user_id: Id<UserMarker>,
-        user_name: &str,
-        message: &str,
-        attachments: Vec<Attachment>,
-        ref_text: Option<&str>,
-        ref_attachments: Vec<Attachment>,
-        ref_author: Option<&str>,
+        interaction: AiInteraction<'_>,
     ) -> anyhow::Result<String> {
+        let AiInteraction {
+            user_id,
+            user_name,
+            message,
+            attachments,
+            ref_text,
+            ref_attachments,
+            ref_author,
+        } = interaction;
+
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
         interaction::summarize_history(&mut history).await;

@@ -3,7 +3,10 @@ use twilight_model::{
     id::{Id, marker::UserMarker},
 };
 
-use crate::{context::Context, services::ai::AiService};
+use crate::{
+    context::Context,
+    services::ai::{AiInteraction, AiService},
+};
 use std::{borrow::Cow, sync::Arc};
 
 pub(crate) fn build_ai_input<'a>(content: &'a str, referenced: Option<&'a str>) -> Cow<'a, str> {
@@ -105,13 +108,15 @@ pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
             let (attachments, ref_attachments) = collect_attachments(message);
             match AiService::handle_interaction(
                 ctx,
-                message.author.id,
-                &message.author.name,
-                input.as_ref(),
-                attachments,
-                ref_text_opt,
-                ref_attachments,
-                ref_author,
+                AiInteraction {
+                    user_id: message.author.id,
+                    user_name: &message.author.name,
+                    message: input.as_ref(),
+                    attachments,
+                    ref_text: ref_text_opt,
+                    ref_attachments,
+                    ref_author,
+                },
             )
             .await
             {
