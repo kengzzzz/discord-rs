@@ -15,7 +15,7 @@ fn bench_cmp_ignore_ascii_case(c: &mut Criterion) {
     ];
 
     for &(a, b) in &cases {
-        let id = format!("\"{}\" vs \"{}\"", a, b);
+        let id = format!("\"{a}\" vs \"{b}\"");
         group.bench_with_input(
             BenchmarkId::new("cmp_ignore_ascii_case", id),
             &(a, b),
@@ -57,7 +57,7 @@ fn bench_ascii_starts_with_icase(c: &mut Criterion) {
 fn bench_collect_prefix_icase(c: &mut Criterion) {
     let mut group = c.benchmark_group("collect_prefix_icase");
 
-    let data: Vec<String> = (0..10_000).map(|i| format!("str{:05}", i)).collect();
+    let data: Vec<String> = (0..10_000).map(|i| format!("str{i:05}")).collect();
 
     let cases = [
         ("empty", ""),
