@@ -1,4 +1,6 @@
+use chrono::Utc;
 use deadpool_redis::Pool;
+use google_ai_rs::{Content, Part};
 use twilight_model::id::{Id, marker::UserMarker};
 
 #[cfg(test)]
@@ -131,6 +133,55 @@ pub(crate) async fn purge_prompt_cache(_pool: &Pool, user_id: u64) {
         let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
         redis_delete(_pool, &key).await;
     }
+}
+
+pub(crate) async fn parse_history<'a>(
+    history: impl IntoIterator<Item = &'a ChatEntry>,
+    user_name: &str,
+) -> Vec<Content> {
+    let now = Utc::now();
+    history
+        .into_iter()
+        .map(|c| {
+            let mut parts = vec![Part::text(&c.text)];
+            let expired = now - c.created_at > chrono::Duration::hours(48);
+            for url in &c.attachments {
+                if expired {
+                    let label =
+                        format!("Attachment from {user_name} is expired and no longer accessible.");
+                    parts.push(Part::text(&label));
+                } else {
+                    let label = format!("Attachment from {user_name}:");
+                    parts.push(Part::text(&label));
+                    parts.push(Part::file_data("", url));
+                }
+            }
+            if let Some(ref_text) = &c.ref_text {
+                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                let label = format!("In reply to {owner}:");
+                parts.push(Part::text(&label));
+                parts.push(Part::text(ref_text));
+            }
+            if let Some(ref_urls) = &c.ref_attachments {
+                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                for url in ref_urls {
+                    if expired {
+                        let label =
+                            format!("Attachment from {owner} is expired and no longer accessible.");
+                        parts.push(Part::text(&label));
+                    } else {
+                        let label = format!("Attachment from {owner}:");
+                        parts.push(Part::text(&label));
+                        parts.push(Part::file_data("", url));
+                    }
+                }
+            }
+            Content {
+                role: c.role.clone(),
+                parts,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

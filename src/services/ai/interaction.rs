@@ -3,8 +3,8 @@ use super::{
     client::{self, MODELS, extract_text},
     models::ChatEntry,
 };
-use crate::configs::google::GOOGLE_CONFIGS;
 use crate::context::Context;
+use crate::{configs::google::GOOGLE_CONFIGS, services::ai::history::parse_history};
 use google_ai_rs::{Content, Part};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -22,15 +22,15 @@ pub(super) struct BuildRequest<'a> {
     pub ref_author: Option<&'a str>,
 }
 
-pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>) {
+pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>, user_name: &str) {
     if history.len() > MAX_HISTORY {
-        if let Ok(summary) = client::summarize(history.make_contiguous()).await {
+        if let Ok(summary) = client::summarize(history, user_name).await {
             while history.len() > KEEP_RECENT {
                 history.pop_front();
             }
             history.push_front(ChatEntry::new(
-                "user".to_string(),
-                format!("Summary so far: {summary}"),
+                "model".to_string(),
+                format!("Summary so far:\n{summary}"),
                 Vec::new(),
                 None,
                 None,
@@ -64,49 +64,7 @@ pub(super) async fn build_request(
         system.push_str(&p);
     }
 
-    let now = chrono::Utc::now();
-    let mut contents: Vec<Content> = history
-        .iter()
-        .map(|c| {
-            let mut parts = vec![Part::text(&c.text)];
-            let expired = now - c.created_at > chrono::Duration::hours(48);
-            for url in &c.attachments {
-                if expired {
-                    let label =
-                        format!("Attachment from {user_name} is expired and no longer accessible.");
-                    parts.push(Part::text(&label));
-                } else {
-                    let label = format!("Attachment from {user_name}:");
-                    parts.push(Part::text(&label));
-                    parts.push(Part::file_data("", url));
-                }
-            }
-            if let Some(ref_text) = &c.ref_text {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
-                let label = format!("In reply to {owner}:");
-                parts.push(Part::text(&label));
-                parts.push(Part::text(ref_text));
-            }
-            if let Some(ref_urls) = &c.ref_attachments {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
-                for url in ref_urls {
-                    if expired {
-                        let label =
-                            format!("Attachment from {owner} is expired and no longer accessible.");
-                        parts.push(Part::text(&label));
-                    } else {
-                        let label = format!("Attachment from {owner}:");
-                        parts.push(Part::text(&label));
-                        parts.push(Part::file_data("", url));
-                    }
-                }
-            }
-            Content {
-                role: c.role.clone(),
-                parts,
-            }
-        })
-        .collect();
+    let mut contents = parse_history(history, user_name).await;
 
     let mut parts = vec![Part::text(message)];
     let attachment_urls =
