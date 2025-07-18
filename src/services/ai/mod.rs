@@ -70,7 +70,7 @@ impl AiService {
 
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
-        interaction::summarize_history(&mut history).await;
+        interaction::summarize_history(&mut history, user_name).await;
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 

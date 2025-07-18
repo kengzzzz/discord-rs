@@ -1,11 +1,15 @@
+use std::collections::VecDeque;
+
 use super::models::ChatEntry;
 #[cfg(test)]
 use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;
-use chrono::{Duration, Utc};
-use google_ai_rs::Client;
-use google_ai_rs::{Content, Part, genai::Response};
+use crate::services::ai::history::parse_history;
+use google_ai_rs::genai::Response;
+use google_ai_rs::{Client, Content, Part};
 use tokio::sync::OnceCell;
+
+const SYSTEM: &str = "You are a conversation summarizer. Given the chat history, produce a concise summary in English only, formatted as bullet points. Do NOT include any greetings, sign-offs, full sentences, or explanations—just the key facts.";
 
 pub(super) static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
@@ -50,59 +54,23 @@ pub(super) fn extract_text(response: Response) -> String {
         .unwrap_or_default()
 }
 
-pub(super) async fn summarize(history: &[ChatEntry]) -> anyhow::Result<String> {
+pub(super) async fn summarize(
+    history: &mut VecDeque<ChatEntry>,
+    user_name: &str,
+) -> anyhow::Result<String> {
     #[cfg(test)]
     if let Some(f) = SUMMARIZE_OVERRIDE.get() {
-        return Ok(f(history));
+        return Ok(f(history.make_contiguous()));
     }
 
     let client = client().await?;
-    let now = Utc::now();
-    let contents: Vec<Content> = history
-        .iter()
-        .map(|c| {
-            let mut parts = vec![Part::text(&c.text)];
-            let expired = now - c.created_at > Duration::hours(48);
-            for url in &c.attachments {
-                if expired {
-                    parts.push(Part::text("Attachment expired and no longer accessible."));
-                } else {
-                    parts.push(Part::text("Attachment:"));
-                    parts.push(Part::file_data("", url));
-                }
-            }
-            if let Some(ref_text) = &c.ref_text {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
-                let label = format!("In reply to {owner}:");
-                parts.push(Part::text(&label));
-                parts.push(Part::text(ref_text));
-            }
-            if let Some(ref_urls) = &c.ref_attachments {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
-                for url in ref_urls {
-                    if expired {
-                        let label =
-                            format!("Attachment from {owner} is expired and no longer accessible.");
-                        parts.push(Part::text(&label));
-                    } else {
-                        let label = format!("Attachment from {owner}:");
-                        parts.push(Part::text(&label));
-                        parts.push(Part::file_data("", url));
-                    }
-                }
-            }
-            Content {
-                role: c.role.clone(),
-                parts,
-            }
-        })
-        .collect();
-    let system = "Summarize the conversation so far in a concise form. Include brief mentions of any attachments or quotes.";
+    let mut contents = parse_history(&*history, user_name).await;
+    contents.push(Content::from(Part::text(SYSTEM)));
 
     for name in SUMMARY_MODELS {
         let model = client
             .generative_model(name)
-            .with_system_instruction(system);
+            .with_system_instruction(SYSTEM);
         match model.generate_content(contents.clone()).await {
             Ok(resp) => return Ok(extract_text(resp)),
             Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
