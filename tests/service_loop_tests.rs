@@ -19,6 +19,7 @@ async fn test_watcher_reconnect_and_shutdown() {
     let calls = std::sync::Arc::new(tokio::sync::Mutex::new(0u32));
     let calls_clone = calls.clone();
     spawn_watcher_mock(
+        &map,
         "reconnect",
         ReceiverStream::new(rx),
         move |_| {
@@ -62,6 +63,7 @@ async fn test_watcher_ignores_after_shutdown() {
     let calls = std::sync::Arc::new(tokio::sync::Mutex::new(0u32));
     let calls_clone = calls.clone();
     spawn_watcher_mock(
+        &map,
         "shutdown",
         ReceiverStream::new(rx),
         move |_| {

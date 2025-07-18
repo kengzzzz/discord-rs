@@ -26,7 +26,7 @@ pub async fn clear_log(pool: &Pool, guild_id: u64, user_id: u64) {
     redis_delete(pool, &key).await;
 }
 
-pub async fn log_message(ctx: Arc<Context>, guild_id: u64, message: &Message) -> Option<String> {
+pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -> Option<String> {
     let hash = hash_message(message).await;
     let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
     let now = Utc::now().timestamp();
@@ -56,15 +56,11 @@ pub async fn log_message(ctx: Arc<Context>, guild_id: u64, message: &Message) ->
 
     if record.histories.len() >= SPAM_LIMIT {
         let to_delete = record.histories.clone();
-        BroadcastService::delete_replicas(ctx.clone(), &to_delete).await;
-        let ctx_clone = ctx.clone();
+        BroadcastService::delete_replicas(ctx, &to_delete).await;
+        let ctx = ctx.clone();
         tokio::spawn(async move {
             for (c_id, m_id) in to_delete {
-                if let Err(e) = ctx_clone
-                    .http
-                    .delete_message(Id::new(c_id), Id::new(m_id))
-                    .await
-                {
+                if let Err(e) = ctx.http.delete_message(Id::new(c_id), Id::new(m_id)).await {
                     tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
                 }
             }

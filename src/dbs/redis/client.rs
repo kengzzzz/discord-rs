@@ -1,8 +1,5 @@
-#[allow(unused_imports)]
 use anyhow::Context as _;
-#[allow(unused_imports)]
 use deadpool_redis::{Config, Pool, Runtime, redis::cmd};
-#[allow(unused_imports)]
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::configs::redis::REDIS_CONFIGS;

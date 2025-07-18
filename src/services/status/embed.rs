@@ -8,7 +8,7 @@ use twilight_model::{
 use crate::{context::Context, warframe};
 
 pub async fn build_embed(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> Option<Embed> {
     match warframe::status_embed(ctx, guild).await {

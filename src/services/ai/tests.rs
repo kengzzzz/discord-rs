@@ -1,5 +1,5 @@
 use super::models::ChatEntry;
-use super::*;
+use google_ai_rs::Content;
 use once_cell::sync::OnceCell as SyncOnceCell;
 
 pub(super) static GENERATE_OVERRIDE: SyncOnceCell<

@@ -26,12 +26,8 @@ impl IntroductionService {
             let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
             let user = interaction.author().context("no author")?;
 
-            let Some(intro_channel) = ChannelService::get_by_type(
-                ctx.clone(),
-                guild_id.get(),
-                &ChannelEnum::Introduction,
-            )
-            .await
+            let Some(intro_channel) =
+                ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Introduction).await
             else {
                 if let Ok(embed) = self::embed::intro_unavailable_embed(&guild_ref) {
                     ctx.http
@@ -54,7 +50,7 @@ impl IntroductionService {
             };
 
             handler::handle_valid_intro(
-                ctx.clone(),
+                &ctx,
                 user.id,
                 guild_id,
                 &intro_channel,

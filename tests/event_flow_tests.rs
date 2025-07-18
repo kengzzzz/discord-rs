@@ -11,7 +11,7 @@ mod utils;
 use discord_bot;
 use discord_bot::configs::CACHE_PREFIX;
 use utils::context::test_context;
-use utils::mock_db::spawn_watcher_mock;
+use utils::mock_db::{init_mock, spawn_watcher_mock};
 
 #[tokio::test]
 async fn test_ping_command_flow() {
@@ -65,6 +65,7 @@ async fn test_channel_watcher_purge_cache() {
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     let token = CancellationToken::new();
     spawn_watcher_mock(
+        &init_mock(),
         "channels",
         ReceiverStream::new(rx),
         move |evt: ChangeStreamEvent<discord_bot::dbs::mongo::models::channel::Channel>| {

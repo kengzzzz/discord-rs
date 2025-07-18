@@ -17,7 +17,7 @@ use super::embed;
 use super::form::IntroDetails;
 
 pub async fn handle_valid_intro(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     user_id: Id<UserMarker>,
     guild_id: Id<GuildMarker>,
     intro_channel: &Channel,

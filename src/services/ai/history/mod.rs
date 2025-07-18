@@ -54,10 +54,10 @@ pub(crate) async fn store_history(_pool: &Pool, user: Id<UserMarker>, hist: &Vec
     }
 }
 
-pub(crate) async fn get_prompt(ctx: Arc<Context>, user: Id<UserMarker>) -> Option<String> {
+pub(crate) async fn get_prompt(ctx: &Arc<Context>, user: Id<UserMarker>) -> Option<String> {
     #[cfg(test)]
     {
-        let _ = ctx; // silence unused
+        let _ = ctx;
         return PROMPT_STORE.read().await.get(&user.get()).cloned();
     }
     #[cfg(not(test))]
@@ -95,10 +95,10 @@ pub(crate) async fn clear_history(_pool: &Pool, user: Id<UserMarker>) {
     }
 }
 
-pub(crate) async fn set_prompt(ctx: Arc<Context>, user: Id<UserMarker>, prompt: String) {
+pub(crate) async fn set_prompt(ctx: &Arc<Context>, user: Id<UserMarker>, prompt: String) {
     #[cfg(test)]
     {
-        let _ = &ctx;
+        let _ = ctx;
         PROMPT_STORE.write().await.insert(user.get(), prompt);
     }
     #[cfg(not(test))]

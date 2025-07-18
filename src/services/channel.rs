@@ -10,12 +10,11 @@ use crate::{
         redis::{redis_delete, redis_get, redis_set},
     },
 };
-use std::sync::Arc;
 
 pub struct ChannelService;
 
 impl ChannelService {
-    pub async fn get(ctx: Arc<Context>, channel_id: u64) -> Vec<Channel> {
+    pub async fn get(ctx: &Context, channel_id: u64) -> Vec<Channel> {
         let redis_key = format!("{CACHE_PREFIX}:channel:{channel_id}");
 
         if let Some(Some(channels)) = redis_get(&ctx.redis, &redis_key).await {
@@ -48,7 +47,7 @@ impl ChannelService {
     }
 
     pub async fn get_by_type(
-        ctx: Arc<Context>,
+        ctx: &Context,
         guild_id: u64,
         channel_type: &ChannelEnum,
     ) -> Option<Channel> {
@@ -91,7 +90,7 @@ impl ChannelService {
         redis_delete(pool, &redis_key).await;
     }
 
-    pub async fn list_by_type(ctx: Arc<Context>, channel_type: &ChannelEnum) -> Vec<Channel> {
+    pub async fn list_by_type(ctx: &Context, channel_type: &ChannelEnum) -> Vec<Channel> {
         let redis_key = format!("{}:channels-by-type:{}", CACHE_PREFIX, channel_type.value());
 
         if let Some(Some(channels)) = redis_get(&ctx.redis, &redis_key).await {

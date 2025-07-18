@@ -57,7 +57,7 @@ impl MarketService {
         collect_prefix_icase(&items, prefix, |e| &e.name)
     }
 
-    async fn maybe_refresh(ctx: Arc<Context>) {
+    async fn maybe_refresh(ctx: &Arc<Context>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -73,7 +73,7 @@ impl MarketService {
         }
     }
 
-    pub async fn search_with_update(ctx: Arc<Context>, prefix: &str) -> Vec<String> {
+    pub async fn search_with_update(ctx: &Arc<Context>, prefix: &str) -> Vec<String> {
         let mut results = Self::search(prefix).await;
         if results.is_empty() {
             Self::maybe_refresh(ctx).await;

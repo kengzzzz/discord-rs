@@ -7,7 +7,7 @@ use twilight_model::id::{Id, marker::UserMarker};
 
 use crate::context::Context;
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
-use crate::services::ai::{AiService, history, models::ChatEntry};
+use crate::services::ai::{AiInteraction, AiService, history, models::ChatEntry};
 use std::collections::VecDeque;
 
 fn mock_response(text: &str) -> Response {
@@ -42,17 +42,19 @@ async fn test_prompt_and_history() {
     set_generate_override(|_| mock_response("ok"));
 
     AiService::clear_history(&ctx.redis, user).await;
-    AiService::set_prompt(ctx.clone(), user, "hi".to_string()).await;
+    AiService::set_prompt(&ctx, user, "hi".to_string()).await;
 
     let text = AiService::handle_interaction(
-        ctx.clone(),
-        user,
-        "Tester",
-        "hello",
-        Vec::new(),
-        None,
-        Vec::new(),
-        None,
+        &ctx,
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "hello",
+            attachments: Vec::new(),
+            ref_text: None,
+            ref_attachments: Vec::new(),
+            ref_author: None,
+        },
     )
     .await
     .unwrap();
@@ -62,7 +64,7 @@ async fn test_prompt_and_history() {
     assert_eq!(hist.len(), 2);
     assert_eq!(hist[0].role, "user".to_string());
 
-    let prompt = history::get_prompt(ctx, user).await;
+    let prompt = history::get_prompt(&ctx, user).await;
     assert_eq!(prompt, Some("hi".to_string()));
 }
 
@@ -75,14 +77,16 @@ async fn test_reply_fields() {
     AiService::clear_history(&ctx.redis, user).await;
 
     let _ = AiService::handle_interaction(
-        ctx.clone(),
-        user,
-        "Tester",
-        "hi",
-        Vec::new(),
-        Some("hello"),
-        Vec::new(),
-        Some("Tester2"),
+        &ctx,
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "hi",
+            attachments: Vec::new(),
+            ref_text: Some("hello"),
+            ref_attachments: Vec::new(),
+            ref_author: Some("Tester2"),
+        },
     )
     .await;
 
@@ -115,14 +119,16 @@ async fn test_summary_rotation() {
     history::store_history(&ctx.redis, user, &history).await;
 
     let _ = AiService::handle_interaction(
-        ctx.clone(),
-        user,
-        "Tester",
-        "msg",
-        Vec::new(),
-        None,
-        Vec::new(),
-        None,
+        &ctx,
+        AiInteraction {
+            user_id: user,
+            user_name: "Tester",
+            message: "msg",
+            attachments: Vec::new(),
+            ref_text: None,
+            ref_attachments: Vec::new(),
+            ref_author: None,
+        },
     )
     .await;
     let hist = history::load_history(&ctx.redis, user).await;
@@ -135,11 +141,11 @@ async fn test_summary_rotation() {
 async fn test_purge_prompt_cache() {
     let user = Id::<UserMarker>::new(3);
     let ctx = std::sync::Arc::new(Context::test().await);
-    AiService::set_prompt(ctx.clone(), user, "hello".to_string()).await;
-    let prompt = history::get_prompt(ctx.clone(), user).await;
+    AiService::set_prompt(&ctx, user, "hello".to_string()).await;
+    let prompt = history::get_prompt(&ctx, user).await;
     assert_eq!(prompt, Some("hello".to_string()));
 
     AiService::purge_prompt_cache(&ctx.redis, user.get()).await;
-    let prompt = history::get_prompt(ctx, user).await;
+    let prompt = history::get_prompt(&ctx, user).await;
     assert!(prompt.is_none());
 }

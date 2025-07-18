@@ -49,7 +49,7 @@ where
     Ok(val)
 }
 
-async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
+async fn image_link(ctx: &Arc<Context>) -> anyhow::Result<Option<String>> {
     let key = format!("{CACHE_PREFIX}:wf:news");
     let client = ctx.reqwest.clone();
     match cached_or_request(
@@ -68,7 +68,7 @@ async fn image_link(ctx: Arc<Context>) -> anyhow::Result<Option<String>> {
     }
 }
 
-async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
+async fn cycle_field(ctx: &Arc<Context>, endpoint: &str, name: &str) -> anyhow::Result<EmbedField> {
     let key = format!("{CACHE_PREFIX}:wf:cycle:{endpoint}");
     let client = ctx.reqwest.clone();
     let data = cached_or_request(
@@ -92,7 +92,7 @@ async fn cycle_field(ctx: Arc<Context>, endpoint: &str, name: &str) -> anyhow::R
     Ok(field)
 }
 
-pub async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
+pub async fn steel_path_field(ctx: &Arc<Context>) -> anyhow::Result<(EmbedField, bool)> {
     let key = format!("{CACHE_PREFIX}:wf:steel-path");
     let client = ctx.reqwest.clone();
     let data = cached_or_request(
@@ -136,15 +136,15 @@ pub async fn steel_path_field(ctx: Arc<Context>) -> anyhow::Result<(EmbedField, 
 }
 
 pub async fn status_embed(
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> anyhow::Result<(Embed, bool)> {
-    let image_fut = image_link(ctx.clone());
-    let steel_fut = steel_path_field(ctx.clone());
-    let earth_fut = cycle_field(ctx.clone(), "earthCycle", "Earth");
-    let cetus_fut = cycle_field(ctx.clone(), "cetusCycle", "Cetus");
-    let vallis_fut = cycle_field(ctx.clone(), "vallisCycle", "Vallis");
-    let cambion_fut = cycle_field(ctx.clone(), "cambionCycle", "Cambion");
+    let image_fut = image_link(ctx);
+    let steel_fut = steel_path_field(ctx);
+    let earth_fut = cycle_field(ctx, "earthCycle", "Earth");
+    let cetus_fut = cycle_field(ctx, "cetusCycle", "Cetus");
+    let vallis_fut = cycle_field(ctx, "vallisCycle", "Vallis");
+    let cambion_fut = cycle_field(ctx, "cambionCycle", "Cambion");
     let zariman_fut = cycle_field(ctx, "zarimanCycle", "Zariman");
 
     let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(

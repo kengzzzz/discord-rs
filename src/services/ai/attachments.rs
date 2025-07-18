@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use twilight_model::channel::Attachment;
 
-use crate::{configs::google::GOOGLE_CONFIGS, context::Context, services::http::HttpService};
+use crate::{configs::google::GOOGLE_CONFIGS, context::Context};
 
 const CONCURRENCY: usize = 5;
 
@@ -17,7 +17,7 @@ async fn handle_attachment(
 ) -> anyhow::Result<Option<(String, String)>> {
     if let (Some(ct), Ok(resp)) = (
         a.content_type.clone(),
-        HttpService::get(&ctx.reqwest, &a.url).await,
+        ctx.reqwest.get(a.url).send().await?.error_for_status(),
     ) {
         let stream = Body::wrap_stream(resp.bytes_stream());
         let upload_url = reqwest::Url::parse_with_params(
@@ -32,7 +32,9 @@ async fn handle_attachment(
         if let Some(content_type) = &a.content_type {
             headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
         }
-        let resp = HttpService::post(&ctx.reqwest, upload_url)
+        let resp = ctx
+            .reqwest
+            .post(upload_url)
             .headers(headers)
             .body(stream)
             .send()

@@ -5,7 +5,11 @@ use twilight_model::{
     channel::message::MessageFlags,
 };
 
-use crate::{context::Context, defer_interaction, services::ai::AiService};
+use crate::{
+    context::Context,
+    defer_interaction,
+    services::ai::{AiInteraction, AiService},
+};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -76,7 +80,7 @@ impl AiCommand {
             match command {
                 AiCommand::Prompt(c) => {
                     if let Some(user) = interaction.author() {
-                        AiService::set_prompt(ctx.clone(), user.id, c.prompt).await;
+                        AiService::set_prompt(&ctx, user.id, c.prompt).await;
                         let embeds = AiService::ai_embeds("Prompt updated")?;
                         ctx.http
                             .interaction(interaction.application_id)
@@ -89,14 +93,16 @@ impl AiCommand {
                     let user = interaction.author().context("no author")?;
                     let attachments = c.attachment.into_iter().collect();
                     let reply = AiService::handle_interaction(
-                        ctx.clone(),
-                        user.id,
-                        &user.name,
-                        &c.message,
-                        attachments,
-                        None,
-                        Vec::new(),
-                        None,
+                        &ctx,
+                        AiInteraction {
+                            user_id: user.id,
+                            user_name: &user.name,
+                            message: &c.message,
+                            attachments,
+                            ref_text: None,
+                            ref_attachments: Vec::new(),
+                            ref_author: None,
+                        },
                     )
                     .await?;
                     for embed in AiService::ai_embeds(&reply)? {

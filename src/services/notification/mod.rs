@@ -28,17 +28,15 @@ static HANDLES: Lazy<RwLock<HashMap<u64, Vec<JoinHandle<()>>>>> =
 
 impl NotificationService {
     async fn init_for_channel(
-        ctx: Arc<Context>,
+        ctx: &Arc<Context>,
         ch: Channel,
         token: CancellationToken,
     ) -> Vec<JoinHandle<()>> {
         let mut handles = Vec::with_capacity(3);
         let channel_id = Id::new(ch.channel_id);
-        if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::Helminth).await
-        {
+        if let Some(role) = RoleService::get_by_type(ctx, ch.guild_id, &RoleEnum::Helminth).await {
             handles.push(notify_loop(
-                ctx.clone(),
+                ctx,
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.helminth,
@@ -46,11 +44,10 @@ impl NotificationService {
                 token.clone(),
             ));
         }
-        if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::RivenSilver).await
+        if let Some(role) = RoleService::get_by_type(ctx, ch.guild_id, &RoleEnum::RivenSilver).await
         {
             handles.push(notify_loop(
-                ctx.clone(),
+                ctx,
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.riven_sliver,
@@ -58,8 +55,7 @@ impl NotificationService {
                 token.clone(),
             ));
         }
-        if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::UmbralForma).await
+        if let Some(role) = RoleService::get_by_type(ctx, ch.guild_id, &RoleEnum::UmbralForma).await
         {
             handles.push(notify_umbra_loop(
                 ctx,
@@ -77,23 +73,23 @@ impl NotificationService {
         token: CancellationToken,
     ) -> HashMap<u64, Vec<JoinHandle<()>>> {
         let mut map = HashMap::new();
-        let channels = ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Notification).await;
+        let channels = ChannelService::list_by_type(&ctx, &ChannelEnum::Notification).await;
         for ch in channels {
             map.insert(
                 ch.guild_id,
-                Self::init_for_channel(ctx.clone(), ch, token.clone()).await,
+                Self::init_for_channel(&ctx, ch, token.clone()).await,
             );
         }
         map
     }
 
     async fn init_guild(
-        ctx: Arc<Context>,
+        ctx: &Arc<Context>,
         guild_id: u64,
         token: CancellationToken,
     ) -> Vec<JoinHandle<()>> {
         if let Some(ch) =
-            ChannelService::get_by_type(ctx.clone(), guild_id, &ChannelEnum::Notification).await
+            ChannelService::get_by_type(ctx, guild_id, &ChannelEnum::Notification).await
         {
             Self::init_for_channel(ctx, ch, token).await
         } else {
@@ -118,7 +114,7 @@ impl NotificationService {
         })
     }
 
-    pub async fn reload_guild(ctx: Arc<Context>, guild_id: u64) {
+    pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {
         let token = shutdown::get_token();
         let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
         let mut guard = HANDLES.write().await;

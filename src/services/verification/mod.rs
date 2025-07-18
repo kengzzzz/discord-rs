@@ -34,7 +34,7 @@ impl VerificationService {
                 return Ok(());
             };
 
-            let success = spam::quarantine::verify(ctx.clone(), guild_id, user.id, &token).await;
+            let success = spam::quarantine::verify(&ctx, guild_id, user.id, &token).await;
             if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 let embed = if success {
                     self::embed::verify_success_embed(&guild_ref)

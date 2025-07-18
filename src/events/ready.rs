@@ -20,12 +20,12 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
     let role_ctx = ctx.clone();
     tokio::spawn(async move {
         for guild in event.guilds {
-            role_message::handler::ensure_message(role_ctx.clone(), guild.id).await;
+            role_message::handler::ensure_message(&role_ctx, guild.id).await;
         }
     });
 
     if !INIT.swap(true, Ordering::Relaxed) {
-        StatusService::spawn(ctx.clone());
+        StatusService::spawn(&ctx);
 
         let build_ctx = ctx.clone();
         tokio::spawn(async move {

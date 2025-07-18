@@ -31,39 +31,48 @@ where
 {
     let redis_key = format!("changestream:resume:{}", coll.name());
     tokio::spawn(async move {
+        let mut backoff = Duration::from_secs(1);
         while !token.is_cancelled() {
             let mut builder = coll.watch().with_options(options.clone());
             if let Some(token_str) = redis_get::<String>(&pool, &redis_key).await {
                 match serde_json::from_str::<ResumeToken>(&token_str) {
                     Ok(token) => builder = builder.resume_after(token),
                     Err(e) => {
-                        tracing::warn!(collection = coll.name(), error = %e, "invalid resume token")
+                        tracing::warn!(collection = coll.name(), error = %e, "invalid resume token, starting from now")
                     }
                 }
             }
 
             let mut stream = match builder.await {
-                Ok(stream) => stream,
+                Ok(stream) => {
+                    backoff = Duration::from_secs(1);
+                    stream
+                }
                 Err(e) => {
                     if ascii_contains_icase(&e.to_string(), "resume") {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
                         match coll.watch().with_options(options.clone()).await {
-                            Ok(stream) => stream,
+                            Ok(stream) => {
+                                backoff = Duration::from_secs(1);
+                                stream
+                            }
                             Err(e) => {
-                                tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
+                                tracing::error!(collection = coll.name(), error = %e, "failed to start change stream, retrying");
                                 tokio::select! {
                                     _ = token.cancelled() => break,
-                                    _ = sleep(Duration::from_secs(5)) => {}
+                                    _ = sleep(backoff) => {}
                                 }
+                                backoff = (backoff * 2).min(Duration::from_secs(60));
                                 continue;
                             }
                         }
                     } else {
-                        tracing::error!(collection = coll.name(), error = %e, "failed to start change stream");
+                        tracing::error!(collection = coll.name(), error = %e, "failed to start change stream, retrying");
                         tokio::select! {
                             _ = token.cancelled() => break,
-                            _ = sleep(Duration::from_secs(5)) => {}
+                            _ = sleep(backoff) => {}
                         }
+                        backoff = (backoff * 2).min(Duration::from_secs(60));
                         continue;
                     }
                 }
@@ -95,10 +104,12 @@ where
                 }
             }
 
+            tracing::info!(collection = coll.name(), delay = ?backoff, "restart change stream");
             tokio::select! {
                 _ = token.cancelled() => break,
-                _ = sleep(Duration::from_secs(5)) => {}
+                _ = sleep(backoff) => {}
             }
+            backoff = (backoff * 2).min(Duration::from_secs(60));
         }
     });
     Ok(())

@@ -9,12 +9,11 @@ use crate::{
         redis::{redis_delete, redis_get, redis_set},
     },
 };
-use std::sync::Arc;
 
 pub struct RoleService;
 
 impl RoleService {
-    pub async fn get(ctx: Arc<Context>, role_id: u64) -> Option<Role> {
+    pub async fn get(ctx: &Context, role_id: u64) -> Option<Role> {
         let redis_key = format!("{CACHE_PREFIX}:role:{role_id}");
 
         if let Some(role) = redis_get(&ctx.redis, &redis_key).await {
@@ -41,11 +40,7 @@ impl RoleService {
         redis_delete(pool, &redis_key).await;
     }
 
-    pub async fn get_by_type(
-        ctx: Arc<Context>,
-        guild_id: u64,
-        role_type: &RoleEnum,
-    ) -> Option<Role> {
+    pub async fn get_by_type(ctx: &Context, guild_id: u64, role_type: &RoleEnum) -> Option<Role> {
         let redis_key = format!(
             "{}:role-type:{}:{}",
             CACHE_PREFIX,

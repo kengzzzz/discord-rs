@@ -87,9 +87,9 @@ impl AdminChannelCommand {
         }
 
         if self.channel_type == ChannelEnum::UpdateRole {
-            role_message::handler::ensure_message(ctx.clone(), guild_id).await;
+            role_message::handler::ensure_message(&ctx, guild_id).await;
         }
-        NotificationService::reload_guild(ctx, guild_id.get()).await;
+        NotificationService::reload_guild(&ctx, guild_id.get()).await;
         Ok(())
     }
 }

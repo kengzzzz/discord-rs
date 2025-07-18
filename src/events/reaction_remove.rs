@@ -21,7 +21,7 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionRemove) {
         return;
     }
 
-    let channels = ChannelService::get(ctx.clone(), event.channel_id.get()).await;
+    let channels = ChannelService::get(&ctx, event.channel_id.get()).await;
     if !channels
         .iter()
         .any(|ch| ch.channel_type == ChannelEnum::UpdateRole)
@@ -29,7 +29,7 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionRemove) {
         return;
     }
 
-    if let Some(record) = role_message::storage::get(ctx.clone(), guild_id.get()).await {
+    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await {
         if record.message_id != event.message_id.get() {
             return;
         }
@@ -41,7 +41,7 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionRemove) {
         return;
     };
 
-    if let Some(role) = RoleService::get_by_type(ctx.clone(), guild_id.get(), &role_type).await {
+    if let Some(role) = RoleService::get_by_type(&ctx, guild_id.get(), &role_type).await {
         if role.self_assignable {
             if let Err(e) = ctx
                 .http

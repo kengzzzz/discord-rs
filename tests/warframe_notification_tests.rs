@@ -34,7 +34,7 @@ async fn test_steel_path_umbra() {
         .await;
 
     let ctx = std::sync::Arc::new(test_context().await);
-    let (field, is_umbra) = warframe::embed::steel_path_field(ctx).await.unwrap();
+    let (field, is_umbra) = warframe::embed::steel_path_field(&ctx).await.unwrap();
     assert!(is_umbra);
     assert_eq!(
         field.name,

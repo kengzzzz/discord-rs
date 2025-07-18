@@ -103,8 +103,8 @@ impl AdminRoleCommand {
                 .await?;
         }
 
-        role_message::handler::ensure_message(ctx.clone(), guild_id).await;
-        NotificationService::reload_guild(ctx, guild_id.get()).await;
+        role_message::handler::ensure_message(&ctx, guild_id).await;
+        NotificationService::reload_guild(&ctx, guild_id.get()).await;
 
         Ok(())
     }

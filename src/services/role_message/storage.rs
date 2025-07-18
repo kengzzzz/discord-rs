@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
+pub async fn get(ctx: &Arc<Context>, guild_id: u64) -> Option<Message> {
     let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
 
     if let Some(msg) = redis_get(&ctx.redis, &redis_key).await {
@@ -33,7 +33,7 @@ pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
     None
 }
 
-pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
+pub async fn set(ctx: &Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
     if let Err(e) = ctx
         .mongo
         .messages

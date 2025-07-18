@@ -17,9 +17,9 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
     let guild_id = event.guild_id;
 
     if let (Some(token), Some(q_role), Some(q_channel)) = (
-        spam::quarantine::get_token(ctx.clone(), guild_id.get(), event.user.id.get()).await,
-        RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await,
-        ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Quarantine).await,
+        spam::quarantine::get_token(&ctx, guild_id.get(), event.user.id.get()).await,
+        RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await,
+        ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Quarantine).await,
     ) {
         if let Err(e) = ctx
             .http
@@ -44,9 +44,9 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         return;
     }
 
-    let guest_role = RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Guest).await;
+    let guest_role = RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Guest).await;
     let intro_channel =
-        ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Introduction).await;
+        ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Introduction).await;
 
     if let (Some(guest), Some(channel)) = (guest_role, intro_channel) {
         let guest_id = Id::new(guest.role_id);

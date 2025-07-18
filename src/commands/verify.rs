@@ -28,7 +28,7 @@ impl VerifyCommand {
             let guild_id = interaction.guild_id.context("no guild id")?;
 
             let Some(token) =
-                spam::quarantine::get_token(ctx.clone(), guild_id.get(), author.id.get()).await
+                spam::quarantine::get_token(&ctx, guild_id.get(), author.id.get()).await
             else {
                 if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                     if let Some(embed) = verification::embed::verify_no_token_embed(&guild_ref) {

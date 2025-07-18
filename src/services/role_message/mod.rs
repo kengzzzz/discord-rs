@@ -11,11 +11,11 @@ use crate::{context::Context, dbs::mongo::models::message::Message};
 pub struct RoleMessageService;
 
 impl RoleMessageService {
-    pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
+    pub async fn get(ctx: &Arc<Context>, guild_id: u64) -> Option<Message> {
         storage::get(ctx, guild_id).await
     }
 
-    pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
+    pub async fn set(ctx: &Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
         storage::set(ctx, guild_id, channel_id, message_id).await;
     }
 
@@ -23,7 +23,7 @@ impl RoleMessageService {
         storage::purge_cache(pool, guild_id).await;
     }
 
-    pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
+    pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
         handler::ensure_message(ctx, guild_id).await;
     }
 }
