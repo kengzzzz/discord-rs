@@ -34,9 +34,7 @@ impl NotificationService {
     ) -> Vec<JoinHandle<()>> {
         let mut handles = Vec::with_capacity(3);
         let channel_id = Id::new(ch.channel_id);
-        if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::Helminth).await
-        {
+        if let Some(role) = RoleService::get_by_type(&ctx, ch.guild_id, &RoleEnum::Helminth).await {
             handles.push(notify_loop(
                 ctx.clone(),
                 channel_id,
@@ -47,7 +45,7 @@ impl NotificationService {
             ));
         }
         if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::RivenSilver).await
+            RoleService::get_by_type(&ctx, ch.guild_id, &RoleEnum::RivenSilver).await
         {
             handles.push(notify_loop(
                 ctx.clone(),
@@ -59,7 +57,7 @@ impl NotificationService {
             ));
         }
         if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), ch.guild_id, &RoleEnum::UmbralForma).await
+            RoleService::get_by_type(&ctx, ch.guild_id, &RoleEnum::UmbralForma).await
         {
             handles.push(notify_umbra_loop(
                 ctx,
@@ -77,7 +75,7 @@ impl NotificationService {
         token: CancellationToken,
     ) -> HashMap<u64, Vec<JoinHandle<()>>> {
         let mut map = HashMap::new();
-        let channels = ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Notification).await;
+        let channels = ChannelService::list_by_type(&ctx, &ChannelEnum::Notification).await;
         for ch in channels {
             map.insert(
                 ch.guild_id,
@@ -93,7 +91,7 @@ impl NotificationService {
         token: CancellationToken,
     ) -> Vec<JoinHandle<()>> {
         if let Some(ch) =
-            ChannelService::get_by_type(ctx.clone(), guild_id, &ChannelEnum::Notification).await
+            ChannelService::get_by_type(&ctx, guild_id, &ChannelEnum::Notification).await
         {
             Self::init_for_channel(ctx, ch, token).await
         } else {

@@ -25,7 +25,7 @@ impl IntroCommand {
         if let Err(e) = guild_command!(ctx.http, interaction, true, {
             let guild_id = interaction.guild_id.context("no guild id")?;
             let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
-            if ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Introduction)
+            if ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Introduction)
                 .await
                 .is_none()
             {

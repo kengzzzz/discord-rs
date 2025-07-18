@@ -39,7 +39,7 @@ fn embed_equals(a: &Embed, b: &Embed) -> bool {
 
 pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     let Some(channel) = ChannelService::get_by_type(
-        ctx.clone(),
+        &ctx,
         guild_id.get(),
         &crate::dbs::mongo::models::channel::ChannelEnum::UpdateRole,
     )
@@ -72,7 +72,7 @@ pub async fn ensure_message(ctx: Arc<Context>, guild_id: Id<GuildMarker>) {
     ];
     let mut info = Vec::with_capacity(roles.len());
     for role_type in roles.iter() {
-        if let Some(role) = RoleService::get_by_type(ctx.clone(), guild_id.get(), role_type).await {
+        if let Some(role) = RoleService::get_by_type(&ctx, guild_id.get(), role_type).await {
             if role.self_assignable {
                 if let (Some(emoji), Some(role_ref)) = (
                     role_enum_to_emoji(role_type),

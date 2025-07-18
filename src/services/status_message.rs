@@ -8,12 +8,11 @@ use crate::{
 };
 use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
-use std::sync::Arc;
 
 pub struct StatusMessageService;
 
 impl StatusMessageService {
-    pub async fn get(ctx: Arc<Context>, guild_id: u64) -> Option<Message> {
+    pub async fn get(ctx: &Context, guild_id: u64) -> Option<Message> {
         let redis_key = format!("{CACHE_PREFIX}:status-message:{guild_id}");
 
         if let Some(msg) = redis_get(&ctx.redis, &redis_key).await {
@@ -32,7 +31,7 @@ impl StatusMessageService {
         None
     }
 
-    pub async fn set(ctx: Arc<Context>, guild_id: u64, channel_id: u64, message_id: u64) {
+    pub async fn set(ctx: &Context, guild_id: u64, channel_id: u64, message_id: u64) {
         if let Err(e) = ctx.mongo
             .messages
             .update_one(

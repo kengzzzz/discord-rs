@@ -40,7 +40,7 @@ pub async fn verify(
         .await
     {
         if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
+            RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await
         {
             if let Err(e) = ctx
                 .http
@@ -116,7 +116,7 @@ pub async fn quarantine_member(
             }
         }
         if let Some(role) =
-            RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await
+            RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await
         {
             if let Err(e) = ctx
                 .http

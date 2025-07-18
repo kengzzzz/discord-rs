@@ -15,9 +15,9 @@ pub async fn handle_quarantine(ctx: Arc<Context>, message: &Message) -> bool {
         return false;
     };
 
-    let q_role = RoleService::get_by_type(ctx.clone(), guild_id.get(), &RoleEnum::Quarantine).await;
+    let q_role = RoleService::get_by_type(&ctx, guild_id.get(), &RoleEnum::Quarantine).await;
     let q_channel =
-        ChannelService::get_by_type(ctx.clone(), guild_id.get(), &ChannelEnum::Quarantine).await;
+        ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Quarantine).await;
 
     if let (Some(_), Some(channel)) = (q_role, q_channel) {
         if SpamService::is_quarantined(ctx.clone(), guild_id.get(), message.author.id.get()).await {

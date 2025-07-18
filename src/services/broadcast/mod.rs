@@ -35,7 +35,7 @@ impl BroadcastService {
             return;
         };
 
-        let channels = ChannelService::list_by_type(ctx.clone(), &ChannelEnum::Broadcast).await;
+        let channels = ChannelService::list_by_type(&ctx, &ChannelEnum::Broadcast).await;
         let records: Vec<(u64, u64)> = stream::iter(channels)
             .filter(|ch| futures::future::ready(ch.channel_id != message.channel_id.get()))
             .map(|channel| {
