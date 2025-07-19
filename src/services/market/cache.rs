@@ -95,3 +95,94 @@ impl MarketService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        dbs::mongo::client::MongoDB,
+        dbs::mongo::models::{
+            ai_prompt::AiPrompt, channel::Channel, message::Message, quarantine::Quarantine,
+            role::Role,
+        },
+        dbs::redis::new_pool,
+    };
+    use tokio::sync::OnceCell;
+
+    async fn build_context() -> Arc<Context> {
+        static CTX: OnceCell<Arc<Context>> = OnceCell::const_new();
+        CTX.get_or_init(|| async {
+            unsafe {
+                std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
+            }
+            let http = twilight_http::Client::new("test".into());
+            let cache = twilight_cache_inmemory::InMemoryCache::builder().build();
+            let redis = new_pool();
+            let client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+                .await
+                .unwrap();
+            let db = client.database("test_db");
+            let mongo = MongoDB {
+                client,
+                channels: db.collection::<Channel>("channels"),
+                roles: db.collection::<Role>("roles"),
+                quarantines: db.collection::<Quarantine>("quarantines"),
+                messages: db.collection::<Message>("messages"),
+                ai_prompts: db.collection::<AiPrompt>("ai_prompts"),
+            };
+            let reqwest = reqwest::Client::new();
+            Arc::new(Context {
+                http,
+                cache,
+                redis,
+                mongo,
+                reqwest,
+            })
+        })
+        .await
+        .clone()
+    }
+
+    #[tokio::test]
+    async fn test_set_items_and_search() {
+        let mut data: Vec<MarketEntry> = (0..30)
+            .map(|i| MarketEntry {
+                name: format!("Item{:02}", 29 - i),
+                url: format!("url{i}"),
+            })
+            .collect();
+        data.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
+        MarketService::set_items(data).await;
+        let results = MarketService::search("").await;
+        assert_eq!(results.len(), 25);
+        let mut sorted = results.clone();
+        sorted.sort_unstable_by(|a, b| cmp_ignore_ascii_case(a, b));
+        assert_eq!(results, sorted);
+    }
+
+    #[tokio::test]
+    async fn test_maybe_refresh_updates() {
+        let ctx = build_context().await;
+        LAST_UPDATE.store(0, Ordering::Relaxed);
+        MarketService::maybe_refresh(&ctx).await;
+        let last = LAST_UPDATE.load(Ordering::Relaxed);
+        assert!(last > 0);
+    }
+
+    #[tokio::test]
+    async fn test_find_url() {
+        let entries = vec![
+            MarketEntry {
+                name: "Apple".into(),
+                url: "apple".into(),
+            },
+            MarketEntry {
+                name: "Banana".into(),
+                url: "banana".into(),
+            },
+        ];
+        MarketService::set_items(entries).await;
+        assert_eq!(MarketService::find_url("Apple").await, Some("apple".into()));
+        assert_eq!(MarketService::find_url("Unknown").await, None);
+    }
+}
