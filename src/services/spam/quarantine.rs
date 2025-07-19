@@ -158,6 +158,7 @@ pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
 mod tests {
     use super::*;
     use crate::context::{ContextBuilder, mock_http::MockClient as Client};

@@ -97,6 +97,7 @@ impl MarketService {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
 mod tests {
     use super::*;
     use crate::context::{Context, ContextBuilder, mock_http::MockClient as Client};

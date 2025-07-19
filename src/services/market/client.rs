@@ -158,12 +158,12 @@ where
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
 mod tests {
     use std::sync::Arc;
 
     use super::*;
     use crate::context::{Context, ContextBuilder, mock_http::MockClient as Client};
-    use once_cell::sync::Lazy;
 
     struct MockClient {
         items: ItemsResponse,

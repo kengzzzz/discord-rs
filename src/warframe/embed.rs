@@ -185,14 +185,11 @@ pub async fn status_embed(
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code, unused_imports)]
 mod tests {
     use super::*;
-    use crate::{
-        configs::CACHE_PREFIX,
-        context::{ContextBuilder, mock_http::MockClient as Client},
-        dbs::redis::redis_set_ex,
-        warframe::api::{SteelPathData, SteelPathReward},
-    };
+    use crate::context::{ContextBuilder, mock_http::MockClient as Client};
+    use crate::warframe::api::{SteelPathData, SteelPathReward};
     use std::sync::Arc;
     use twilight_cache_inmemory::DefaultInMemoryCache;
     use twilight_model::gateway::payload::incoming::GuildCreate;
