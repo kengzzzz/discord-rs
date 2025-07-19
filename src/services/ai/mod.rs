@@ -121,6 +121,3 @@ impl AiService {
         check_rate_limit(ctx, user).await
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests;

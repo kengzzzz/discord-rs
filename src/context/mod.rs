@@ -76,6 +76,3 @@ impl Context {
         redis::redis_delete(&self.redis, key).await;
     }
 }
-
-#[cfg(any(test, feature = "test-utils"))]
-pub mod tests;

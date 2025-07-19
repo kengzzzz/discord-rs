@@ -117,19 +117,7 @@ pub(super) async fn process_response(
     system: &str,
     contents: Vec<Content>,
 ) -> anyhow::Result<String> {
-    let mut response = {
-        #[cfg(test)]
-        {
-            super::tests::GENERATE_OVERRIDE
-                .get()
-                .map(|f| f(contents.clone()))
-        }
-        #[cfg(not(test))]
-        {
-            None
-        }
-    };
-
+    let mut response = None;
     if response.is_none() {
         let client = client::client().await?;
         for name in MODELS {

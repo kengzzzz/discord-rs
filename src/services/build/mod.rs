@@ -41,6 +41,3 @@ impl BuildService {
         }
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests;

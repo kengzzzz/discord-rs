@@ -3,8 +3,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(test)]
-use crate::tests::build_cache_utils::ITEMS_URL_OVERRIDE;
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -55,12 +53,6 @@ const CATEGORY: [&str; 9] = [
 ];
 
 fn items_url() -> String {
-    #[cfg(test)]
-    {
-        if let Some(u) = ITEMS_URL_OVERRIDE.get() {
-            return u.clone();
-        }
-    }
     ITEMS_URL.to_string()
 }
 

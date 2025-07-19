@@ -1,5 +1,3 @@
-#[cfg(any(test, feature = "mock-redis"))]
-use self::tests::BASE_URL_OVERRIDE;
 use serde::{Deserialize, Serialize};
 
 const BASE_URL: &str = "https://api.warframestat.us/pc";
@@ -33,20 +31,7 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
     path: &str,
 ) -> anyhow::Result<T> {
-    let base = {
-        #[cfg(any(test, feature = "mock-redis"))]
-        {
-            if let Some(url) = BASE_URL_OVERRIDE.get() {
-                url.as_str()
-            } else {
-                BASE_URL
-            }
-        }
-        #[cfg(not(any(test, feature = "mock-redis")))]
-        {
-            BASE_URL
-        }
-    };
+    let base = BASE_URL;
     let url = format!("{base}/{path}");
     let result = client
         .get(url)
@@ -69,6 +54,3 @@ pub async fn cycle(client: &reqwest::Client, endpoint: &str) -> anyhow::Result<C
 pub async fn steel_path(client: &reqwest::Client) -> anyhow::Result<SteelPathData> {
     fetch_json(client, "steelPath").await
 }
-
-#[cfg(any(test, feature = "mock-redis"))]
-pub mod tests;

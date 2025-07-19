@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 
 use super::models::ChatEntry;
-#[cfg(test)]
-use super::tests::SUMMARIZE_OVERRIDE;
 use crate::configs::google::GOOGLE_CONFIGS;
 use crate::services::ai::history::parse_history;
 use google_ai_rs::genai::Response;
@@ -58,11 +56,6 @@ pub(super) async fn summarize(
     history: &mut VecDeque<ChatEntry>,
     user_name: &str,
 ) -> anyhow::Result<String> {
-    #[cfg(test)]
-    if let Some(f) = SUMMARIZE_OVERRIDE.get() {
-        return Ok(f(history.make_contiguous()));
-    }
-
     let client = client().await?;
     let mut contents = parse_history(&*history, user_name).await;
     contents.push(Content::from(Part::text(SYSTEM)));

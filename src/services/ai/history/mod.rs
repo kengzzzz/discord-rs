@@ -1,138 +1,78 @@
 use chrono::Utc;
 use deadpool_redis::Pool;
 use google_ai_rs::{Content, Part};
+use mongodb::bson::{doc, to_bson};
 use twilight_model::id::{Id, marker::UserMarker};
 
-#[cfg(test)]
-use self::tests::{HISTORY_STORE, PROMPT_STORE};
 use super::models::ChatEntry;
-use std::collections::VecDeque;
+use crate::{
+    configs::CACHE_PREFIX,
+    context::Context,
+    dbs::mongo::models::ai_prompt::AiPrompt,
+    dbs::redis::{redis_delete, redis_get, redis_set},
+};
+use std::{collections::VecDeque, sync::Arc};
 
-#[cfg(not(test))]
-use crate::configs::CACHE_PREFIX;
-use crate::context::Context;
-#[cfg(not(test))]
-use crate::dbs::redis::{redis_delete, redis_get, redis_set};
-use std::sync::Arc;
-
-#[cfg(not(test))]
 async fn history_key(user: Id<UserMarker>) -> String {
     format!("{CACHE_PREFIX}:ai:history:{}", user.get())
 }
 
-#[cfg(not(test))]
 async fn prompt_key(user: Id<UserMarker>) -> String {
     format!("{CACHE_PREFIX}:ai:prompt:{}", user.get())
 }
 
 pub(crate) async fn load_history(_pool: &Pool, user: Id<UserMarker>) -> VecDeque<ChatEntry> {
-    #[cfg(test)]
-    {
-        return HISTORY_STORE
-            .read()
-            .await
-            .get(&user.get())
-            .cloned()
-            .unwrap_or_default();
-    }
-    #[cfg(not(test))]
-    {
-        let key = history_key(user).await;
-        redis_get::<VecDeque<ChatEntry>>(_pool, &key)
-            .await
-            .unwrap_or_default()
-    }
+    let key = history_key(user).await;
+    redis_get::<VecDeque<ChatEntry>>(_pool, &key)
+        .await
+        .unwrap_or_default()
 }
 
 pub(crate) async fn store_history(_pool: &Pool, user: Id<UserMarker>, hist: &VecDeque<ChatEntry>) {
-    #[cfg(test)]
-    {
-        HISTORY_STORE.write().await.insert(user.get(), hist.clone());
-    }
-    #[cfg(not(test))]
-    {
-        let key = history_key(user).await;
-        redis_set(_pool, &key, hist).await;
-    }
+    let key = history_key(user).await;
+    redis_set(_pool, &key, hist).await;
 }
 
 pub(crate) async fn get_prompt(ctx: &Arc<Context>, user: Id<UserMarker>) -> Option<String> {
-    #[cfg(test)]
-    {
-        let _ = ctx;
-        return PROMPT_STORE.read().await.get(&user.get()).cloned();
+    let key = prompt_key(user).await;
+    if let Some(prompt) = redis_get::<String>(&ctx.redis, &key).await {
+        return Some(prompt);
     }
-    #[cfg(not(test))]
+    if let Ok(Some(record)) = ctx
+        .mongo
+        .ai_prompts
+        .find_one(doc! {"user_id": user.get() as i64})
+        .await
     {
-        let key = prompt_key(user).await;
-        if let Some(prompt) = redis_get::<String>(&ctx.redis, &key).await {
-            return Some(prompt);
-        }
-
-        use mongodb::bson::doc;
-
-        if let Ok(Some(record)) = ctx
-            .mongo
-            .ai_prompts
-            .find_one(doc! {"user_id": user.get() as i64})
-            .await
-        {
-            redis_set(&ctx.redis, &key, &record.prompt).await;
-            return Some(record.prompt);
-        }
-
-        None
+        redis_set(&ctx.redis, &key, &record.prompt).await;
+        return Some(record.prompt);
     }
+    None
 }
 
 pub(crate) async fn clear_history(_pool: &Pool, user: Id<UserMarker>) {
-    #[cfg(test)]
-    {
-        HISTORY_STORE.write().await.remove(&user.get());
-    }
-    #[cfg(not(test))]
-    {
-        let key = history_key(user).await;
-        redis_delete(_pool, &key).await;
-    }
+    let key = history_key(user).await;
+    redis_delete(_pool, &key).await;
 }
 
 pub(crate) async fn set_prompt(ctx: &Arc<Context>, user: Id<UserMarker>, prompt: String) {
-    #[cfg(test)]
-    {
-        let _ = ctx;
-        PROMPT_STORE.write().await.insert(user.get(), prompt);
-    }
-    #[cfg(not(test))]
-    {
-        use crate::dbs::mongo::models::ai_prompt::AiPrompt;
-        use mongodb::bson::{doc, to_bson};
-
-        if let Ok(bson) = to_bson(&AiPrompt {
-            id: None,
-            user_id: user.get(),
-            prompt: prompt.clone(),
-        }) {
-            let _ = ctx
-                .mongo
-                .ai_prompts
-                .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
-                .upsert(true)
-                .await;
-        }
+    if let Ok(bson) = to_bson(&AiPrompt {
+        id: None,
+        user_id: user.get(),
+        prompt: prompt.clone(),
+    }) {
+        let _ = ctx
+            .mongo
+            .ai_prompts
+            .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
+            .upsert(true)
+            .await;
     }
 }
 
 pub(crate) async fn purge_prompt_cache(_pool: &Pool, user_id: u64) {
-    #[cfg(test)]
-    {
-        PROMPT_STORE.write().await.remove(&user_id);
-    }
-    #[cfg(not(test))]
-    {
-        let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
-        redis_delete(_pool, &key).await;
-    }
+    let key = format!("{CACHE_PREFIX}:ai:prompt:{user_id}");
+    redis_delete(_pool, &key).await;
 }
 
 pub(crate) async fn parse_history<'a>(
@@ -183,6 +123,3 @@ pub(crate) async fn parse_history<'a>(
         })
         .collect()
 }
-
-#[cfg(test)]
-pub(crate) mod tests;
