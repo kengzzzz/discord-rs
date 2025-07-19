@@ -17,6 +17,7 @@ pub struct ContextBuilder {
     redis: Option<Pool>,
     mongo: Option<MongoDB>,
     reqwest: Option<ReqwestClient>,
+    watchers: bool,
 }
 
 impl Default for ContextBuilder {
@@ -33,6 +34,7 @@ impl ContextBuilder {
             redis: None,
             mongo: None,
             reqwest: None,
+            watchers: true,
         }
     }
 
@@ -61,6 +63,11 @@ impl ContextBuilder {
         self
     }
 
+    pub fn watchers(mut self, watchers: bool) -> Self {
+        self.watchers = watchers;
+        self
+    }
+
     pub async fn build(self) -> anyhow::Result<Context> {
         let http = self
             .http
@@ -83,7 +90,7 @@ impl ContextBuilder {
 
         let mongo = match self.mongo {
             Some(mongo) => mongo,
-            None => MongoDB::init(redis.clone()).await?,
+            None => MongoDB::init(redis.clone(), self.watchers).await?,
         };
 
         let reqwest = match self.reqwest {
