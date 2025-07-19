@@ -185,8 +185,8 @@ impl<'a> MockInteractionClient<'a> {
     pub fn update_response(&'a self, _token: &'a str) -> MockUpdateMessage<'a> {
         MockUpdateMessage {
             client: self.client,
-            channel_id: Id::new(0),
-            message_id: Id::new(0),
+            channel_id: Id::new(1),
+            message_id: Id::new(1),
             content: None,
             embeds: None,
         }
@@ -195,7 +195,7 @@ impl<'a> MockInteractionClient<'a> {
     pub fn create_followup(&'a self, _token: &'a str) -> MockCreateMessage<'a> {
         MockCreateMessage {
             client: self.client,
-            channel_id: Id::new(0),
+            channel_id: Id::new(1),
             content: None,
             embeds: Vec::new(),
         }
@@ -422,7 +422,7 @@ fn fake_message(
         "edited_timestamp": null,
         "embeds": embeds,
         "flags": 0,
-        "kind": u8::from(MessageType::Regular),
+        "type": u8::from(MessageType::Regular),
         "mention_channels": [],
         "mention_everyone": false,
         "mention_roles": [],
