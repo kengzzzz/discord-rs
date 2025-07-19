@@ -1,13 +1,13 @@
-use std::time::Duration;
+mod builder;
+pub use builder::ContextBuilder;
 
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
-use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
+use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_http::Client;
 
-use crate::configs::discord::DISCORD_CONFIGS;
 use crate::dbs::mongo::client::MongoDB;
-use crate::dbs::redis::{self, new_pool};
+use crate::dbs::redis;
 
 pub struct Context {
     pub http: Client,
@@ -19,36 +19,7 @@ pub struct Context {
 
 impl Context {
     pub async fn new() -> anyhow::Result<Self> {
-        let http = Client::new(DISCORD_CONFIGS.discord_token.clone());
-        let cache = DefaultInMemoryCache::builder()
-            .resource_types(
-                ResourceType::GUILD
-                    | ResourceType::CHANNEL
-                    | ResourceType::MESSAGE
-                    | ResourceType::ROLE
-                    | ResourceType::MEMBER
-                    | ResourceType::USER_CURRENT,
-            )
-            .build();
-
-        let redis = new_pool();
-
-        let mongo = MongoDB::init(redis.clone()).await?;
-
-        let reqwest = ReqwestClient::builder()
-            .pool_max_idle_per_host(10)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(60))
-            .build()
-            .expect("Failed to build Client");
-
-        Ok(Self {
-            http,
-            cache,
-            redis,
-            mongo,
-            reqwest,
-        })
+        ContextBuilder::new().build().await
     }
 
     pub async fn redis_get<T>(&self, key: &str) -> Option<T>

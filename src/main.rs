@@ -4,7 +4,7 @@ use discord_bot::{
         ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
     },
     configs::discord::DISCORD_CONFIGS,
-    context::Context,
+    context::{Context, ContextBuilder},
     events::{
         interaction_create, member_add, member_remove, message_create, message_delete,
         reaction_add, reaction_remove, ready,
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_token = CancellationToken::new();
     shutdown::set_token(shutdown_token.clone());
 
-    let ctx = Arc::new(Context::new().await?);
+    let ctx = Arc::new(ContextBuilder::new().build().await?);
     let (tx, rx) = mpsc::channel::<Event>(EVENT_CONCURRENCY * 2);
     let rx = Arc::new(Mutex::new(rx));
     for _ in 0..EVENT_CONCURRENCY {

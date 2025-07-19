@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+use crate::utils::http::HttpProvider;
 
 const BASE_URL: &str = "https://api.warframestat.us/pc";
 
@@ -27,30 +29,33 @@ pub struct SteelPathData {
     pub activation: Option<String>,
 }
 
-async fn fetch_json<T: for<'de> Deserialize<'de>>(
-    client: &reqwest::Client,
-    path: &str,
-) -> anyhow::Result<T> {
+async fn fetch_json<H, T>(client: &H, path: &str) -> anyhow::Result<T>
+where
+    H: HttpProvider + Sync,
+    T: DeserializeOwned + Send,
+{
     let base = BASE_URL;
     let url = format!("{base}/{path}");
-    let result = client
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<T>()
-        .await?;
-    Ok(result)
+    client.get_json(&url).await
 }
 
-pub async fn news(client: &reqwest::Client) -> anyhow::Result<Vec<NewsItem>> {
+pub async fn news<H>(client: &H) -> anyhow::Result<Vec<NewsItem>>
+where
+    H: HttpProvider + Sync,
+{
     fetch_json(client, "news").await
 }
 
-pub async fn cycle(client: &reqwest::Client, endpoint: &str) -> anyhow::Result<Cycle> {
+pub async fn cycle<H>(client: &H, endpoint: &str) -> anyhow::Result<Cycle>
+where
+    H: HttpProvider + Sync,
+{
     fetch_json(client, endpoint).await
 }
 
-pub async fn steel_path(client: &reqwest::Client) -> anyhow::Result<SteelPathData> {
+pub async fn steel_path<H>(client: &H) -> anyhow::Result<SteelPathData>
+where
+    H: HttpProvider + Sync,
+{
     fetch_json(client, "steelPath").await
 }
