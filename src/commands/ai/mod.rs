@@ -91,6 +91,16 @@ impl AiCommand {
                 }
                 AiCommand::Talk(c) => {
                     let user = interaction.author().context("no author")?;
+                    if let Some(wait) = AiService::check_rate_limit(&ctx, user.id).await {
+                        if let Ok(embed) = AiService::rate_limit_embed(wait) {
+                            ctx.http
+                                .interaction(interaction.application_id)
+                                .update_response(&interaction.token)
+                                .embeds(Some(&[embed]))
+                                .await?;
+                        }
+                        return Ok::<_, anyhow::Error>(());
+                    }
                     let attachments = c.attachment.into_iter().collect();
                     let reply = AiService::handle_interaction(
                         &ctx,

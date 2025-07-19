@@ -39,4 +39,14 @@ impl AiService {
         }
         Ok::<_, anyhow::Error>(embeds)
     }
+
+    pub fn rate_limit_embed(wait: u64) -> anyhow::Result<Embed> {
+        let embed = EmbedBuilder::new()
+            .color(COLOR)
+            .title("⏳ คุณส่งข้อความเร็วเกินไป")
+            .description(format!("กรุณารอ {wait} วินาทีแล้วลองอีกครั้ง"))
+            .validate()?
+            .build();
+        Ok(embed)
+    }
 }

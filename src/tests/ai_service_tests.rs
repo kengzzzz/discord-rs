@@ -150,3 +150,13 @@ async fn test_purge_prompt_cache() {
     let prompt = history::get_prompt(&ctx, user).await;
     assert!(prompt.is_none());
 }
+
+#[tokio::test]
+#[cfg(feature = "mock-redis")]
+async fn test_rate_limit() {
+    let user = Id::<UserMarker>::new(99);
+    let ctx = std::sync::Arc::new(Context::test().await);
+    assert!(AiService::check_rate_limit(&ctx, user).await.is_none());
+    let wait = AiService::check_rate_limit(&ctx, user).await;
+    assert!(wait.is_some());
+}

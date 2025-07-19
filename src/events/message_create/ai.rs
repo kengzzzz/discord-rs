@@ -95,6 +95,24 @@ pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
             if let Err(e) = ctx.http.create_typing_trigger(message.channel_id).await {
                 tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
             }
+            if let Some(wait) = AiService::check_rate_limit(ctx, message.author.id).await {
+                if let Ok(embed) = AiService::rate_limit_embed(wait) {
+                    if let Err(e) = ctx
+                        .http
+                        .create_message(message.channel_id)
+                        .embeds(&[embed])
+                        .await
+                    {
+                        tracing::warn!(
+                            channel_id = message.channel_id.get(),
+                            user_id = message.author.id.get(),
+                            error = %e,
+                            "failed to send rate limit message",
+                        );
+                    }
+                }
+                return;
+            }
             let content = strip_mention(&message.content, user.id);
             let ref_text_opt = message
                 .referenced_message
