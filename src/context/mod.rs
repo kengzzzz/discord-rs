@@ -1,4 +1,5 @@
 #[cfg(not(any(test, feature = "test-utils")))]
+#[allow(clippy::module_inception)]
 mod context;
 #[cfg(not(any(test, feature = "test-utils")))]
 pub use context::Context;
