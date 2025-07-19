@@ -6,7 +6,7 @@ use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
 use twilight_http::Client;
 
 use crate::configs::discord::DISCORD_CONFIGS;
-use crate::dbs::mongo::client::MongoDB;
+use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
 
 use super::Context;

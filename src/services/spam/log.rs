@@ -96,10 +96,7 @@ async fn hash_message(message: &Message) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dbs::mongo::client::MongoDB;
-    use crate::dbs::mongo::models;
-    use crate::dbs::mongo::models::channel::Channel;
-    use crate::dbs::mongo::models::{ai_prompt::AiPrompt, quarantine::Quarantine, role::Role};
+    use crate::dbs::mongo::MongoDB;
     use crate::dbs::redis::new_pool;
     use tokio::sync::OnceCell;
     use twilight_model::{
@@ -203,18 +200,7 @@ mod tests {
             let http = twilight_http::Client::new("test".into());
             let cache = twilight_cache_inmemory::InMemoryCache::builder().build();
             let redis = new_pool();
-            let client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
-                .await
-                .unwrap();
-            let db = client.database("test_db");
-            let mongo = MongoDB {
-                client,
-                channels: db.collection::<Channel>("channels"),
-                roles: db.collection::<Role>("roles"),
-                quarantines: db.collection::<Quarantine>("quarantines"),
-                messages: db.collection::<models::message::Message>("messages"),
-                ai_prompts: db.collection::<AiPrompt>("ai_prompts"),
-            };
+            let mongo = MongoDB::init(redis.clone(), false).await.unwrap();
             let reqwest = reqwest::Client::new();
             Arc::new(Context {
                 http,

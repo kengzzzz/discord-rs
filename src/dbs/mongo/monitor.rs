@@ -2,7 +2,7 @@ use mongodb::bson::doc;
 use tokio::time::{self, Duration};
 
 use crate::{
-    dbs::mongo::client::MongoDB,
+    dbs::mongo::MongoDB,
     services::{health::HealthService, shutdown},
 };
 

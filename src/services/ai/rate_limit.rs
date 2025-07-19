@@ -24,11 +24,8 @@ pub(crate) async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -
 mod tests {
     use super::*;
     use crate::context::Context;
-    use crate::dbs::mongo::models::{
-        ai_prompt::AiPrompt, channel::Channel, message::Message, quarantine::Quarantine, role::Role,
-    };
+    use crate::dbs::mongo::MongoDB;
     use crate::dbs::redis::new_pool;
-    use mongodb::Client;
     use reqwest::Client as ReqwestClient;
     use twilight_cache_inmemory::DefaultInMemoryCache;
     use twilight_http::Client as HttpClient;
@@ -38,18 +35,7 @@ mod tests {
         let cache = DefaultInMemoryCache::new();
         let redis = new_pool();
 
-        let mongo_client = Client::with_uri_str("mongodb://localhost:27017")
-            .await
-            .unwrap();
-        let database = mongo_client.database("test_db");
-        let mongo = crate::dbs::mongo::client::MongoDB {
-            client: mongo_client,
-            channels: database.collection::<Channel>("channels"),
-            roles: database.collection::<Role>("roles"),
-            quarantines: database.collection::<Quarantine>("quarantines"),
-            messages: database.collection::<Message>("messages"),
-            ai_prompts: database.collection::<AiPrompt>("ai_prompts"),
-        };
+        let mongo = MongoDB::init(redis.clone(), false).await.unwrap();
 
         let reqwest = ReqwestClient::new();
 
