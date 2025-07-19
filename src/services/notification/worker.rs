@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, TimeZone as _, Utc};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -8,15 +8,14 @@ use twilight_model::id::{Id, marker::ChannelMarker};
 
 use crate::{configs::notifications::NOTIFICATIONS, context::Context};
 
-pub(crate) fn next_monday_duration() -> Duration {
-    let now = Utc::now();
-    let weekday = now.weekday().number_from_monday();
-    let days = if weekday == 1 { 7 } else { 8 - weekday } as i64;
-    let next_day = now.date_naive() + chrono::Duration::days(days);
-    let target = next_day.and_hms_opt(0, 0, 0).expect("valid timestamp");
-    let target_dt = DateTime::<Utc>::from_naive_utc_and_offset(target, Utc);
-    let dur = target_dt - now;
-    Duration::from_secs(dur.num_seconds() as u64)
+pub(crate) fn next_monday_duration_from(now: DateTime<Utc>) -> Duration {
+    let w = now.weekday().number_from_monday();
+    let days_ahead = 8 - w;
+    let next_monday = (now.date_naive() + chrono::Duration::days(days_ahead as i64))
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let target = Utc.from_utc_datetime(&next_monday);
+    (target - now).to_std().unwrap()
 }
 
 pub(crate) fn notify_loop(
