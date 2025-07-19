@@ -5,7 +5,7 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    services::ai::{AiInteraction, AiService},
+    services::ai::{self, AiInteraction, AiService},
 };
 use std::{borrow::Cow, sync::Arc};
 
@@ -124,8 +124,16 @@ pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
                 .map(|m| (*m.author.name).as_ref());
             let input = build_ai_input(content.as_ref(), ref_text_opt);
             let (attachments, ref_attachments) = collect_attachments(message);
+            let client = match ai::client::client().await {
+                Ok(c) => Arc::new(c.clone()),
+                Err(e) => {
+                    tracing::warn!(error=%e, "failed to init ai client");
+                    return;
+                }
+            };
             match AiService::handle_interaction(
                 ctx,
+                &client,
                 AiInteraction {
                     user_id: message.author.id,
                     user_name: &message.author.name,

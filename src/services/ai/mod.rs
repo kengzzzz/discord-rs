@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub mod attachments;
-mod client;
+pub mod client;
 pub mod embed;
 pub(crate) mod history;
 pub mod models;
@@ -56,10 +56,14 @@ impl AiService {
         hist::get_prompt(ctx, user).await
     }
 
-    pub async fn handle_interaction(
+    pub async fn handle_interaction<C>(
         ctx: &Arc<Context>,
+        client: &Arc<C>,
         interaction: AiInteraction<'_>,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<String>
+    where
+        C: client::AiClient + Send + Sync + 'static,
+    {
         let AiInteraction {
             user_id,
             user_name,
@@ -72,7 +76,7 @@ impl AiService {
 
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
-        interaction::spawn_summary(ctx, user_id, user_name, &history).await;
+        interaction::spawn_summary(Arc::clone(client), ctx, user_id, user_name, &history).await;
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 
@@ -90,7 +94,7 @@ impl AiService {
         let (system, contents, attachment_urls, ref_attachment_urls) =
             interaction::build_request(args).await?;
 
-        let text = interaction::process_response(&system, contents).await?;
+        let text = interaction::process_response(client.as_ref(), &system, contents).await?;
 
         history.push_back(ChatEntry::new(
             "user".into(),
