@@ -1,8 +1,7 @@
-use std::time::Duration;
-
 use deadpool_redis::Pool;
-use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
+
+use crate::context::test_utils::mock_reqwest::MockReqwest;
 
 use crate::context::test_utils::mock_context::Context;
 use crate::context::test_utils::mock_http::MockClient as Client;
@@ -14,7 +13,7 @@ pub struct ContextBuilder {
     cache: Option<DefaultInMemoryCache>,
     redis: Option<Pool>,
     mongo: Option<MongoDB>,
-    reqwest: Option<ReqwestClient>,
+    reqwest: Option<MockReqwest>,
     watchers: bool,
 }
 
@@ -56,7 +55,7 @@ impl ContextBuilder {
         self
     }
 
-    pub fn reqwest(mut self, reqwest: ReqwestClient) -> Self {
+    pub fn reqwest(mut self, reqwest: MockReqwest) -> Self {
         self.reqwest = Some(reqwest);
         self
     }
@@ -89,15 +88,7 @@ impl ContextBuilder {
             None => MongoDB::init(redis.clone(), self.watchers).await?,
         };
 
-        let reqwest = match self.reqwest {
-            Some(client) => client,
-            None => ReqwestClient::builder()
-                .pool_max_idle_per_host(10)
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(60))
-                .build()
-                .expect("Failed to build Client"),
-        };
+        let reqwest = self.reqwest.unwrap_or_default();
 
         Ok(Context {
             http,

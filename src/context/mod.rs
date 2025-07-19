@@ -15,3 +15,5 @@ pub use test_utils::mock_builder::{self, ContextBuilder};
 pub use test_utils::mock_context::Context;
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_utils::mock_http;
+#[cfg(any(test, feature = "test-utils"))]
+pub use test_utils::mock_reqwest;

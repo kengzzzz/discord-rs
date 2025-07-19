@@ -157,37 +157,19 @@ pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
     redis_delete(pool, &quarantine_key).await;
 }
 
-#[cfg(all(test, not(feature = "test-utils")))]
+#[cfg(any(test, feature = "test-utils"))]
 mod tests {
     use super::*;
-    use crate::{
-        context::mock_http::MockClient as Client,
-        dbs::{mongo::MongoDB, redis::new_pool},
-    };
-    use tokio::sync::OnceCell;
-    use twilight_cache_inmemory::InMemoryCache;
+    use crate::context::{ContextBuilder, mock_http::MockClient as Client};
 
     async fn build_context() -> Arc<Context> {
-        static CTX: OnceCell<Arc<Context>> = OnceCell::const_new();
-        CTX.get_or_init(|| async {
-            unsafe {
-                std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
-            }
-            let http = Client::new();
-            let cache = InMemoryCache::builder().build();
-            let redis = new_pool();
-            let mongo = MongoDB::init(redis.clone(), false).await.unwrap();
-            let reqwest = reqwest::Client::new();
-            Arc::new(Context {
-                http,
-                cache,
-                redis,
-                mongo,
-                reqwest,
-            })
-        })
-        .await
-        .clone()
+        let ctx = ContextBuilder::new()
+            .http(Client::new())
+            .watchers(false)
+            .build()
+            .await
+            .expect("failed to build Context");
+        Arc::new(ctx)
     }
 
     #[tokio::test]
