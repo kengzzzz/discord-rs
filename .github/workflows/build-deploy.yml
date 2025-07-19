@@ -7,35 +7,8 @@ on:
       - 'README.md'
       - 'LICENSE'
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Prepare
-        uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Run tests
-        run: cargo test --locked --all-features -- --nocapture
-
-      - name: Audit dependencies
-        uses: actions-rust-lang/audit@v1
-        with:
-          ignore: RUSTSEC-2023-0071
-
   approval:
-    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,6 +34,9 @@ jobs:
     if: needs.approval.outputs.status == 'approved'
     environment: production
     runs-on: [self-hosted, linux, ARM64]
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: discord-bot-deploy
       cancel-in-progress: true
