@@ -288,7 +288,7 @@ impl MockClient {
         &self,
         _channel_id: Id<ChannelMarker>,
         _message_id: Id<MessageMarker>,
-        _reaction: &twilight_http::request::channel::reaction::RequestReactionType,
+        _reaction: &twilight_http::request::channel::reaction::RequestReactionType<'_>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -367,7 +367,7 @@ fn fake_message(
         "edited_timestamp": null,
         "embeds": embeds,
         "flags": 0,
-        "kind": MessageType::Regular as u8,
+        "kind": u8::from(MessageType::Regular),
         "mention_channels": [],
         "mention_everyone": false,
         "mention_roles": [],
@@ -376,7 +376,7 @@ fn fake_message(
         "pinned": false,
         "reactions": [],
         "sticker_items": [],
-        "timestamp": Timestamp::from_secs(0).unwrap().to_string(),
+        "timestamp": Timestamp::from_secs(0).unwrap().iso_8601().to_string(),
         "tts": false
     }))
     .unwrap()
