@@ -15,7 +15,7 @@ pub(crate) mod history;
 pub mod models;
 
 const MAX_HISTORY: usize = 20;
-const KEEP_RECENT: usize = 6;
+const KEEP_RECENT: usize = 2;
 
 pub struct AiInteraction<'a> {
     pub user_id: Id<UserMarker>,
@@ -70,7 +70,7 @@ impl AiService {
 
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
-        interaction::summarize_history(&mut history, user_name).await;
+        interaction::spawn_summary(ctx, user_id, user_name, &history).await;
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 
