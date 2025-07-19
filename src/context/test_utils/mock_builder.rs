@@ -67,7 +67,7 @@ impl ContextBuilder {
     }
 
     pub async fn build(self) -> anyhow::Result<Context> {
-        let http = self.http.unwrap_or_else(|| Client::new());
+        let http = self.http.unwrap_or_default();
 
         let cache = self.cache.unwrap_or_else(|| {
             DefaultInMemoryCache::builder()

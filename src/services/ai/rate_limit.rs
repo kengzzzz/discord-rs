@@ -20,18 +20,18 @@ pub(crate) async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -
     None
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "test-utils")))]
 mod tests {
     use super::*;
     use crate::context::Context;
+    use crate::context::mock_http::MockClient as Client;
     use crate::dbs::mongo::MongoDB;
     use crate::dbs::redis::new_pool;
     use reqwest::Client as ReqwestClient;
     use twilight_cache_inmemory::DefaultInMemoryCache;
-    use twilight_http::Client as HttpClient;
 
     async fn test_context() -> Arc<Context> {
-        let http = HttpClient::new(String::new());
+        let http = Client::new();
         let cache = DefaultInMemoryCache::new();
         let redis = new_pool();
 

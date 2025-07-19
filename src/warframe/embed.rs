@@ -184,12 +184,12 @@ pub async fn status_embed(
     Ok((embed, is_umbra))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "test-utils")))]
 mod tests {
     use super::*;
     use crate::{
         configs::CACHE_PREFIX,
-        context::ContextBuilder,
+        context::{ContextBuilder, mock_http::MockClient as Client},
         dbs::{
             mongo::MongoDB,
             redis::{new_pool, redis_set_ex},
@@ -267,7 +267,7 @@ mod tests {
             unsafe {
                 std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
             }
-            let http = twilight_http::Client::new("test".into());
+            let http = Client::new();
             let cache = DefaultInMemoryCache::new();
             let redis = new_pool();
             let mongo = MongoDB::init(redis.clone(), false).await.unwrap();

@@ -96,8 +96,8 @@ async fn hash_message(message: &Message) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dbs::mongo::MongoDB;
     use crate::dbs::redis::new_pool;
+    use crate::{context::mock_http::MockClient as Client, dbs::mongo::MongoDB};
     use tokio::sync::OnceCell;
     use twilight_model::{
         channel::{Attachment, message::MessageType},
@@ -197,7 +197,7 @@ mod tests {
             unsafe {
                 std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
             }
-            let http = twilight_http::Client::new("test".into());
+            let http = Client::new();
             let cache = twilight_cache_inmemory::InMemoryCache::builder().build();
             let redis = new_pool();
             let mongo = MongoDB::init(redis.clone(), false).await.unwrap();

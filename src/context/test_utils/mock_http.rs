@@ -6,12 +6,15 @@ use std::sync::Mutex;
 use twilight_model::channel::message::MessageType;
 use twilight_model::channel::{
     Channel,
-    message::{Embed, Message},
+    message::{Embed, Message, MessageFlags},
 };
 use twilight_model::http::interaction::InteractionResponse;
 use twilight_model::id::{
     Id,
-    marker::{ApplicationMarker, ChannelMarker, InteractionMarker, MessageMarker, UserMarker},
+    marker::{
+        ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker, MessageMarker,
+        RoleMarker, UserMarker,
+    },
 };
 use twilight_model::oauth::Application;
 use twilight_model::user::User;
@@ -72,7 +75,9 @@ impl<'a> MockCreateMessage<'a> {
         self.embeds = embeds.to_vec();
         self
     }
-
+    pub fn flags(self, _flags: MessageFlags) -> Self {
+        self
+    }
     async fn exec(self) -> anyhow::Result<MockResponse<Message>> {
         let id = self.client.next_id.fetch_add(1, Ordering::SeqCst);
         let message = fake_message(
@@ -95,7 +100,7 @@ impl<'a> MockCreateMessage<'a> {
 
 impl<'a> IntoFuture for MockCreateMessage<'a> {
     type Output = anyhow::Result<MockResponse<Message>>;
-    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + 'a>>;
+    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(self.exec())
     }
@@ -116,6 +121,12 @@ impl<'a> MockUpdateMessage<'a> {
     }
     pub fn embeds(mut self, embeds: Option<&'a [Embed]>) -> Self {
         self.embeds = embeds.map(|e| e.to_vec());
+        self
+    }
+    pub fn components(
+        self,
+        _components: Option<&'a [twilight_model::channel::message::component::Component]>,
+    ) -> Self {
         self
     }
 
@@ -142,7 +153,7 @@ impl<'a> MockUpdateMessage<'a> {
 
 impl<'a> IntoFuture for MockUpdateMessage<'a> {
     type Output = anyhow::Result<MockResponse<Message>>;
-    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + 'a>>;
+    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(self.exec())
     }
@@ -189,6 +200,13 @@ impl<'a> MockInteractionClient<'a> {
             embeds: Vec::new(),
         }
     }
+
+    pub async fn set_global_commands(
+        &'a self,
+        _commands: &[twilight_model::application::command::Command],
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 pub struct MockInteractionResponseFuture<'a> {
@@ -198,7 +216,7 @@ pub struct MockInteractionResponseFuture<'a> {
 
 impl<'a> IntoFuture for MockInteractionResponseFuture<'a> {
     type Output = anyhow::Result<()>;
-    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + 'a>>;
+    type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             self.client.interactions.lock().unwrap().push(self.record);
@@ -212,6 +230,12 @@ pub struct MockClient {
     pub interactions: Mutex<Vec<InteractionRecord>>,
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
     next_id: AtomicU64,
+}
+
+impl Default for MockClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockClient {
@@ -282,6 +306,37 @@ impl MockClient {
         _message_id: Id<MessageMarker>,
     ) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    pub async fn add_guild_member_role(
+        &self,
+        _guild_id: Id<GuildMarker>,
+        _user_id: Id<UserMarker>,
+        _role_id: Id<RoleMarker>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    pub async fn remove_guild_member_role(
+        &self,
+        _guild_id: Id<GuildMarker>,
+        _user_id: Id<UserMarker>,
+        _role_id: Id<RoleMarker>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    pub async fn message(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+    ) -> anyhow::Result<MockResponse<Message>> {
+        let map = self.channels.lock().unwrap();
+        let message = map
+            .get(&channel_id)
+            .and_then(|msgs| msgs.iter().find(|m| m.id == message_id).cloned())
+            .unwrap_or_else(|| fake_message(message_id, channel_id, String::new(), Vec::new()));
+        Ok(MockResponse::new(message))
     }
 
     pub async fn create_reaction(

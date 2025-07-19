@@ -96,10 +96,13 @@ impl MarketService {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "test-utils")))]
 mod tests {
     use super::*;
-    use crate::{dbs::mongo::MongoDB, dbs::redis::new_pool};
+    use crate::{
+        context::mock_http::MockClient as Client,
+        dbs::{mongo::MongoDB, redis::new_pool},
+    };
     use tokio::sync::OnceCell;
 
     async fn build_context() -> Arc<Context> {
@@ -108,7 +111,7 @@ mod tests {
             unsafe {
                 std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
             }
-            let http = twilight_http::Client::new("test".into());
+            let http = Client::new();
             let cache = twilight_cache_inmemory::InMemoryCache::builder().build();
             let redis = new_pool();
             let mongo = MongoDB::init(redis.clone(), false).await.unwrap();

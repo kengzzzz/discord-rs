@@ -10,7 +10,7 @@ pub use builder::ContextBuilder;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 #[cfg(any(test, feature = "test-utils"))]
-pub use test_utils::mock_builder;
+pub use test_utils::mock_builder::{self, ContextBuilder};
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_utils::mock_context::Context;
 #[cfg(any(test, feature = "test-utils"))]
