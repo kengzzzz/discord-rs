@@ -3,10 +3,9 @@ use std::time::Duration;
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
-use twilight_http::Client;
 
-use crate::configs::discord::DISCORD_CONFIGS;
-use crate::context::Context;
+use crate::context::test_utils::mock_context::Context;
+use crate::context::test_utils::mock_http::MockClient as Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
 
@@ -68,9 +67,7 @@ impl ContextBuilder {
     }
 
     pub async fn build(self) -> anyhow::Result<Context> {
-        let http = self
-            .http
-            .unwrap_or_else(|| Client::new(DISCORD_CONFIGS.discord_token.clone()));
+        let http = self.http.unwrap_or_else(|| Client::new());
 
         let cache = self.cache.unwrap_or_else(|| {
             DefaultInMemoryCache::builder()
