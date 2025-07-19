@@ -189,10 +189,12 @@ mod tests {
     use super::*;
     use crate::{
         configs::CACHE_PREFIX,
+        context::ContextBuilder,
         dbs::{
             mongo::MongoDB,
             redis::{new_pool, redis_set_ex},
         },
+        warframe::api::{SteelPathData, SteelPathReward},
     };
     use std::sync::Arc;
     use tokio::sync::OnceCell;
@@ -362,5 +364,28 @@ mod tests {
         assert_eq!(embed.title.as_deref(), Some("[PC] Warframe Cycle Timers"));
         assert_eq!(embed.footer.unwrap().text, "guild");
         assert_eq!(embed.fields.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_ttl_from_expiry_future() {
+        let expiry = (Utc::now() + chrono::Duration::seconds(120)).to_rfc3339();
+        assert!(ttl_from_expiry(&expiry) >= 120);
+    }
+
+    #[tokio::test]
+    async fn test_steel_path_field_umbra() {
+        let ctx = Arc::new(ContextBuilder::new().watchers(false).build().await.unwrap());
+        let data = SteelPathData {
+            current_reward: Some(SteelPathReward {
+                name: "Umbra Forma Blueprint".to_string(),
+            }),
+            expiry: (Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
+            activation: Some((Utc::now() - chrono::Duration::minutes(2)).to_rfc3339()),
+        };
+        let key = format!("{CACHE_PREFIX}:wf:steel-path");
+        redis_set_ex(&ctx.redis, &key, &data, 60).await;
+
+        let (_field, is_umbra) = steel_path_field(&ctx).await.unwrap();
+        assert!(is_umbra);
     }
 }
