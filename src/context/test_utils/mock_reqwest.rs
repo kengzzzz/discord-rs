@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use axum::http::HeaderMap;
 use reqwest::{Body, Client, Response, Url};
 
-use discord_bot::services::ai::attachments::AttachmentHttp;
-use discord_bot::utils::http::HttpProvider;
+use crate::services::ai::attachments::AttachmentHttp;
+use crate::utils::http::HttpProvider;
 
 #[derive(Clone, Default)]
 pub struct MockReqwest {

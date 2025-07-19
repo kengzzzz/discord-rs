@@ -1,9 +1,9 @@
 use deadpool_redis::Pool;
-use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::DefaultInMemoryCache;
 
 use crate::context::mock_builder::ContextBuilder;
 use crate::context::test_utils::mock_http::MockClient as Client;
+use crate::context::test_utils::mock_reqwest::MockReqwest;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis;
 
@@ -12,7 +12,7 @@ pub struct Context {
     pub cache: DefaultInMemoryCache,
     pub redis: Pool,
     pub mongo: MongoDB,
-    pub reqwest: ReqwestClient,
+    pub reqwest: MockReqwest,
 }
 
 impl Context {
