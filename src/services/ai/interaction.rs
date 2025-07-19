@@ -3,12 +3,17 @@ use super::{
     client::{self, MODELS, extract_text},
     models::ChatEntry,
 };
-use crate::context::Context;
 use crate::{configs::google::GOOGLE_CONFIGS, services::ai::history::parse_history};
+use crate::{context::Context, services::ai::history};
 use google_ai_rs::{Content, Part};
-use std::collections::VecDeque;
+use once_cell::sync::Lazy;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
-use twilight_model::channel::Attachment;
+use tokio::sync::RwLock;
+use twilight_model::{
+    channel::Attachment,
+    id::{Id, marker::UserMarker},
+};
 
 pub(super) struct BuildRequest<'a> {
     pub ctx: &'a Arc<Context>,
@@ -22,13 +27,40 @@ pub(super) struct BuildRequest<'a> {
     pub ref_author: Option<&'a str>,
 }
 
-pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>, user_name: &str) {
-    if history.len() > MAX_HISTORY {
-        if let Ok(summary) = client::summarize(history, user_name).await {
-            while history.len() > KEEP_RECENT {
-                history.pop_front();
+pub(super) static RUNNING: Lazy<RwLock<HashSet<u64>>> = Lazy::new(|| RwLock::new(HashSet::new()));
+
+pub(super) async fn spawn_summary(
+    ctx: &Arc<Context>,
+    user_id: Id<UserMarker>,
+    user_name: &str,
+    history: &VecDeque<ChatEntry>,
+) {
+    if history.len() <= MAX_HISTORY {
+        return;
+    }
+
+    let uid = user_id.get();
+    {
+        let mut guard = RUNNING.write().await;
+        if !guard.insert(uid) {
+            return;
+        }
+    }
+
+    let ctx = ctx.clone();
+    let user_name = user_name.to_string();
+    let mut history = history.clone();
+    tokio::spawn(async move {
+        if let Ok(summary) = client::summarize(&mut history, &user_name).await {
+            let mut latest = history::load_history(&ctx.redis, user_id).await;
+            let remove = history.len().saturating_sub(KEEP_RECENT);
+            for _ in 0..remove {
+                if latest.is_empty() {
+                    break;
+                }
+                latest.pop_front();
             }
-            history.push_front(ChatEntry::new(
+            latest.push_front(ChatEntry::new(
                 "model".to_string(),
                 format!("Summary so far:\n{summary}"),
                 Vec::new(),
@@ -36,8 +68,11 @@ pub(super) async fn summarize_history(history: &mut VecDeque<ChatEntry>, user_na
                 None,
                 None,
             ));
+            history::store_history(&ctx.redis, user_id, &latest).await;
         }
-    }
+
+        RUNNING.write().await.remove(&uid);
+    });
 }
 
 pub(super) async fn build_request(

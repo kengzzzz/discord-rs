@@ -5,9 +5,9 @@ use google_ai_rs::{
 };
 use twilight_model::id::{Id, marker::UserMarker};
 
-use crate::context::Context;
 use crate::services::ai::tests::{set_generate_override, set_summarize_override};
 use crate::services::ai::{AiInteraction, AiService, history, models::ChatEntry};
+use crate::{context::Context, services::ai::tests::wait_for_summaries};
 use std::collections::VecDeque;
 
 fn mock_response(text: &str) -> Response {
@@ -131,8 +131,9 @@ async fn test_summary_rotation() {
         },
     )
     .await;
+    wait_for_summaries().await;
     let hist = history::load_history(&ctx.redis, user).await;
-    assert_eq!(hist.len(), 9); // summary + KEEP_RECENT + 2
+    assert_eq!(hist.len(), 5);
     assert_eq!(hist[0].role, "model".to_string());
     assert!(hist[0].text.contains("SUM"));
 }
@@ -148,4 +149,14 @@ async fn test_purge_prompt_cache() {
     AiService::purge_prompt_cache(&ctx.redis, user.get()).await;
     let prompt = history::get_prompt(&ctx, user).await;
     assert!(prompt.is_none());
+}
+
+#[tokio::test]
+#[cfg(feature = "mock-redis")]
+async fn test_rate_limit() {
+    let user = Id::<UserMarker>::new(99);
+    let ctx = std::sync::Arc::new(Context::test().await);
+    assert!(AiService::check_rate_limit(&ctx, user).await.is_none());
+    let wait = AiService::check_rate_limit(&ctx, user).await;
+    assert!(wait.is_some());
 }

@@ -5,6 +5,7 @@ use self::history as hist;
 use self::models::ChatEntry;
 mod interaction;
 use crate::context::Context;
+use crate::services::ai::rate_limit::check_rate_limit;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -13,9 +14,10 @@ mod client;
 pub mod embed;
 pub(crate) mod history;
 pub mod models;
+mod rate_limit;
 
 const MAX_HISTORY: usize = 20;
-const KEEP_RECENT: usize = 6;
+const KEEP_RECENT: usize = 2;
 
 pub struct AiInteraction<'a> {
     pub user_id: Id<UserMarker>,
@@ -70,7 +72,7 @@ impl AiService {
 
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
-        interaction::summarize_history(&mut history, user_name).await;
+        interaction::spawn_summary(ctx, user_id, user_name, &history).await;
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 
@@ -113,6 +115,10 @@ impl AiService {
         Self::store_history(&ctx.redis, user_id, &history).await;
 
         Ok(text)
+    }
+
+    pub async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -> Option<u64> {
+        check_rate_limit(ctx, user).await
     }
 }
 

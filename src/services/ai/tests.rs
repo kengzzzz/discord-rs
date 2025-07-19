@@ -1,3 +1,5 @@
+use crate::services::ai::interaction::RUNNING;
+
 use super::models::ChatEntry;
 use google_ai_rs::Content;
 use once_cell::sync::OnceCell as SyncOnceCell;
@@ -22,4 +24,14 @@ where
     F: Fn(&[ChatEntry]) -> String + Send + Sync + 'static,
 {
     let _ = SUMMARIZE_OVERRIDE.set(Box::new(f));
+}
+
+pub(crate) async fn wait_for_summaries() {
+    use tokio::time::{Duration, sleep};
+    loop {
+        if RUNNING.read().await.is_empty() {
+            break;
+        }
+        sleep(Duration::from_millis(5)).await;
+    }
 }
