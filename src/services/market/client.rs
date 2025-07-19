@@ -10,7 +10,7 @@ use crate::{
     utils::ascii::cmp_ignore_ascii_case,
 };
 
-use reqwest::Client;
+use crate::utils::http::HttpProvider;
 
 use super::{MarketKind, cache::MarketEntry};
 
@@ -68,15 +68,17 @@ pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<Vec<Market
     None
 }
 
-pub(super) async fn update_items(
-    client: &Client,
+pub(super) async fn update_items<H>(
+    client: &H,
     key: &str,
     items: &Lazy<RwLock<Vec<MarketEntry>>>,
     last_update: &Lazy<AtomicU64>,
     pool: &Pool,
-) -> anyhow::Result<()> {
-    let resp = client.get(ITEMS_URL).send().await?.error_for_status()?;
-    let data: ItemsResponse = resp.json().await?;
+) -> anyhow::Result<()>
+where
+    H: HttpProvider + Sync,
+{
+    let data: ItemsResponse = client.get_json(ITEMS_URL).await?;
     let mut entries: Vec<MarketEntry> = data
         .payload
         .items
@@ -101,21 +103,26 @@ pub(super) async fn update_items(
     Ok(())
 }
 
-pub(super) async fn fetch_orders(client: &Client, url: &str) -> anyhow::Result<Vec<Order>> {
-    let resp = client
-        .get(format!("https://api.warframe.market/v1/items/{url}/orders"))
-        .send()
-        .await?
-        .error_for_status()?;
-    let data: OrdersResponse = resp.json().await?;
+pub(super) async fn fetch_orders<H>(client: &H, url: &str) -> anyhow::Result<Vec<Order>>
+where
+    H: HttpProvider + Sync,
+{
+    let data: OrdersResponse = client
+        .get_json(&format!(
+            "https://api.warframe.market/v1/items/{url}/orders"
+        ))
+        .await?;
     Ok(data.payload.orders)
 }
 
-pub(super) async fn fetch_orders_map(
-    client: &Client,
+pub(super) async fn fetch_orders_map<H>(
+    client: &H,
     url: &str,
     kind: &MarketKind,
-) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)> {
+) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)>
+where
+    H: HttpProvider + Sync,
+{
     let orders = fetch_orders(client, url).await?;
     let mut by_rank: BTreeMap<u8, Vec<super::session::OrderInfo>> = BTreeMap::new();
     let mut max_rank: Option<u8> = None;

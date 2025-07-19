@@ -6,6 +6,8 @@ pub trait HttpProvider {
     async fn get_json<T>(&self, url: &str) -> anyhow::Result<T>
     where
         T: DeserializeOwned + Send;
+
+    fn as_reqwest(&self) -> &reqwest::Client;
 }
 
 #[async_trait]
@@ -16,5 +18,9 @@ impl HttpProvider for reqwest::Client {
     {
         let res = self.get(url).send().await?.error_for_status()?;
         Ok(res.json().await?)
+    }
+
+    fn as_reqwest(&self) -> &reqwest::Client {
+        self
     }
 }

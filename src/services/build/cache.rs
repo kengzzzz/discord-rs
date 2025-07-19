@@ -14,7 +14,7 @@ use crate::{
     utils::ascii::{cmp_ignore_ascii_case, collect_prefix_icase},
 };
 
-use reqwest::Client;
+use crate::utils::http::HttpProvider;
 use std::sync::Arc;
 
 const ITEMS_URL: &str =
@@ -52,10 +52,6 @@ const CATEGORY: [&str; 9] = [
     "Arch-Gun",
 ];
 
-fn items_url() -> String {
-    ITEMS_URL.to_string()
-}
-
 fn filter(item: &Item) -> bool {
     if CATEGORY.contains(&item.category.as_str()) {
         return true;
@@ -79,7 +75,10 @@ async fn load_from_redis(pool: &Pool) -> Option<Vec<String>> {
     None
 }
 
-pub(crate) async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result<()> {
+pub(crate) async fn update_items<H>(client: &H, pool: &Pool) -> anyhow::Result<()>
+where
+    H: HttpProvider + Sync,
+{
     use reqwest::header::{ETAG, HeaderMap, HeaderValue, IF_NONE_MATCH};
     let mut headers = HeaderMap::new();
     if let Some(tag) = &*ITEMS_ETAG.read().await {
@@ -88,7 +87,8 @@ pub(crate) async fn update_items(client: &Client, pool: &Pool) -> anyhow::Result
         }
     }
     let resp = client
-        .get(items_url())
+        .as_reqwest()
+        .get(ITEMS_URL)
         .headers(headers)
         .send()
         .await?
@@ -163,7 +163,10 @@ impl BuildService {
         collect_prefix_icase(&items, prefix, |s| s)
     }
 
-    async fn maybe_refresh(client: &Client, pool: &Pool) {
+    async fn maybe_refresh<H>(client: &H, pool: &Pool)
+    where
+        H: HttpProvider + Sync,
+    {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -176,7 +179,10 @@ impl BuildService {
         }
     }
 
-    pub async fn search_with_update(client: &Client, pool: &Pool, prefix: &str) -> Vec<String> {
+    pub async fn search_with_update<H>(client: &H, pool: &Pool, prefix: &str) -> Vec<String>
+    where
+        H: HttpProvider + Sync,
+    {
         let mut results = Self::search(prefix).await;
         if results.is_empty() {
             Self::maybe_refresh(client, pool).await;
