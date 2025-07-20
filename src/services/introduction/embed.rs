@@ -95,7 +95,9 @@ pub fn intro_details_embed(
 pub fn intro_success_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
 ) -> anyhow::Result<Embed> {
-    let mut builder = EmbedBuilder::new().color(COLOR).title("✅ แนะนำตัวสำเร็จ");
+    let mut builder = EmbedBuilder::new()
+        .color(COLOR)
+        .title("✅ แนะนำตัวสำเร็จ");
 
     let mut footer = footer_with_icon(guild)?;
     footer.text = guild.name().to_string();

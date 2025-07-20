@@ -3,9 +3,19 @@ pub use discord_bot::context::mock_http::{
 };
 
 pub fn last_interaction(client: &MockClient) -> Option<InteractionRecord> {
-    client.interactions.lock().unwrap().last().cloned()
+    client
+        .interactions
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
 }
 
 pub fn last_message(client: &MockClient) -> Option<MessageRecord> {
-    client.messages.lock().unwrap().last().cloned()
+    client
+        .messages
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
 }

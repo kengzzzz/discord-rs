@@ -33,13 +33,19 @@ fn admin_type_arg_desc() -> DescLocalizations {
 
 impl AdminChannelCommand {
     pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
-        let guild_id = interaction.guild_id.context("failed to parse guild_id")?;
+        let guild_id = interaction
+            .guild_id
+            .context("failed to parse guild_id")?;
 
         let mut interaction = interaction;
         let channel = mem::take(&mut interaction.channel).context("failed to take channel")?;
-        let author = interaction.author().context("failed to parse author")?;
+        let author = interaction
+            .author()
+            .context("failed to parse author")?;
         let channel_id = channel.id.get() as i64;
-        let channel_name = channel.name.context("failed to parse channel name")?;
+        let channel_name = channel
+            .name
+            .context("failed to parse channel name")?;
 
         match self.channel_type {
             ChannelEnum::None => {

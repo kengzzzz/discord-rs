@@ -18,8 +18,12 @@ impl VerificationService {
     ) {
         if let Err(e) = guild_command!(ctx.http, interaction, true, {
             defer_interaction!(ctx.http, &interaction, true).await?;
-            let guild_id = interaction.guild_id.context("no guild id")?;
-            let user = interaction.author().context("no author")?;
+            let guild_id = interaction
+                .guild_id
+                .context("no guild id")?;
+            let user = interaction
+                .author()
+                .context("no author")?;
 
             let Some(token) = form::parse_modal(&data) else {
                 if let Some(guild_ref) = ctx.cache.guild(guild_id) {

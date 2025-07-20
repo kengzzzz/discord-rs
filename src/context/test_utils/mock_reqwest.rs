@@ -16,10 +16,7 @@ pub struct MockReqwest {
 
 impl MockReqwest {
     pub fn new() -> Self {
-        Self {
-            responses: Arc::new(Mutex::new(HashMap::new())),
-            client: Client::new(),
-        }
+        Self { responses: Arc::new(Mutex::new(HashMap::new())), client: Client::new() }
     }
 
     pub fn add_json_response(&self, url: &str, body: &str) {
@@ -37,7 +34,10 @@ impl HttpProvider for MockReqwest {
         T: serde::de::DeserializeOwned + Send,
     {
         let map = self.responses.lock().unwrap();
-        let body = map.get(url).cloned().unwrap_or_else(|| "null".to_string());
+        let body = map
+            .get(url)
+            .cloned()
+            .unwrap_or_else(|| "null".to_string());
         Ok(serde_json::from_str(&body)?)
     }
 

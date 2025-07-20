@@ -21,7 +21,11 @@ pub async fn verify(
     user_id: Id<UserMarker>,
     token: &str,
 ) -> bool {
-    let key = format!("spam:quarantine:{}:{}", guild_id.get(), user_id.get());
+    let key = format!(
+        "spam:quarantine:{}:{}",
+        guild_id.get(),
+        user_id.get()
+    );
 
     if let Some(stored) = redis_get::<String>(&ctx.redis, &key).await {
         if stored != token {

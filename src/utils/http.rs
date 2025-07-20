@@ -16,7 +16,11 @@ impl HttpProvider for reqwest::Client {
     where
         T: DeserializeOwned + Send,
     {
-        let res = self.get(url).send().await?.error_for_status()?;
+        let res = self
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?;
         Ok(res.json().await?)
     }
 

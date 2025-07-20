@@ -42,7 +42,12 @@ impl BroadcastService {
                 let embeds = embeds.clone();
                 async move {
                     let channel_id = Id::new(channel.channel_id);
-                    if let Ok(resp) = ctx.http.create_message(channel_id).embeds(&embeds).await {
+                    if let Ok(resp) = ctx
+                        .http
+                        .create_message(channel_id)
+                        .embeds(&embeds)
+                        .await
+                    {
                         if let Ok(msg) = resp.model().await {
                             return Some((channel.channel_id, msg.id.get()));
                         }
@@ -59,9 +64,7 @@ impl BroadcastService {
             Self::remember(&ctx.redis, message.id.get(), &records).await;
         }
 
-        let emoji = RequestReactionType::Unicode {
-            name: Reaction::Success.emoji(),
-        };
+        let emoji = RequestReactionType::Unicode { name: Reaction::Success.emoji() };
         if let Err(e) = ctx
             .http
             .create_reaction(message.channel_id, message.id, &emoji)
@@ -81,7 +84,11 @@ impl BroadcastService {
             let key = format!("{CACHE_PREFIX}:broadcast:{msg_id}");
             if let Some(list) = redis_get::<Vec<(u64, u64)>>(&ctx.redis, &key).await {
                 for (ch, m) in list {
-                    if let Err(e) = ctx.http.delete_message(Id::new(ch), Id::new(m)).await {
+                    if let Err(e) = ctx
+                        .http
+                        .delete_message(Id::new(ch), Id::new(m))
+                        .await
+                    {
                         tracing::warn!(channel_id = ch, message_id = m, error = %e, "failed to delete broadcast replica");
                     }
                 }

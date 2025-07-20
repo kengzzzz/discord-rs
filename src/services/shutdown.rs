@@ -10,5 +10,8 @@ pub fn set_token(token: CancellationToken) {
 }
 
 pub fn get_token() -> CancellationToken {
-    SHUTDOWN.get().expect("shutdown token not set").clone()
+    SHUTDOWN
+        .get()
+        .expect("shutdown token not set")
+        .clone()
 }

@@ -37,7 +37,9 @@ impl BroadcastService {
                 .color(COLOR)
                 .author(author.clone())
                 .footer(footer.clone())
-                .timestamp(Timestamp::from_micros(Utc::now().timestamp_micros())?);
+                .timestamp(Timestamp::from_micros(
+                    Utc::now().timestamp_micros(),
+                )?);
 
             if let Some(ct) = &attachment.content_type {
                 if ct.starts_with("image") {
@@ -62,7 +64,9 @@ impl BroadcastService {
                 .author(author)
                 .description(&message.content)
                 .footer(footer)
-                .timestamp(Timestamp::from_micros(Utc::now().timestamp_micros())?)
+                .timestamp(Timestamp::from_micros(
+                    Utc::now().timestamp_micros(),
+                )?)
                 .build();
             embeds.push(embed);
         }

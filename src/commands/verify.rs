@@ -24,8 +24,12 @@ impl VerifyCommand {
             let _command = VerifyCommand::from_interaction(data.into())
                 .context("failed to parse command data")?;
 
-            let author = interaction.author().context("failed to get author")?;
-            let guild_id = interaction.guild_id.context("no guild id")?;
+            let author = interaction
+                .author()
+                .context("failed to get author")?;
+            let guild_id = interaction
+                .guild_id
+                .context("no guild id")?;
 
             let Some(token) =
                 spam::quarantine::get_token(&ctx, guild_id.get(), author.id.get()).await
@@ -76,10 +80,8 @@ impl VerifyCommand {
                 tts: None,
             };
 
-            let response = InteractionResponse {
-                kind: InteractionResponseType::Modal,
-                data: Some(data),
-            };
+            let response =
+                InteractionResponse { kind: InteractionResponseType::Modal, data: Some(data) };
 
             ctx.http
                 .interaction(interaction.application_id)

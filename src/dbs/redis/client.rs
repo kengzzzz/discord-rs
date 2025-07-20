@@ -16,7 +16,11 @@ where
 {
     let mut conn = pool.get().await.ok()?;
 
-    let json: String = cmd("GET").arg(key).query_async(&mut conn).await.ok()?;
+    let json: String = cmd("GET")
+        .arg(key)
+        .query_async(&mut conn)
+        .await
+        .ok()?;
 
     serde_json::from_str(&json)
         .context("redis_get_json: deserializing")
@@ -29,7 +33,10 @@ where
 {
     if let Err(e) = async {
         let json = serde_json::to_string(value).context("serialize value for redis_set_json")?;
-        let mut conn = pool.get().await.context("get redis connection")?;
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
         cmd("SET")
             .arg(key)
             .arg(json)
@@ -50,7 +57,10 @@ where
 {
     if let Err(e) = async {
         let json = serde_json::to_string(value).context("serialize value for redis_set_ex")?;
-        let mut conn = pool.get().await.context("get redis connection")?;
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
         cmd("SET")
             .arg(key)
             .arg(json)
@@ -70,7 +80,10 @@ where
 pub async fn redis_delete(pool: &Pool, key: &str) {
     if let Err(e) = async {
         let mut conn = pool.get().await?;
-        cmd("DEL").arg(key).query_async::<()>(&mut conn).await?;
+        cmd("DEL")
+            .arg(key)
+            .query_async::<()>(&mut conn)
+            .await?;
         Ok::<_, anyhow::Error>(())
     }
     .await

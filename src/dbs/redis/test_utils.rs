@@ -8,7 +8,8 @@ static REDIS_STORE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::n
 
 pub fn new_pool() -> Pool {
     let cfg = Config::default();
-    cfg.create_pool(Some(Runtime::Tokio1)).unwrap()
+    cfg.create_pool(Some(Runtime::Tokio1))
+        .unwrap()
 }
 
 pub async fn redis_get<T>(_pool: &Pool, key: &str) -> Option<T>

@@ -76,7 +76,14 @@ impl AiService {
 
         let mut history = Self::load_history(&ctx.redis, user_id).await;
 
-        interaction::spawn_summary(Arc::clone(client), ctx, user_id, user_name, &history).await;
+        interaction::spawn_summary(
+            Arc::clone(client),
+            ctx,
+            user_id,
+            user_name,
+            &history,
+        )
+        .await;
 
         let prompt = Self::get_prompt(ctx, user_id).await;
 
@@ -101,11 +108,7 @@ impl AiService {
             message.to_owned(),
             attachment_urls,
             ref_text.map(|t| t.to_string()),
-            if ref_attachment_urls.is_empty() {
-                None
-            } else {
-                Some(ref_attachment_urls)
-            },
+            if ref_attachment_urls.is_empty() { None } else { Some(ref_attachment_urls) },
             ref_author.map(|t| t.to_string()),
         ));
         history.push_back(ChatEntry::new(

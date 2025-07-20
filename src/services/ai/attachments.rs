@@ -34,7 +34,11 @@ impl AttachmentHttp for reqwest::Client {
         headers: HeaderMap,
         body: Body,
     ) -> reqwest::Result<reqwest::Response> {
-        self.post(url).headers(headers).body(body).send().await
+        self.post(url)
+            .headers(headers)
+            .body(body)
+            .send()
+            .await
     }
 }
 
@@ -45,7 +49,10 @@ where
     H: AttachmentHttp + Sync,
 {
     if let Some(ct) = a.content_type.clone() {
-        let resp = http.get(&a.url).await?.error_for_status()?;
+        let resp = http
+            .get(&a.url)
+            .await?
+            .error_for_status()?;
         let stream = Body::wrap_stream(resp.bytes_stream());
         let upload_url = reqwest::Url::parse_with_params(
             "https://generativelanguage.googleapis.com/upload/v1beta/files",
@@ -57,7 +64,10 @@ where
             HeaderValue::from_str(GOOGLE_CONFIGS.api_key.as_str())?,
         );
         if let Some(content_type) = &a.content_type {
-            headers.append(CONTENT_TYPE, HeaderValue::from_str(content_type.as_str())?);
+            headers.append(
+                CONTENT_TYPE,
+                HeaderValue::from_str(content_type.as_str())?,
+            );
         }
         let resp = http
             .post(upload_url, headers, stream)

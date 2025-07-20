@@ -33,7 +33,9 @@ where
     tokio::spawn(async move {
         let mut backoff = Duration::from_secs(1);
         while !token.is_cancelled() {
-            let mut builder = coll.watch().with_options(options.clone());
+            let mut builder = coll
+                .watch()
+                .with_options(options.clone());
             if let Some(token_str) = redis_get::<String>(&pool, &redis_key).await {
                 match serde_json::from_str::<ResumeToken>(&token_str) {
                     Ok(token) => builder = builder.resume_after(token),
@@ -51,7 +53,11 @@ where
                 Err(e) => {
                     if ascii_contains_icase(&e.to_string(), "resume") {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
-                        match coll.watch().with_options(options.clone()).await {
+                        match coll
+                            .watch()
+                            .with_options(options.clone())
+                            .await
+                        {
                             Ok(stream) => {
                                 backoff = Duration::from_secs(1);
                                 stream

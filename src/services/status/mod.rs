@@ -42,7 +42,10 @@ impl StatusService {
     pub async fn update_all(ctx: &Arc<Context>) {
         let channels = ChannelService::list_by_type(ctx, &ChannelEnum::Status).await;
         for channel in channels {
-            let Some(guild_ref) = ctx.cache.guild(Id::new(channel.guild_id)) else {
+            let Some(guild_ref) = ctx
+                .cache
+                .guild(Id::new(channel.guild_id))
+            else {
                 continue;
             };
             let Some(embed) = embed::build_embed(ctx, &guild_ref).await else {
@@ -72,17 +75,27 @@ impl StatusService {
                 }
                 StatusMessageService::set(ctx, channel.guild_id, channel.channel_id, msg_id).await;
             } else {
-                if let Ok(resp) = ctx.http.channel_messages(channel_id).await {
+                if let Ok(resp) = ctx
+                    .http
+                    .channel_messages(channel_id)
+                    .await
+                {
                     if let Ok(msgs) = resp.model().await {
                         let ids: Vec<_> = msgs.into_iter().map(|m| m.id).collect();
 
                         for chunk in ids.chunks(100) {
                             if chunk.len() == 1 {
-                                if let Err(e) = ctx.http.delete_message(channel_id, chunk[0]).await
+                                if let Err(e) = ctx
+                                    .http
+                                    .delete_message(channel_id, chunk[0])
+                                    .await
                                 {
                                     tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
                                 }
-                            } else if let Err(e) = ctx.http.delete_messages(channel_id, chunk).await
+                            } else if let Err(e) = ctx
+                                .http
+                                .delete_messages(channel_id, chunk)
+                                .await
                             {
                                 tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
                             }

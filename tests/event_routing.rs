@@ -37,7 +37,11 @@ async fn message_delete_triggers_role_message_update() {
         channel_id: 10,
         guild_id: guild_id.get(),
     };
-    ctx.mongo.channels.insert_one(channel).await.unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(channel)
+        .await
+        .unwrap();
 
     let role = Role {
         id: None,
@@ -46,7 +50,11 @@ async fn message_delete_triggers_role_message_update() {
         guild_id: guild_id.get(),
         self_assignable: true,
     };
-    ctx.mongo.roles.insert_one(role).await.unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(role)
+        .await
+        .unwrap();
 
     let record = Message {
         id: None,
@@ -55,14 +63,21 @@ async fn message_delete_triggers_role_message_update() {
         message_id: 100,
         message_type: MessageEnum::Role,
     };
-    ctx.mongo.messages.insert_one(record).await.unwrap();
+    ctx.mongo
+        .messages
+        .insert_one(record)
+        .await
+        .unwrap();
 
     let event = make_message_delete(guild_id.get(), 10, 100);
 
     message_delete::handle_single(ctx.clone(), event).await;
 
     let record = last_message(&ctx.http).expect("message record");
-    assert!(matches!(record.kind, MessageOp::Update | MessageOp::Create));
+    assert!(matches!(
+        record.kind,
+        MessageOp::Update | MessageOp::Create
+    ));
 }
 
 #[tokio::test]
@@ -79,7 +94,11 @@ async fn message_delete_bulk_triggers_role_message_update() {
         channel_id: 10,
         guild_id: guild_id.get(),
     };
-    ctx.mongo.channels.insert_one(channel).await.unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(channel)
+        .await
+        .unwrap();
 
     let role = Role {
         id: None,
@@ -88,7 +107,11 @@ async fn message_delete_bulk_triggers_role_message_update() {
         guild_id: guild_id.get(),
         self_assignable: true,
     };
-    ctx.mongo.roles.insert_one(role).await.unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(role)
+        .await
+        .unwrap();
 
     let record = Message {
         id: None,
@@ -97,14 +120,21 @@ async fn message_delete_bulk_triggers_role_message_update() {
         message_id: 100,
         message_type: MessageEnum::Role,
     };
-    ctx.mongo.messages.insert_one(record).await.unwrap();
+    ctx.mongo
+        .messages
+        .insert_one(record)
+        .await
+        .unwrap();
 
     let event = message_delete_bulk(guild_id.get(), 10, vec![50, 100]);
 
     message_delete::handle_bulk(ctx.clone(), event).await;
 
     let record = last_message(&ctx.http).expect("message record");
-    assert!(matches!(record.kind, MessageOp::Update | MessageOp::Create));
+    assert!(matches!(
+        record.kind,
+        MessageOp::Update | MessageOp::Create
+    ));
 }
 
 #[tokio::test]
@@ -145,8 +175,16 @@ async fn message_create_broadcasts() {
         channel_id: 11,
         guild_id: guild_id.get(),
     };
-    ctx.mongo.channels.insert_one(ch_src).await.unwrap();
-    ctx.mongo.channels.insert_one(ch_dest).await.unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(ch_src)
+        .await
+        .unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(ch_dest)
+        .await
+        .unwrap();
 
     let message = make_message(1, 10, Some(guild_id.get()), 200, "hello");
 
@@ -170,7 +208,11 @@ async fn message_create_quarantine_skips_other_routes() {
         channel_id: 99,
         guild_id: guild_id.get(),
     };
-    ctx.mongo.channels.insert_one(q_channel).await.unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(q_channel)
+        .await
+        .unwrap();
 
     let q_role = Role {
         id: None,
@@ -179,7 +221,11 @@ async fn message_create_quarantine_skips_other_routes() {
         guild_id: guild_id.get(),
         self_assignable: false,
     };
-    ctx.mongo.roles.insert_one(q_role).await.unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(q_role)
+        .await
+        .unwrap();
 
     ctx.redis_set(
         &format!("spam:quarantine:{}:{}", guild_id.get(), 200),

@@ -123,7 +123,10 @@ pub async fn spawn_quarantine_watcher(
                     | OperationType::Update
                     | OperationType::Replace
                     | OperationType::Delete => {
-                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                        if let Some(doc) = evt
+                            .full_document
+                            .or(evt.full_document_before_change)
+                        {
                             spam::quarantine::purge_cache(&pool, doc.guild_id, doc.user_id).await;
                         }
                     }
@@ -154,7 +157,10 @@ pub async fn spawn_message_watcher(
                     | OperationType::Update
                     | OperationType::Replace
                     | OperationType::Delete => {
-                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                        if let Some(doc) = evt
+                            .full_document
+                            .or(evt.full_document_before_change)
+                        {
                             match doc.message_type {
                                 MessageEnum::Role => {
                                     role_message::storage::purge_cache(&pool, doc.guild_id).await;
@@ -192,7 +198,10 @@ pub async fn spawn_ai_prompt_watcher(
                     | OperationType::Update
                     | OperationType::Replace
                     | OperationType::Delete => {
-                        if let Some(doc) = evt.full_document.or(evt.full_document_before_change) {
+                        if let Some(doc) = evt
+                            .full_document
+                            .or(evt.full_document_before_change)
+                        {
                             AiService::purge_prompt_cache(&pool, doc.user_id).await;
                             AiService::clear_history(&pool, Id::new(doc.user_id)).await;
                         }

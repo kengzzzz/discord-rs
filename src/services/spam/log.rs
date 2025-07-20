@@ -30,11 +30,13 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
     let hash = hash_message(message).await;
     let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
     let now = Utc::now().timestamp();
-    let mut record = redis_get(&ctx.redis, &key).await.unwrap_or(SpamRecord {
-        hash: hash.clone(),
-        histories: Vec::with_capacity(SPAM_LIMIT),
-        timestamp: now,
-    });
+    let mut record = redis_get(&ctx.redis, &key)
+        .await
+        .unwrap_or(SpamRecord {
+            hash: hash.clone(),
+            histories: Vec::with_capacity(SPAM_LIMIT),
+            timestamp: now,
+        });
 
     if record.hash == hash
         && !record
@@ -60,7 +62,11 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
         let ctx = ctx.clone();
         tokio::spawn(async move {
             for (c_id, m_id) in to_delete {
-                if let Err(e) = ctx.http.delete_message(Id::new(c_id), Id::new(m_id)).await {
+                if let Err(e) = ctx
+                    .http
+                    .delete_message(Id::new(c_id), Id::new(m_id))
+                    .await
+                {
                     tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
                 }
             }

@@ -121,20 +121,37 @@ impl MongoDB {
 
         let idx1 = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "channel_type": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
-        let idx2 = IndexModel::builder().keys(doc! { "channel_id": 1 }).build();
-        if let Err(e) = channels.create_indexes([idx1, idx2]).await {
+        let idx2 = IndexModel::builder()
+            .keys(doc! { "channel_id": 1 })
+            .build();
+        if let Err(e) = channels
+            .create_indexes([idx1, idx2])
+            .await
+        {
             tracing::warn!(collection = "channels", error = %e, "failed to create indexes");
         }
 
         let idx1 = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "role_type": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
         let idx2: IndexModel = IndexModel::builder()
             .keys(doc! { "role_id": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
         if let Err(e) = roles.create_indexes([idx1, idx2]).await {
             tracing::warn!(collection = "roles", error = %e, "failed to create indexes");
@@ -142,7 +159,11 @@ impl MongoDB {
 
         let idx = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "user_id": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
         if let Err(e) = quarantines.create_index(idx).await {
             tracing::warn!(collection = "quarantines", error = %e, "failed to create index");
@@ -150,7 +171,11 @@ impl MongoDB {
 
         let idx = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "message_type": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
         if let Err(e) = messages.create_index(idx).await {
             tracing::warn!(collection = "messages", error = %e, "failed to create index");
@@ -158,20 +183,17 @@ impl MongoDB {
 
         let idx = IndexModel::builder()
             .keys(doc! { "user_id": 1 })
-            .options(IndexOptions::builder().unique(true).build())
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
             .build();
         if let Err(e) = ai_prompts.create_index(idx).await {
             tracing::warn!(collection = "ai_prompts", error = %e, "failed to create index");
         }
 
-        let repo = Self {
-            client,
-            channels,
-            roles,
-            quarantines,
-            messages,
-            ai_prompts,
-        };
+        let repo = Self { client, channels, roles, quarantines, messages, ai_prompts };
 
         if watchers {
             let options = ChangeStreamOptions::builder()

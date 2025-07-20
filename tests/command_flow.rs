@@ -111,19 +111,22 @@ async fn intro_command_modal() {
     let ctx = build_context().await;
     let guild = make_guild(Id::new(1), "guild");
     cache_guild(&ctx.cache, guild.clone());
-    let channel = Channel {
-        id: None,
-        channel_type: ChannelEnum::Introduction,
-        channel_id: 1,
-        guild_id: 1,
-    };
-    ctx.mongo.channels.insert_one(channel).await.unwrap();
+    let channel =
+        Channel { id: None, channel_type: ChannelEnum::Introduction, channel_id: 1, guild_id: 1 };
+    ctx.mongo
+        .channels
+        .insert_one(channel)
+        .await
+        .unwrap();
     let (interaction, data) = command_interaction("intro", Some(1));
 
     IntroCommand::handle(ctx.clone(), interaction, data).await;
 
     let response = last_interaction(&ctx.http).expect("interaction record");
-    assert_eq!(response.response.kind, InteractionResponseType::Modal);
+    assert_eq!(
+        response.response.kind,
+        InteractionResponseType::Modal
+    );
     let modal = response.response.data.expect("data");
     assert_eq!(modal.custom_id.as_deref(), Some("intro_modal"));
 }
@@ -152,13 +155,17 @@ async fn verify_command_modal() {
     let ctx = build_context().await;
     let guild = make_guild(Id::new(1), "guild");
     cache_guild(&ctx.cache, guild.clone());
-    ctx.redis_set("spam:quarantine:1:200", &"token").await;
+    ctx.redis_set("spam:quarantine:1:200", &"token")
+        .await;
     let (interaction, data) = command_interaction("verify", Some(1));
 
     VerifyCommand::handle(ctx.clone(), interaction, data).await;
 
     let response = last_interaction(&ctx.http).expect("interaction record");
-    assert_eq!(response.response.kind, InteractionResponseType::Modal);
+    assert_eq!(
+        response.response.kind,
+        InteractionResponseType::Modal
+    );
     let data = response.response.data.expect("data");
     assert_eq!(data.custom_id.as_deref(), Some("verify_modal"));
 }

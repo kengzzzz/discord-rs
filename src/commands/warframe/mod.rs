@@ -41,7 +41,11 @@ fn extract_focused(cmd: &CommandData) -> Option<(&str, &str, &str)> {
         if let CommandOptionValue::SubCommand(sub_opts) = &opt.value {
             for nested in sub_opts {
                 if let CommandOptionValue::Focused(user_input, _) = &nested.value {
-                    return Some((opt.name.as_str(), nested.name.as_str(), user_input.as_str()));
+                    return Some((
+                        opt.name.as_str(),
+                        nested.name.as_str(),
+                        user_input.as_str(),
+                    ));
                 }
             }
         }
@@ -70,11 +74,15 @@ impl WarframeCommand {
                 } else {
                     MarketService::search_with_update(&ctx, user_input).await
                 };
-                choices.extend(results.into_iter().map(|item| CommandOptionChoice {
-                    name: item.clone(),
-                    value: CommandOptionChoiceValue::String(item),
-                    name_localizations: None,
-                }));
+                choices.extend(
+                    results
+                        .into_iter()
+                        .map(|item| CommandOptionChoice {
+                            name: item.clone(),
+                            value: CommandOptionChoiceValue::String(item),
+                            name_localizations: None,
+                        }),
+                );
             }
 
             let response = InteractionResponse {

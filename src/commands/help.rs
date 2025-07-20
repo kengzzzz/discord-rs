@@ -15,7 +15,9 @@ fn help_desc() -> DescLocalizations {
 impl HelpCommand {
     pub async fn handle(ctx: Arc<Context>, interaction: Interaction, _data: CommandData) {
         handle_ephemeral!(ctx.http, interaction, "HelpCommand", {
-            let guild_id = interaction.guild_id.ok_or(anyhow::anyhow!("no guild"))?;
+            let guild_id = interaction
+                .guild_id
+                .ok_or(anyhow::anyhow!("no guild"))?;
             if let Some(guild_ref) = ctx.cache.guild(guild_id) {
                 let embed = embed::help_embed(&guild_ref)?;
                 ctx.http

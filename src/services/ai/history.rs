@@ -56,15 +56,14 @@ pub(crate) async fn clear_history(_pool: &Pool, user: Id<UserMarker>) {
 }
 
 pub(crate) async fn set_prompt(ctx: &Arc<Context>, user: Id<UserMarker>, prompt: String) {
-    if let Ok(bson) = to_bson(&AiPrompt {
-        id: None,
-        user_id: user.get(),
-        prompt: prompt.clone(),
-    }) {
+    if let Ok(bson) = to_bson(&AiPrompt { id: None, user_id: user.get(), prompt: prompt.clone() }) {
         let _ = ctx
             .mongo
             .ai_prompts
-            .update_one(doc! {"user_id": user.get() as i64}, doc! {"$set": bson})
+            .update_one(
+                doc! {"user_id": user.get() as i64},
+                doc! {"$set": bson},
+            )
             .upsert(true)
             .await;
     }
@@ -97,13 +96,19 @@ pub(crate) async fn parse_history<'a>(
                 }
             }
             if let Some(ref_text) = &c.ref_text {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                let owner = c
+                    .ref_author
+                    .as_deref()
+                    .unwrap_or("another user");
                 let label = format!("In reply to {owner}:");
                 parts.push(Part::text(&label));
                 parts.push(Part::text(ref_text));
             }
             if let Some(ref_urls) = &c.ref_attachments {
-                let owner = c.ref_author.as_deref().unwrap_or("another user");
+                let owner = c
+                    .ref_author
+                    .as_deref()
+                    .unwrap_or("another user");
                 for url in ref_urls {
                     if expired {
                         let label =
@@ -116,10 +121,7 @@ pub(crate) async fn parse_history<'a>(
                     }
                 }
             }
-            Content {
-                role: c.role.clone(),
-                parts,
-            }
+            Content { role: c.role.clone(), parts }
         })
         .collect()
 }

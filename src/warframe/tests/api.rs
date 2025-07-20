@@ -9,10 +9,7 @@ struct MockHttp {
 
 impl MockHttp {
     fn new(map: HashMap<String, String>) -> Self {
-        Self {
-            data: map,
-            client: reqwest::Client::new(),
-        }
+        Self { data: map, client: reqwest::Client::new() }
     }
 }
 
@@ -22,7 +19,10 @@ impl HttpProvider for MockHttp {
     where
         T: DeserializeOwned + Send,
     {
-        let body = self.data.get(url).expect("missing mock response");
+        let body = self
+            .data
+            .get(url)
+            .expect("missing mock response");
         Ok(serde_json::from_str(body)?)
     }
 
@@ -53,7 +53,9 @@ async fn test_cycle_fetch_json() {
     );
     let client = MockHttp::new(map);
 
-    let cycle = cycle(&client, "earthCycle").await.expect("cycle call");
+    let cycle = cycle(&client, "earthCycle")
+        .await
+        .expect("cycle call");
     assert_eq!(cycle.state, "day");
     assert_eq!(cycle.expiry, "2030-01-01T00:00:00Z");
 }
@@ -65,7 +67,9 @@ async fn test_steel_path_fetch_json() {
     map.insert(url, "{\"currentReward\":{\"name\":\"Forma\"},\"expiry\":\"2030-01-01T00:00:00Z\",\"activation\":\"2029-12-01T00:00:00Z\"}".to_string());
     let client = MockHttp::new(map);
 
-    let sp = steel_path(&client).await.expect("steel path");
+    let sp = steel_path(&client)
+        .await
+        .expect("steel path");
     assert_eq!(sp.current_reward.unwrap().name, "Forma");
     assert_eq!(sp.expiry, "2030-01-01T00:00:00Z");
     assert_eq!(sp.activation.unwrap(), "2029-12-01T00:00:00Z");

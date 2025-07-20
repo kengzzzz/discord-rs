@@ -25,14 +25,7 @@ impl Default for ContextBuilder {
 
 impl ContextBuilder {
     pub fn new() -> Self {
-        Self {
-            http: None,
-            cache: None,
-            redis: None,
-            mongo: None,
-            reqwest: None,
-            watchers: true,
-        }
+        Self { http: None, cache: None, redis: None, mongo: None, reqwest: None, watchers: true }
     }
 
     pub fn http(mut self, http: Client) -> Self {
@@ -90,12 +83,6 @@ impl ContextBuilder {
 
         let reqwest = self.reqwest.unwrap_or_default();
 
-        Ok(Context {
-            http,
-            cache,
-            redis,
-            mongo,
-            reqwest,
-        })
+        Ok(Context { http, cache, redis, mongo, reqwest })
     }
 }

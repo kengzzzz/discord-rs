@@ -50,11 +50,16 @@ pub async fn handle_valid_intro(
 
     if let Some(guild_ref) = ctx.cache.guild(guild_id) {
         let intro_embed = embed::intro_details_embed(&guild_ref, member_tag, details)?;
-        send_with_fallback!(ctx, user_id, Id::new(intro_channel.channel_id), |msg| {
-            let welcome = welcome_embed(&guild_ref, member_tag, &details.name)?;
-            msg.embeds(&[welcome]).await?;
-            Ok::<_, anyhow::Error>(())
-        });
+        send_with_fallback!(
+            ctx,
+            user_id,
+            Id::new(intro_channel.channel_id),
+            |msg| {
+                let welcome = welcome_embed(&guild_ref, member_tag, &details.name)?;
+                msg.embeds(&[welcome]).await?;
+                Ok::<_, anyhow::Error>(())
+            }
+        );
         ctx.http
             .create_message(Id::new(intro_channel.channel_id))
             .embeds(&[intro_embed])

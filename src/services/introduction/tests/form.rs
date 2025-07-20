@@ -47,7 +47,12 @@ fn build_data(
 
 #[test]
 fn test_parse_modal_success() {
-    let data = build_data(Some(" Alice "), Some(" 21 "), Some(" IGN "), Some(" Clan "));
+    let data = build_data(
+        Some(" Alice "),
+        Some(" 21 "),
+        Some(" IGN "),
+        Some(" Clan "),
+    );
 
     let result = parse_modal(&data).unwrap();
     assert_eq!(result.name, "Alice");

@@ -66,7 +66,10 @@ pub fn set_channel_embed(
         .title(format!("ตั้งค่าห้อง “{channel_name}”"))
         .description("การตั้งค่าสำเร็จ 🎉")
         .field(EmbedFieldBuilder::new("ชื่อห้อง", channel_name))
-        .field(EmbedFieldBuilder::new("รหัสห้อง", channel_id.to_string()))
+        .field(EmbedFieldBuilder::new(
+            "รหัสห้อง",
+            channel_id.to_string(),
+        ))
         .field(EmbedFieldBuilder::new("ชนิดห้อง", channel_type))
         .field(EmbedFieldBuilder::new("ผู้ตั้งค่า", setter_name).inline())
         .field(EmbedFieldBuilder::new("ตั้งเมื่อ", format!("<t:{now}:R>")).inline())
@@ -92,7 +95,10 @@ pub fn set_role_embed(
         .title(format!("ตั้งค่า Role “{role_name}”"))
         .description("การตั้งค่าสำเร็จ 🎉")
         .field(EmbedFieldBuilder::new("ชื่อ Role", role_name))
-        .field(EmbedFieldBuilder::new("รหัส Role", role_id.to_string()))
+        .field(EmbedFieldBuilder::new(
+            "รหัส Role",
+            role_id.to_string(),
+        ))
         .field(EmbedFieldBuilder::new("ชนิด Role", role_type))
         .field(EmbedFieldBuilder::new("ผู้ตั้งค่า", setter).inline())
         .field(EmbedFieldBuilder::new("เวลา", format!("<t:{now}:R>")).inline())
@@ -119,7 +125,10 @@ pub fn role_message_embed(
             builder.field(EmbedFieldBuilder::new(format!("{emoji} {name}"), "\u{200B}").inline());
     }
 
-    let embed = builder.footer(footer).validate()?.build();
+    let embed = builder
+        .footer(footer)
+        .validate()?
+        .build();
     Ok(embed)
 }
 
