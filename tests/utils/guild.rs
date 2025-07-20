@@ -1,5 +1,3 @@
-#![cfg(feature = "test-utils")]
-
 use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_model::{
     gateway::payload::incoming::GuildCreate,

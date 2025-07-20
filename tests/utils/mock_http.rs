@@ -1,5 +1,3 @@
-#![cfg(feature = "test-utils")]
-
 pub use discord_bot::context::mock_http::{
     InteractionRecord, MessageOp, MessageRecord, MockClient,
 };

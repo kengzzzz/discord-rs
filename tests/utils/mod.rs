@@ -1,4 +1,5 @@
 #![cfg(feature = "test-utils")]
+#![allow(dead_code, unused_imports)]
 
 pub mod event;
 pub mod guild;

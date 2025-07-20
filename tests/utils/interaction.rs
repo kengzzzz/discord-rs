@@ -1,5 +1,3 @@
-#![cfg(feature = "test-utils")]
-
 use twilight_model::application::command::CommandType;
 use twilight_model::application::interaction::{
     Interaction, InteractionData, InteractionType,
@@ -75,6 +73,7 @@ pub fn command_interaction(
             user: None,
         },
         channel: None,
+        #[allow(deprecated)]
         channel_id: None,
         context: None,
         data: Some(InteractionData::ApplicationCommand(Box::new(

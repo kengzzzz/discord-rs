@@ -1,5 +1,3 @@
-#![cfg(feature = "test-utils")]
-
 use twilight_model::gateway::payload::incoming::{MessageDelete, MessageDeleteBulk};
 use twilight_model::id::{
     Id,

@@ -15,7 +15,7 @@ use twilight_model::application::interaction::application_command::{
 };
 use twilight_model::channel::message::MessageFlags;
 use twilight_model::http::interaction::InteractionResponseType;
-use twilight_model::id::{Id, marker::GuildMarker};
+use twilight_model::id::Id;
 use utils::{
     guild::{cache_guild, make_guild},
     interaction::{command_interaction, command_interaction_with_options},
