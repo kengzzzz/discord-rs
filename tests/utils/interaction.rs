@@ -2,7 +2,8 @@
 
 use twilight_model::application::command::CommandType;
 use twilight_model::application::interaction::{
-    Interaction, InteractionData, InteractionType, application_command::CommandData,
+    Interaction, InteractionData, InteractionType,
+    application_command::{CommandData, CommandDataOption},
 };
 use twilight_model::guild::{MemberFlags, PartialMember};
 use twilight_model::id::{
@@ -93,4 +94,15 @@ pub fn command_interaction(
     };
 
     (interaction, command)
+}
+
+pub fn command_interaction_with_options(
+    command_name: &str,
+    guild_id: Option<u64>,
+    options: Vec<CommandDataOption>,
+) -> (Interaction, CommandData) {
+    let (mut interaction, mut data) = command_interaction(command_name, guild_id);
+    data.options = options;
+    interaction.data = Some(InteractionData::ApplicationCommand(Box::new(data.clone())));
+    (interaction, data)
 }

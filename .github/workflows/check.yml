@@ -23,7 +23,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --all-features -- --nocapture
+        run: cargo test --all-features -- --test-threads 1
 
       - name: Audit dependencies
         uses: actions-rust-lang/audit@v1
