@@ -33,9 +33,9 @@ how long enqueue operations block, recording both via Prometheus histograms.
 |------|------|------|--------|-------------|------------|
 | `bot_events_total` | counter | events | priority, event_type, result | Number of events processed or enqueued | Sudden drops may indicate disconnects |
 | `bot_handler_errors_total` | counter | errors | priority, event_type, result | Errors from event handlers | Watch for sustained increases |
-| `bot_queue_wait_ms` | histogram | milliseconds | priority | Time events spend waiting in queue (residency) | Long tails show queue saturation |
-| `bot_queue_enqueue_block_ms` | histogram | milliseconds | priority | Time producers block when queues are full | Spikes imply backpressure |
-| `bot_interaction_ack_ms` | histogram | milliseconds | kind | Time from receive to initial interaction acknowledgement | High values hurt UX |
+| `bot_queue_wait_seconds` | histogram | seconds | priority | Time events spend waiting in queue (residency) | Long tails show queue saturation |
+| `bot_queue_enqueue_block_seconds` | histogram | seconds | priority | Time producers block when queues are full | Spikes imply backpressure |
+| `bot_interaction_ack_seconds` | histogram | seconds | kind | Time from receive to initial interaction acknowledgement | High values hurt UX |
 
 Low-cardinality labels avoid per-user or per-message dimensions to keep metric
 cardinality manageable.
@@ -83,11 +83,11 @@ and visualized with Prometheus and Grafana. Future considerations include adding
 a readiness probe separate from `/healthz`.
 
 ## Interpreting Latencies
-- **queue_wait_ms** measures how long an event sat in a queue before a worker
+- **queue_wait_seconds** measures how long an event sat in a queue before a worker
   picked it up (queue residency).
-- **enqueue_block_ms** tracks how long senders waited when queues were full
+- **enqueue_block_seconds** tracks how long senders waited when queues were full
   (producer backpressure).
-- **interaction_ack_ms** records time from event receipt to initial interaction
+- **interaction_ack_seconds** records time from event receipt to initial interaction
   response, indicating perceived responsiveness.
 
 ## Development & Contribution
