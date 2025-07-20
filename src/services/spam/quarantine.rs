@@ -156,3 +156,8 @@ pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
     redis_delete(pool, &log_key).await;
     redis_delete(pool, &quarantine_key).await;
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
+#[path = "tests/quarantine.rs"]
+mod tests;

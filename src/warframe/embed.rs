@@ -183,3 +183,8 @@ pub async fn status_embed(
     let embed = builder.footer(footer).build();
     Ok((embed, is_umbra))
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code, unused_imports)]
+#[path = "tests/embed.rs"]
+mod tests;

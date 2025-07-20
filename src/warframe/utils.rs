@@ -31,3 +31,7 @@ pub fn title_case(s: &str) -> String {
     out.push_str("** ends");
     out
 }
+
+#[cfg(test)]
+#[path = "tests/utils.rs"]
+mod tests;

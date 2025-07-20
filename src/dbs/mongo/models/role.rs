@@ -2,7 +2,9 @@ use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 use twilight_interactions::command::{CommandOption, CreateOption};
 
-#[derive(CreateOption, CommandOption, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    CreateOption, CommandOption, Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum RoleEnum {
     #[option(name = "Guest", value = "guest")]
@@ -30,10 +32,11 @@ pub enum RoleEnum {
     Quarantine,
 
     #[option(name = "Regular", value = "regular")]
+    #[default]
     None,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Role {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,

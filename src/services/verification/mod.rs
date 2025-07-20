@@ -57,6 +57,3 @@ impl VerificationService {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

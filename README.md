@@ -111,7 +111,7 @@ Pull requests are welcome! Please ensure:
 
 1. Code is formatted with `cargo fmt`.
 2. `cargo clippy --all-targets -- -D warnings` runs without errors.
-3. All tests pass with `cargo test --all-features`.
+3. All tests pass with `cargo test --all-features -- --test-threads 1`.
 
 Issues and feature requests are also appreciated.
 

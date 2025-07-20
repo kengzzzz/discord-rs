@@ -89,3 +89,7 @@ where
     }
     out
 }
+
+#[cfg(test)]
+#[path = "tests/ascii.rs"]
+mod tests;

@@ -23,3 +23,7 @@ where
         v.parse().ok()
     })
 }
+
+#[cfg(test)]
+#[path = "tests/env.rs"]
+mod tests;

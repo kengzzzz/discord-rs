@@ -2,7 +2,9 @@ use mongodb::bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 use twilight_interactions::command::{CommandOption, CreateOption};
 
-#[derive(CreateOption, CommandOption, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    CreateOption, CommandOption, Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelEnum {
     #[option(name = "Notification Channel", value = "notification")]
@@ -24,10 +26,11 @@ pub enum ChannelEnum {
     Quarantine,
 
     #[option(name = "Regular Channel", value = "regular")]
+    #[default]
     None,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Channel {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,

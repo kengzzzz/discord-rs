@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::atomic::AtomicU64};
 
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -10,46 +10,46 @@ use crate::{
     utils::ascii::cmp_ignore_ascii_case,
 };
 
-use reqwest::Client;
+use crate::utils::http::HttpProvider;
 
 use super::{MarketKind, cache::MarketEntry};
 
 const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
 pub(super) const ITEM_URL: &str = "https://warframe.market/items/";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ItemsPayload {
     items: Vec<MarketItem>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ItemsResponse {
     payload: ItemsPayload,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct MarketItem {
     item_name: String,
     url_name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct OrdersPayload {
     orders: Vec<Order>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub(super) struct OrdersResponse {
     payload: OrdersPayload,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub(super) struct OrderUser {
     pub ingame_name: String,
     pub status: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub(super) struct Order {
     pub platinum: u32,
     pub quantity: u32,
@@ -68,15 +68,17 @@ pub(super) async fn load_from_redis(pool: &Pool, key: &str) -> Option<Vec<Market
     None
 }
 
-pub(super) async fn update_items(
-    client: &Client,
+pub(super) async fn update_items<H>(
+    client: &H,
     key: &str,
     items: &Lazy<RwLock<Vec<MarketEntry>>>,
     last_update: &Lazy<AtomicU64>,
     pool: &Pool,
-) -> anyhow::Result<()> {
-    let resp = client.get(ITEMS_URL).send().await?.error_for_status()?;
-    let data: ItemsResponse = resp.json().await?;
+) -> anyhow::Result<()>
+where
+    H: HttpProvider + Sync,
+{
+    let data: ItemsResponse = client.get_json(ITEMS_URL).await?;
     let mut entries: Vec<MarketEntry> = data
         .payload
         .items
@@ -101,21 +103,26 @@ pub(super) async fn update_items(
     Ok(())
 }
 
-pub(super) async fn fetch_orders(client: &Client, url: &str) -> anyhow::Result<Vec<Order>> {
-    let resp = client
-        .get(format!("https://api.warframe.market/v1/items/{url}/orders"))
-        .send()
-        .await?
-        .error_for_status()?;
-    let data: OrdersResponse = resp.json().await?;
+pub(super) async fn fetch_orders<H>(client: &H, url: &str) -> anyhow::Result<Vec<Order>>
+where
+    H: HttpProvider + Sync,
+{
+    let data: OrdersResponse = client
+        .get_json(&format!(
+            "https://api.warframe.market/v1/items/{url}/orders"
+        ))
+        .await?;
     Ok(data.payload.orders)
 }
 
-pub(super) async fn fetch_orders_map(
-    client: &Client,
+pub(super) async fn fetch_orders_map<H>(
+    client: &H,
     url: &str,
     kind: &MarketKind,
-) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)> {
+) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)>
+where
+    H: HttpProvider + Sync,
+{
     let orders = fetch_orders(client, url).await?;
     let mut by_rank: BTreeMap<u8, Vec<super::session::OrderInfo>> = BTreeMap::new();
     let mut max_rank: Option<u8> = None;
@@ -149,3 +156,8 @@ pub(super) async fn fetch_orders_map(
     }
     Ok((by_rank, max_rank))
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
+#[path = "tests/client.rs"]
+mod tests;

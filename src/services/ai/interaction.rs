@@ -29,12 +29,15 @@ pub(super) struct BuildRequest<'a> {
 
 pub(super) static RUNNING: Lazy<RwLock<HashSet<u64>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
-pub(super) async fn spawn_summary(
+pub(super) async fn spawn_summary<C>(
+    client: Arc<C>,
     ctx: &Arc<Context>,
     user_id: Id<UserMarker>,
     user_name: &str,
     history: &VecDeque<ChatEntry>,
-) {
+) where
+    C: client::AiClient + Send + Sync + 'static,
+{
     if history.len() <= MAX_HISTORY {
         return;
     }
@@ -50,8 +53,11 @@ pub(super) async fn spawn_summary(
     let ctx = ctx.clone();
     let user_name = user_name.to_string();
     let mut history = history.clone();
+    let client_clone = client.clone();
     tokio::spawn(async move {
-        if let Ok(summary) = client::summarize(&mut history, &user_name).await {
+        if let Ok(summary) =
+            client::summarize(client_clone.as_ref(), &mut history, &user_name).await
+        {
             let mut latest = history::load_history(&ctx.redis, user_id).await;
             let remove = history.len().saturating_sub(KEEP_RECENT);
             for _ in 0..remove {
@@ -103,40 +109,29 @@ pub(super) async fn build_request(
 
     let mut parts = vec![Part::text(message)];
     let attachment_urls =
-        attachments::append_attachments(ctx, &mut parts, attachments, user_name).await?;
+        attachments::append_attachments(&ctx.reqwest, &mut parts, attachments, user_name).await?;
     let ref_owner = ref_author.unwrap_or("referenced user");
     let ref_attachment_urls =
-        attachments::append_attachments(ctx, &mut parts, ref_attachments, ref_owner).await?;
+        attachments::append_attachments(&ctx.reqwest, &mut parts, ref_attachments, ref_owner)
+            .await?;
 
     contents.push(Content::from(parts));
 
     Ok((system, contents, attachment_urls, ref_attachment_urls))
 }
 
-pub(super) async fn process_response(
+pub(super) async fn process_response<C>(
+    client: &C,
     system: &str,
     contents: Vec<Content>,
-) -> anyhow::Result<String> {
-    let mut response = {
-        #[cfg(test)]
-        {
-            super::tests::GENERATE_OVERRIDE
-                .get()
-                .map(|f| f(contents.clone()))
-        }
-        #[cfg(not(test))]
-        {
-            None
-        }
-    };
-
+) -> anyhow::Result<String>
+where
+    C: client::AiClient + Send + Sync,
+{
+    let mut response = None;
     if response.is_none() {
-        let client = client::client().await?;
         for name in MODELS {
-            let m = client
-                .generative_model(name)
-                .with_system_instruction(system);
-            match m.generate_content(contents.clone()).await {
+            match client.generate(name, system, contents.clone()).await {
                 Ok(r) => {
                     response = Some(r);
                     break;

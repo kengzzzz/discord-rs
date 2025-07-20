@@ -34,16 +34,12 @@ hex = "0.4"
 google-ai-rs = { version = "0.1", features = ["serde"] }
 axum = "0.8"
 tokio-util = "0.7"
+async-trait = "0.1"
 
 [dev-dependencies]
-httpmock = "0.7"
-mockall = "0.13"
-tokio-stream = "0.1"
-serial_test = "3.2"
 criterion = { version = "0.6", features = ["real_blackbox"] }
 
 [features]
-mock-redis = []
 test-utils = []
 
 [[bench]]

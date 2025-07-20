@@ -95,3 +95,8 @@ impl MarketService {
         }
     }
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code)]
+#[path = "tests/cache.rs"]
+mod tests;

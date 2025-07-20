@@ -1,5 +1,6 @@
-use reqwest::Client;
 use serde::Deserialize;
+
+use crate::utils::http::HttpProvider;
 
 pub(super) const MAX_BUILDS: usize = 5;
 const API_URL: &str = "https://overframe.gg/api/v1/builds";
@@ -24,15 +25,16 @@ struct BuildList {
     results: Vec<BuildData>,
 }
 
-pub(super) async fn fetch_builds(client: &Client, item: &str) -> anyhow::Result<Vec<BuildData>> {
+pub(super) async fn fetch_builds<H>(client: &H, item: &str) -> anyhow::Result<Vec<BuildData>>
+where
+    H: HttpProvider + Sync,
+{
     let mut url =
         format!("{API_URL}?item_name={item}&author_id=10027&limit={MAX_BUILDS}&sort_by=Score");
-    let resp = client.get(url).send().await?.error_for_status()?;
-    let mut data: BuildList = resp.json().await?;
+    let mut data: BuildList = client.get_json(&url).await?;
     if data.results.is_empty() {
         url = format!("{API_URL}?item_name={item}&limit={MAX_BUILDS}&sort_by=Score");
-        let resp = client.get(url).send().await?.error_for_status()?;
-        data = resp.json().await?;
+        data = client.get_json(&url).await?;
     }
     Ok(data.results)
 }

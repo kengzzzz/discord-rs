@@ -52,3 +52,7 @@ impl MarketSession {
         self.expire_token = CancellationToken::new();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/session.rs"]
+mod tests;

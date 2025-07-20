@@ -8,7 +8,7 @@ use twilight_model::{
 use crate::{
     context::Context,
     defer_interaction,
-    services::ai::{AiInteraction, AiService},
+    services::ai::{AiInteraction, AiService, client},
 };
 use std::sync::Arc;
 
@@ -102,8 +102,10 @@ impl AiCommand {
                         return Ok::<_, anyhow::Error>(());
                     }
                     let attachments = c.attachment.into_iter().collect();
+                    let client = Arc::new(client::client().await?.clone());
                     let reply = AiService::handle_interaction(
                         &ctx,
+                        &client,
                         AiInteraction {
                             user_id: user.id,
                             user_name: &user.name,

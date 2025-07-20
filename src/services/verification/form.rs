@@ -8,3 +8,7 @@ pub(crate) fn parse_modal(data: &ModalInteractionData) -> Option<String> {
         .filter(|v| !v.is_empty())
         .map(ToOwned::to_owned)
 }
+
+#[cfg(test)]
+#[path = "tests/form.rs"]
+mod tests;

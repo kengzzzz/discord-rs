@@ -50,3 +50,7 @@ impl AiService {
         Ok(embed)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/embed.rs"]
+mod tests;

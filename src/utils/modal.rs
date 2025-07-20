@@ -10,3 +10,7 @@ pub fn modal_value_of<'a>(data: &'a ModalInteractionData, id: &str) -> Option<&'
     }
     None
 }
+
+#[cfg(test)]
+#[path = "tests/modal.rs"]
+mod tests;

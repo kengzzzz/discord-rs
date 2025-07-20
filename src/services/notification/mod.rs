@@ -2,6 +2,7 @@ pub mod worker;
 
 use std::collections::HashMap;
 
+use chrono::Utc;
 use once_cell::sync::Lazy;
 use tokio::{sync::RwLock, task::JoinHandle};
 
@@ -19,7 +20,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-use worker::{next_monday_duration, notify_loop, notify_umbra_loop};
+use worker::{next_monday_duration_from, notify_loop, notify_umbra_loop};
 
 pub struct NotificationService;
 
@@ -40,7 +41,7 @@ impl NotificationService {
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.helminth,
-                next_monday_duration,
+                || next_monday_duration_from(Utc::now()),
                 token.clone(),
             ));
         }
@@ -51,7 +52,7 @@ impl NotificationService {
                 channel_id,
                 role.role_id,
                 NOTIFICATIONS.riven_sliver,
-                next_monday_duration,
+                || next_monday_duration_from(Utc::now()),
                 token.clone(),
             ));
         }

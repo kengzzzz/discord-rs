@@ -37,3 +37,7 @@ pub(crate) fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
         clan,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/form.rs"]
+mod tests;

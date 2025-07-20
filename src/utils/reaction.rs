@@ -26,3 +26,7 @@ pub fn role_enum_to_emoji(role: &RoleEnum) -> Option<&'static str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/reaction.rs"]
+mod tests;

@@ -42,3 +42,7 @@ pub fn pong_embed(latency_ms: Option<u64>) -> anyhow::Result<Embed> {
         .build();
     Ok(embed)
 }
+
+#[cfg(test)]
+#[path = "tests/general.rs"]
+mod tests;

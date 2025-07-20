@@ -92,3 +92,7 @@ async fn hash_message(message: &Message) -> String {
     }
     hex::encode(hasher.finalize())
 }
+
+#[cfg(test)]
+#[path = "tests/log.rs"]
+mod tests;

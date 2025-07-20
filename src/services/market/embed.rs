@@ -98,3 +98,7 @@ impl MarketService {
         Ok(embed)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/embed.rs"]
+mod tests;

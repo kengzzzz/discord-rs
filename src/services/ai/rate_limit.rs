@@ -19,3 +19,7 @@ pub(crate) async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -
     ctx.redis_set_ex(&key, &now, RATE_LIMIT_SECS as usize).await;
     None
 }
+
+#[cfg(all(test, not(feature = "test-utils")))]
+#[path = "tests/rate_limit.rs"]
+mod tests;
