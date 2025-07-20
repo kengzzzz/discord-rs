@@ -110,7 +110,13 @@ impl AiCommand {
                         return Ok::<_, anyhow::Error>(());
                     }
                     let attachments = c.attachment.into_iter().collect();
-                    let client = Arc::new(client::client().await?.clone());
+                    let client = match client::client().await {
+                        Ok(c) => Arc::new(c.clone()),
+                        Err(e) => {
+                            tracing::warn!(error=%e, "failed to init ai client");
+                            return Err(e);
+                        }
+                    };
                     let reply = AiService::handle_interaction(
                         &ctx,
                         &client,
