@@ -120,10 +120,7 @@ where
     redis_set(
         pool,
         REDIS_KEY,
-        &StoredItems {
-            names,
-            etag: new_etag.clone(),
-        },
+        &StoredItems { names, etag: new_etag.clone() },
     )
     .await;
     *ITEMS_ETAG.write().await = new_etag;

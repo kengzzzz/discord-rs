@@ -12,6 +12,5 @@ impl AppConfig {
     }
 }
 
-pub static APP_CONFIG: LazyLock<AppConfig> = LazyLock::new(|| AppConfig {
-    env: parse_env("APP_ENV", "development"),
-});
+pub static APP_CONFIG: LazyLock<AppConfig> =
+    LazyLock::new(|| AppConfig { env: parse_env("APP_ENV", "development") });

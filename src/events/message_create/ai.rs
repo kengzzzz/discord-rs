@@ -44,7 +44,11 @@ pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
     let bot_id = id.get();
     let bytes = raw.as_bytes();
     let len = bytes.len();
-    if !raw.as_bytes().windows(2).any(|w| w == b"<@") {
+    if !raw
+        .as_bytes()
+        .windows(2)
+        .any(|w| w == b"<@")
+    {
         return Cow::Borrowed(raw);
     }
     let mut out: Option<String> = None;
@@ -62,7 +66,9 @@ pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
                 let b = bytes[j];
                 if b.is_ascii_digit() {
                     has_digit = true;
-                    n = n.saturating_mul(10).saturating_add((b - b'0') as u64);
+                    n = n
+                        .saturating_mul(10)
+                        .saturating_add((b - b'0') as u64);
                     j += 1;
                 } else {
                     break;
@@ -91,8 +97,16 @@ pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
 
 pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
     if let Some(user) = ctx.cache.current_user() {
-        if message.mentions.iter().any(|m| m.id == user.id) {
-            if let Err(e) = ctx.http.create_typing_trigger(message.channel_id).await {
+        if message
+            .mentions
+            .iter()
+            .any(|m| m.id == user.id)
+        {
+            if let Err(e) = ctx
+                .http
+                .create_typing_trigger(message.channel_id)
+                .await
+            {
                 tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
             }
             if let Some(wait) = AiService::check_rate_limit(ctx, message.author.id).await {

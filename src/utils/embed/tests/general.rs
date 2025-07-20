@@ -73,12 +73,20 @@ fn test_footer_with_icon() {
     let guild = make_guild(Id::new(1), "guild", Some(icon));
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
-    let guild_ref = cache.guild(guild.id).expect("guild ref");
+    let guild_ref = cache
+        .guild(guild.id)
+        .expect("guild ref");
 
     let footer = footer_with_icon(&guild_ref).unwrap();
-    let expected_url = format!("https://cdn.discordapp.com/icons/{}/{}.png", guild.id, icon);
+    let expected_url = format!(
+        "https://cdn.discordapp.com/icons/{}/{}.png",
+        guild.id, icon
+    );
     assert_eq!(footer.text, guild.name);
-    assert_eq!(footer.icon_url.as_deref(), Some(expected_url.as_str()));
+    assert_eq!(
+        footer.icon_url.as_deref(),
+        Some(expected_url.as_str())
+    );
 }
 
 #[test]

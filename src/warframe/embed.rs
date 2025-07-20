@@ -60,7 +60,9 @@ async fn image_link(ctx: &Arc<Context>) -> anyhow::Result<Option<String>> {
     )
     .await
     {
-        Ok(data) => Ok(data.last().and_then(|i| i.image_link.clone())),
+        Ok(data) => Ok(data
+            .last()
+            .and_then(|i| i.image_link.clone())),
         Err(e) => {
             tracing::warn!(error = %e, "failed to fetch news image");
             Ok(None)
@@ -85,7 +87,11 @@ async fn cycle_field(ctx: &Arc<Context>, endpoint: &str, name: &str) -> anyhow::
             name,
             Reaction::Load.emoji()
         ),
-        format!("{}\n{}", title_case(&data.state), format_time(&data.expiry)),
+        format!(
+            "{}\n{}",
+            title_case(&data.state),
+            format_time(&data.expiry)
+        ),
     )
     .inline()
     .build();
@@ -119,7 +125,9 @@ pub async fn steel_path_field(ctx: &Arc<Context>) -> anyhow::Result<(EmbedField,
     }
     let value = format!(
         "**{}**\nends {}",
-        data.current_reward.map(|r| r.name).unwrap_or_default(),
+        data.current_reward
+            .map(|r| r.name)
+            .unwrap_or_default(),
         format_time(&data.expiry)
     );
     let field = EmbedFieldBuilder::new(

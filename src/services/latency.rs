@@ -8,7 +8,9 @@ static LAST_LATENCY_MS: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0)
 
 impl LatencyService {
     pub fn update(latency: Option<Duration>) {
-        let ms = latency.map(|d| d.as_millis() as u64).unwrap_or(0);
+        let ms = latency
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         LAST_LATENCY_MS.store(ms, Ordering::Relaxed);
     }
 

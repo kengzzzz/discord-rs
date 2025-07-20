@@ -19,11 +19,7 @@ fn build_session(rank: u8, orders: BTreeMap<u8, Vec<OrderInfo>>) -> MarketSessio
 fn test_lpage() {
     let mut map = BTreeMap::new();
     let entries: Vec<OrderInfo> = (0..7)
-        .map(|i| OrderInfo {
-            quantity: i,
-            platinum: i,
-            ign: format!("u{i}"),
-        })
+        .map(|i| OrderInfo { quantity: i, platinum: i, ign: format!("u{i}") })
         .collect();
     map.insert(2, entries);
 
@@ -38,11 +34,7 @@ fn test_lpage() {
 fn test_slice() {
     let mut map = BTreeMap::new();
     let entries: Vec<OrderInfo> = (0..6)
-        .map(|i| OrderInfo {
-            quantity: i,
-            platinum: i,
-            ign: format!("u{i}"),
-        })
+        .map(|i| OrderInfo { quantity: i, platinum: i, ign: format!("u{i}") })
         .collect();
     map.insert(0, entries);
 

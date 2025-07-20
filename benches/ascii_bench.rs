@@ -32,9 +32,11 @@ fn bench_ascii_contains_icase(c: &mut Criterion) {
     for &size in &[16usize, 64, 256, 1024] {
         let hay = "z".repeat(size) + "hello";
 
-        group.bench_with_input(BenchmarkId::from_parameter(size), &hay, |b, hay| {
-            b.iter(|| ascii_contains_icase(black_box(hay), black_box("hello")))
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            &hay,
+            |b, hay| b.iter(|| ascii_contains_icase(black_box(hay), black_box("hello"))),
+        );
     }
 
     group.finish();
@@ -46,9 +48,11 @@ fn bench_ascii_starts_with_icase(c: &mut Criterion) {
     let test_cases = ["HelloWorld", "helloworld", "HELLOWORLD"];
 
     for &hay in &test_cases {
-        group.bench_with_input(BenchmarkId::from_parameter(hay), &hay, |b, &hay| {
-            b.iter(|| ascii_starts_with_icase(black_box(hay), black_box("hello")))
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(hay),
+            &hay,
+            |b, &hay| b.iter(|| ascii_starts_with_icase(black_box(hay), black_box("hello"))),
+        );
     }
 
     group.finish();
@@ -57,14 +61,12 @@ fn bench_ascii_starts_with_icase(c: &mut Criterion) {
 fn bench_collect_prefix_icase(c: &mut Criterion) {
     let mut group = c.benchmark_group("collect_prefix_icase");
 
-    let data: Vec<String> = (0..10_000).map(|i| format!("str{i:05}")).collect();
+    let data: Vec<String> = (0..10_000)
+        .map(|i| format!("str{i:05}"))
+        .collect();
 
-    let cases = [
-        ("empty", ""),
-        ("no_match", "zzz"),
-        ("one_match", "str00000"),
-        ("many_match", "str00"),
-    ];
+    let cases =
+        [("empty", ""), ("no_match", "zzz"), ("one_match", "str00000"), ("many_match", "str00")];
 
     for &(name, prefix) in &cases {
         group.bench_with_input(
@@ -72,10 +74,11 @@ fn bench_collect_prefix_icase(c: &mut Criterion) {
             &prefix,
             |b, &prefix| {
                 b.iter(|| {
-                    let out =
-                        collect_prefix_icase(black_box(&data), black_box(prefix), |s: &String| {
-                            s.as_str()
-                        });
+                    let out = collect_prefix_icase(
+                        black_box(&data),
+                        black_box(prefix),
+                        |s: &String| s.as_str(),
+                    );
                     black_box(out);
                 })
             },

@@ -25,7 +25,9 @@ fn build_desc() -> DescLocalizations {
 
 impl WarframeBuildCommand {
     pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
-        let guild_id = interaction.guild_id.context("parse guild_id failed")?;
+        let guild_id = interaction
+            .guild_id
+            .context("parse guild_id failed")?;
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             let embeds = BuildService::build_embeds(&ctx.reqwest, &guild_ref, &self.item).await?;
             ctx.http

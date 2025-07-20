@@ -126,15 +126,25 @@ async fn test_log_message_and_clear() {
 
     for i in 1..SPAM_LIMIT as u64 {
         let msg = make_message(i, i, 1, 1, "spam", Vec::new());
-        assert!(log_message(&ctx, 1, &msg).await.is_none());
+        assert!(
+            log_message(&ctx, 1, &msg)
+                .await
+                .is_none()
+        );
     }
     let msg = make_message(99, SPAM_LIMIT as u64, 1, 1, "spam", Vec::new());
-    assert!(log_message(&ctx, 1, &msg).await.is_some());
+    assert!(
+        log_message(&ctx, 1, &msg)
+            .await
+            .is_some()
+    );
 
     let new_msg = make_message(100, 1, 1, 1, "different", Vec::new());
     log_message(&ctx, 1, &new_msg).await;
     let key = "spam:log:1:1";
-    let record: SpamRecord = redis_get(&ctx.redis, key).await.unwrap();
+    let record: SpamRecord = redis_get(&ctx.redis, key)
+        .await
+        .unwrap();
     assert_eq!(record.histories.len(), 1);
 
     clear_log(&ctx.redis, 1, 1).await;

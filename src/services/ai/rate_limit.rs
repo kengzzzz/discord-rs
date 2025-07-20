@@ -16,7 +16,8 @@ pub(crate) async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -
             return Some((RATE_LIMIT_SECS - diff) as u64);
         }
     }
-    ctx.redis_set_ex(&key, &now, RATE_LIMIT_SECS as usize).await;
+    ctx.redis_set_ex(&key, &now, RATE_LIMIT_SECS as usize)
+        .await;
     None
 }
 

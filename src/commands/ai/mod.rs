@@ -48,7 +48,10 @@ fn ai_desc() -> DescLocalizations {
 }
 
 fn prompt_desc() -> DescLocalizations {
-    DescLocalizations::new("Set your custom prompt", [("th", "ตั้งค่าพรอมพ์ส่วนตัว")])
+    DescLocalizations::new(
+        "Set your custom prompt",
+        [("th", "ตั้งค่าพรอมพ์ส่วนตัว")],
+    )
 }
 
 fn prompt_prompt_desc() -> DescLocalizations {
@@ -68,7 +71,10 @@ fn talk_attachment_desc() -> DescLocalizations {
 }
 
 fn clear_desc() -> DescLocalizations {
-    DescLocalizations::new("Clear your AI chat history", [("th", "ล้างประวัติการสนทนา")])
+    DescLocalizations::new(
+        "Clear your AI chat history",
+        [("th", "ล้างประวัติการสนทนา")],
+    )
 }
 
 impl AiCommand {
@@ -90,7 +96,9 @@ impl AiCommand {
                     }
                 }
                 AiCommand::Talk(c) => {
-                    let user = interaction.author().context("no author")?;
+                    let user = interaction
+                        .author()
+                        .context("no author")?;
                     if let Some(wait) = AiService::check_rate_limit(&ctx, user.id).await {
                         if let Ok(embed) = AiService::rate_limit_embed(wait) {
                             ctx.http
@@ -102,7 +110,13 @@ impl AiCommand {
                         return Ok::<_, anyhow::Error>(());
                     }
                     let attachments = c.attachment.into_iter().collect();
-                    let client = Arc::new(client::client().await?.clone());
+                    let client = match client::client().await {
+                        Ok(c) => Arc::new(c.clone()),
+                        Err(e) => {
+                            tracing::warn!(error=%e, "failed to init ai client");
+                            return Err(e);
+                        }
+                    };
                     let reply = AiService::handle_interaction(
                         &ctx,
                         &client,

@@ -29,7 +29,10 @@ pub fn message_delete_bulk(
     MessageDeleteBulk {
         guild_id: Some(Id::<GuildMarker>::new(guild_id)),
         channel_id: Id::<ChannelMarker>::new(channel_id),
-        ids: message_ids.into_iter().map(Id::new).collect(),
+        ids: message_ids
+            .into_iter()
+            .map(Id::new)
+            .collect(),
     }
 }
 
@@ -44,9 +47,7 @@ pub fn reaction_add(
         burst: false,
         burst_colors: Vec::new(),
         channel_id: Id::new(channel_id),
-        emoji: EmojiReactionType::Unicode {
-            name: emoji.to_owned(),
-        },
+        emoji: EmojiReactionType::Unicode { name: emoji.to_owned() },
         guild_id: Some(Id::new(guild_id)),
         member: None,
         message_author_id: None,
@@ -66,9 +67,7 @@ pub fn reaction_remove(
         burst: false,
         burst_colors: Vec::new(),
         channel_id: Id::new(channel_id),
-        emoji: EmojiReactionType::Unicode {
-            name: emoji.to_owned(),
-        },
+        emoji: EmojiReactionType::Unicode { name: emoji.to_owned() },
         guild_id: Some(Id::new(guild_id)),
         member: None,
         message_author_id: None,
@@ -150,10 +149,7 @@ pub fn ready_event(user_id: u64, guild_ids: &[u64]) -> Ready {
         },
         guilds: guild_ids
             .iter()
-            .map(|id| UnavailableGuild {
-                id: Id::new(*id),
-                unavailable: true,
-            })
+            .map(|id| UnavailableGuild { id: Id::new(*id), unavailable: true })
             .collect(),
         resume_gateway_url: String::new(),
         session_id: String::new(),

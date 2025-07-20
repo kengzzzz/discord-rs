@@ -19,9 +19,7 @@ pub struct MockCollection<T> {
 
 impl<T> Default for MockCollection<T> {
     fn default() -> Self {
-        Self {
-            data: Arc::new(RwLock::new(Vec::new())),
-        }
+        Self { data: Arc::new(RwLock::new(Vec::new())) }
     }
 }
 
@@ -30,9 +28,7 @@ where
     T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
 {
     pub fn new() -> Self {
-        Self {
-            data: Arc::new(RwLock::new(Vec::new())),
-        }
+        Self { data: Arc::new(RwLock::new(Vec::new())) }
     }
 
     pub async fn insert_one(&self, doc: T) -> Result<()> {
@@ -60,10 +56,7 @@ where
                 vec.push(item.clone());
             }
         }
-        Ok(MockCursor {
-            data: vec,
-            index: 0,
-        })
+        Ok(MockCursor { data: vec, index: 0 })
     }
 
     pub async fn delete_one(&self, filter: Document) -> Result<()> {
@@ -116,11 +109,7 @@ where
     }
 
     pub fn update_one(&self, filter: Document, update: Document) -> UpdateOneBuilder<'_, T> {
-        UpdateOneBuilder {
-            collection: self,
-            filter,
-            update,
-        }
+        UpdateOneBuilder { collection: self, filter, update }
     }
 }
 
@@ -165,7 +154,9 @@ where
 }
 
 fn matches(doc: &Document, filter: &Document) -> bool {
-    filter.iter().all(|(k, v)| doc.get(k) == Some(v))
+    filter
+        .iter()
+        .all(|(k, v)| doc.get(k) == Some(v))
 }
 
 #[derive(Clone, Default)]

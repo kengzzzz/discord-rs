@@ -32,7 +32,10 @@ pub enum AdminCommand {
 }
 
 fn admin_desc() -> DescLocalizations {
-    DescLocalizations::new("Bot setting for admin", [("th", "การตั้งค่าบอทสำหรับ admin")])
+    DescLocalizations::new(
+        "Bot setting for admin",
+        [("th", "การตั้งค่าบอทสำหรับ admin")],
+    )
 }
 
 fn extract_focused(cmd: &CommandData) -> Option<(&str, &str)> {
@@ -78,7 +81,9 @@ impl AdminCommand {
     pub async fn autocomplete(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         if let Err(e) = async {
             let focused = extract_focused(&data).context("parse focused field failed")?;
-            let guild_id = interaction.guild_id.context("parse guild_id failed")?;
+            let guild_id = interaction
+                .guild_id
+                .context("parse guild_id failed")?;
 
             let mut choices = Vec::with_capacity(25);
 
@@ -88,19 +93,21 @@ impl AdminCommand {
                         role_ids
                             .iter()
                             .filter_map(|role_id| {
-                                ctx.cache.role(*role_id).and_then(|role| {
-                                    if ascii_starts_with_icase(&role.name, focused.1) {
-                                        Some(CommandOptionChoice {
-                                            name: role.name.clone(),
-                                            value: CommandOptionChoiceValue::String(
-                                                role.id.to_string(),
-                                            ),
-                                            name_localizations: None,
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                })
+                                ctx.cache
+                                    .role(*role_id)
+                                    .and_then(|role| {
+                                        if ascii_starts_with_icase(&role.name, focused.1) {
+                                            Some(CommandOptionChoice {
+                                                name: role.name.clone(),
+                                                value: CommandOptionChoiceValue::String(
+                                                    role.id.to_string(),
+                                                ),
+                                                name_localizations: None,
+                                            })
+                                        } else {
+                                            None
+                                        }
+                                    })
                             })
                             .take(25),
                     );

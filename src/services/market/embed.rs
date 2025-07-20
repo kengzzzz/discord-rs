@@ -86,11 +86,10 @@ impl MarketService {
         } else {
             format!("{} {}", kind.label(), item)
         };
-        let mut builder = EmbedBuilder::new().color(COLOR).title(title).url(format!(
-            "{}{}",
-            client::ITEM_URL,
-            url
-        ));
+        let mut builder = EmbedBuilder::new()
+            .color(COLOR)
+            .title(title)
+            .url(format!("{}{}", client::ITEM_URL, url));
         for field in Self::build_fields(&orders, item, kind, rank) {
             builder = builder.field(field);
         }

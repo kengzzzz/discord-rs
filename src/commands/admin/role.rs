@@ -20,7 +20,10 @@ pub struct AdminRoleCommand {
     #[command(desc_localizations = "role_type_arg_desc")]
     pub role_type: RoleEnum,
 
-    #[command(desc_localizations = "role_name_arg_desc", autocomplete = true)]
+    #[command(
+        desc_localizations = "role_name_arg_desc",
+        autocomplete = true
+    )]
     pub role_name: String,
 
     #[command(desc_localizations = "role_assign_arg_desc")]
@@ -32,7 +35,10 @@ fn admin_role_desc() -> DescLocalizations {
 }
 
 fn role_type_arg_desc() -> DescLocalizations {
-    DescLocalizations::new("Select the role type", [("th", "เลือกชนิดของ role")])
+    DescLocalizations::new(
+        "Select the role type",
+        [("th", "เลือกชนิดของ role")],
+    )
 }
 
 fn role_name_arg_desc() -> DescLocalizations {
@@ -48,12 +54,16 @@ fn role_assign_arg_desc() -> DescLocalizations {
 
 impl AdminRoleCommand {
     pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
-        let guild_id = interaction.guild_id.context("failed to parse guild_id")?;
+        let guild_id = interaction
+            .guild_id
+            .context("failed to parse guild_id")?;
         let role_type = self.role_type.value();
         let role_id: Id<RoleMarker> = self.role_name.parse()?;
         let self_assignable = self.self_assignable.unwrap_or_default();
 
-        let author = interaction.author().context("failed to parse author")?;
+        let author = interaction
+            .author()
+            .context("failed to parse author")?;
 
         match self.role_type {
             RoleEnum::None => {

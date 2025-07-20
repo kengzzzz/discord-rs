@@ -11,7 +11,13 @@ use crate::{
 use std::sync::Arc;
 
 pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
-    if event.member.user.bot || event.member.user.system.unwrap_or_default() {
+    if event.member.user.bot
+        || event
+            .member
+            .user
+            .system
+            .unwrap_or_default()
+    {
         return;
     }
     let guild_id = event.guild_id;
@@ -30,15 +36,20 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-            send_with_fallback!(ctx, event.user.id, Id::new(q_channel.channel_id), |msg| {
-                let embed = spam::embed::quarantine_reminder_embed(
-                    &guild_ref,
-                    q_channel.channel_id,
-                    &token,
-                )?;
-                msg.embeds(&[embed]).await?;
-                Ok::<_, anyhow::Error>(())
-            });
+            send_with_fallback!(
+                ctx,
+                event.user.id,
+                Id::new(q_channel.channel_id),
+                |msg| {
+                    let embed = spam::embed::quarantine_reminder_embed(
+                        &guild_ref,
+                        q_channel.channel_id,
+                        &token,
+                    )?;
+                    msg.embeds(&[embed]).await?;
+                    Ok::<_, anyhow::Error>(())
+                }
+            );
         }
 
         return;
@@ -59,12 +70,17 @@ pub async fn handle(ctx: Arc<Context>, event: MemberAdd) {
         }
 
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-            send_with_fallback!(ctx, event.user.id, Id::new(channel.channel_id), |msg| {
-                let embed =
-                    introduction::embed::intro_prompt_embed(&guild_ref, channel.channel_id)?;
-                msg.embeds(&[embed]).await?;
-                Ok::<_, anyhow::Error>(())
-            });
+            send_with_fallback!(
+                ctx,
+                event.user.id,
+                Id::new(channel.channel_id),
+                |msg| {
+                    let embed =
+                        introduction::embed::intro_prompt_embed(&guild_ref, channel.channel_id)?;
+                    msg.embeds(&[embed]).await?;
+                    Ok::<_, anyhow::Error>(())
+                }
+            );
         }
     }
 }

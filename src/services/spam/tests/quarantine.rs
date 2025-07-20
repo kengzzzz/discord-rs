@@ -23,7 +23,11 @@ async fn test_get_token_from_redis() {
         token: "mongo_token".into(),
         roles: Vec::new(),
     };
-    ctx.mongo.quarantines.insert_one(record).await.unwrap();
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
     let token = get_token(&ctx, 1, 1).await;
     assert_eq!(token, Some("redis_token".into()));
 }
@@ -38,11 +42,17 @@ async fn test_get_token_fallback_to_mongo() {
         token: "mongo_token".into(),
         roles: Vec::new(),
     };
-    ctx.mongo.quarantines.insert_one(record).await.unwrap();
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
     let token = get_token(&ctx, 1, 2).await;
     assert_eq!(token, Some("mongo_token".into()));
     let key = "spam:quarantine:1:2";
-    let cached: String = redis_get(&ctx.redis, key).await.unwrap();
+    let cached: String = redis_get(&ctx.redis, key)
+        .await
+        .unwrap();
     assert_eq!(cached, "mongo_token");
 }
 
@@ -63,14 +73,13 @@ async fn test_purge_cache() {
 #[tokio::test]
 async fn test_verify_success_and_delete_record() {
     let ctx = build_context().await;
-    let record = Quarantine {
-        id: None,
-        guild_id: 1,
-        user_id: 4,
-        token: "token".into(),
-        roles: Vec::new(),
-    };
-    ctx.mongo.quarantines.insert_one(record).await.unwrap();
+    let record =
+        Quarantine { id: None, guild_id: 1, user_id: 4, token: "token".into(), roles: Vec::new() };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
     redis_set(&ctx.redis, "spam:quarantine:1:4", &"token").await;
     let ok = verify(&ctx, Id::new(1), Id::new(4), "token").await;
     assert!(ok);
@@ -86,14 +95,13 @@ async fn test_verify_success_and_delete_record() {
 #[tokio::test]
 async fn test_verify_fails_on_mismatched_token() {
     let ctx = build_context().await;
-    let record = Quarantine {
-        id: None,
-        guild_id: 1,
-        user_id: 5,
-        token: "token".into(),
-        roles: Vec::new(),
-    };
-    ctx.mongo.quarantines.insert_one(record).await.unwrap();
+    let record =
+        Quarantine { id: None, guild_id: 1, user_id: 5, token: "token".into(), roles: Vec::new() };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
     redis_set(&ctx.redis, "spam:quarantine:1:5", &"other").await;
     let ok = verify(&ctx, Id::new(1), Id::new(5), "token").await;
     assert!(!ok);

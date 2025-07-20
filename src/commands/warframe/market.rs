@@ -54,7 +54,9 @@ impl From<MarketType> for MarketKind {
 
 impl WarframeMarketCommand {
     pub async fn run(&self, ctx: Arc<Context>, interaction: Interaction) -> anyhow::Result<()> {
-        let guild_id = interaction.guild_id.context("parse guild_id failed")?;
+        let guild_id = interaction
+            .guild_id
+            .context("parse guild_id failed")?;
         if let Some(guild_ref) = ctx.cache.guild(guild_id) {
             if let Some(session) =
                 MarketService::create_session(&ctx, &self.item, self.kind.into()).await?

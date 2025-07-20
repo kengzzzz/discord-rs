@@ -83,10 +83,7 @@ where
         .payload
         .items
         .into_iter()
-        .map(|item| MarketEntry {
-            name: item.item_name,
-            url: item.url_name,
-        })
+        .map(|item| MarketEntry { name: item.item_name, url: item.url_name })
         .collect();
     entries.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
     entries.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
@@ -119,7 +116,10 @@ pub(super) async fn fetch_orders_map<H>(
     client: &H,
     url: &str,
     kind: &MarketKind,
-) -> anyhow::Result<(BTreeMap<u8, Vec<super::session::OrderInfo>>, Option<u8>)>
+) -> anyhow::Result<(
+    BTreeMap<u8, Vec<super::session::OrderInfo>>,
+    Option<u8>,
+)>
 where
     H: HttpProvider + Sync,
 {

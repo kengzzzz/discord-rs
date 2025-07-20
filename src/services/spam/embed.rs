@@ -38,11 +38,15 @@ pub fn quarantine_embed(
     let alert = EmbedBuilder::new()
         .color(COLOR_INVALID)
         .title("🚨 ตรวจพบกิจกรรมต้องสงสัย")
-        .description(format!("เพื่อปลดล็อค กรุณาใช้คำสั่ง /verify ใน <#{channel_id}>"))
+        .description(format!(
+            "เพื่อปลดล็อค กรุณาใช้คำสั่ง /verify ใน <#{channel_id}>"
+        ))
         .field(EmbedFieldBuilder::new("🔑 token สำหรับ verify", format!("```{token}```")).inline())
         .field(EmbedFieldBuilder::new("💬 วิธีการยืนยัน", "กรอก token ในหน้าต่าง /verify").inline())
         .footer(footer.clone())
-        .timestamp(Timestamp::from_micros(Utc::now().timestamp_micros())?)
+        .timestamp(Timestamp::from_micros(
+            Utc::now().timestamp_micros(),
+        )?)
         .validate()?
         .build();
 

@@ -3,18 +3,17 @@ use twilight_model::id::{Id, marker::EmojiMarker};
 
 #[test]
 fn test_emoji_to_role_enum_known() {
-    let emoji = EmojiReactionType::Unicode {
-        name: Reaction::Riven.emoji().to_string(),
-    };
+    let emoji = EmojiReactionType::Unicode { name: Reaction::Riven.emoji().to_string() };
 
-    assert_eq!(emoji_to_role_enum(&emoji), Some(RoleEnum::RivenSilver));
+    assert_eq!(
+        emoji_to_role_enum(&emoji),
+        Some(RoleEnum::RivenSilver)
+    );
 }
 
 #[test]
 fn test_emoji_to_role_enum_unknown_unicode() {
-    let emoji = EmojiReactionType::Unicode {
-        name: "❓".to_string(),
-    };
+    let emoji = EmojiReactionType::Unicode { name: "❓".to_string() };
 
     assert_eq!(emoji_to_role_enum(&emoji), None);
 }

@@ -1,0 +1,13 @@
+edition = "2024"
+style_edition = "2024"
+
+max_width = 100
+use_small_heuristics = "Max"
+
+chain_width = 40
+
+fn_call_width = 50
+attr_fn_like_width = 60
+
+hard_tabs = false
+newline_style = "Auto"

@@ -1,8 +1,7 @@
-use std::future::Future;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::{Router, http::StatusCode, routing::get};
+use axum::http::StatusCode;
 
 static READY: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 static DISCORD_CONNECTED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
@@ -11,19 +10,6 @@ static MONGO_CONNECTED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(
 pub struct HealthService;
 
 impl HealthService {
-    pub fn spawn(shutdown: impl Future<Output = ()> + Send + 'static) {
-        tokio::spawn(async move {
-            let app = Router::new().route("/healthz", get(Self::health));
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
-                .await
-                .expect("bind health listener");
-            axum::serve(listener, app)
-                .with_graceful_shutdown(shutdown)
-                .await
-                .expect("health server crashed");
-        });
-    }
-
     pub fn set_ready(state: bool) {
         READY.store(state, Ordering::Relaxed);
     }

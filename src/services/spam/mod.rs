@@ -15,7 +15,10 @@ pub mod quarantine;
 impl SpamService {
     pub async fn is_quarantined(ctx: &Arc<Context>, guild_id: u64, user_id: u64) -> bool {
         let key = format!("spam:quarantine:{guild_id}:{user_id}");
-        if redis_get::<String>(&ctx.redis, &key).await.is_some() {
+        if redis_get::<String>(&ctx.redis, &key)
+            .await
+            .is_some()
+        {
             return true;
         }
 

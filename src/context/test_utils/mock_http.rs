@@ -79,7 +79,10 @@ impl<'a> MockCreateMessage<'a> {
         self
     }
     async fn exec(self) -> anyhow::Result<MockResponse<Message>> {
-        let id = self.client.next_id.fetch_add(1, Ordering::SeqCst);
+        let id = self
+            .client
+            .next_id
+            .fetch_add(1, Ordering::SeqCst);
         let message = fake_message(
             Id::new(id),
             self.channel_id,
@@ -93,7 +96,11 @@ impl<'a> MockCreateMessage<'a> {
             embeds: self.embeds,
             kind: MessageOp::Create,
         };
-        self.client.messages.lock().unwrap().push(record);
+        self.client
+            .messages
+            .lock()
+            .unwrap()
+            .push(record);
         Ok(MockResponse::new(message))
     }
 }
@@ -146,7 +153,11 @@ impl<'a> MockUpdateMessage<'a> {
             embeds,
             kind: MessageOp::Update,
         };
-        self.client.messages.lock().unwrap().push(record);
+        self.client
+            .messages
+            .lock()
+            .unwrap()
+            .push(record);
         Ok(MockResponse::new(message))
     }
 }
@@ -219,7 +230,11 @@ impl<'a> IntoFuture for MockInteractionResponseFuture<'a> {
     type IntoFuture = Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            self.client.interactions.lock().unwrap().push(self.record);
+            self.client
+                .interactions
+                .lock()
+                .unwrap()
+                .push(self.record);
             Ok(())
         })
     }
@@ -249,16 +264,14 @@ impl MockClient {
     }
 
     pub fn add_channel_messages(&self, channel: Id<ChannelMarker>, msgs: Vec<Message>) {
-        self.channels.lock().unwrap().insert(channel, msgs);
+        self.channels
+            .lock()
+            .unwrap()
+            .insert(channel, msgs);
     }
 
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> MockCreateMessage<'_> {
-        MockCreateMessage {
-            client: self,
-            channel_id,
-            content: None,
-            embeds: Vec::new(),
-        }
+        MockCreateMessage { client: self, channel_id, content: None, embeds: Vec::new() }
     }
 
     pub fn update_message(
@@ -266,13 +279,7 @@ impl MockClient {
         channel_id: Id<ChannelMarker>,
         message_id: Id<MessageMarker>,
     ) -> MockUpdateMessage<'_> {
-        MockUpdateMessage {
-            client: self,
-            channel_id,
-            message_id,
-            content: None,
-            embeds: None,
-        }
+        MockUpdateMessage { client: self, channel_id, message_id, content: None, embeds: None }
     }
 
     pub async fn channel_messages(
@@ -280,7 +287,10 @@ impl MockClient {
         channel_id: Id<ChannelMarker>,
     ) -> anyhow::Result<MockResponse<Vec<Message>>> {
         let map = self.channels.lock().unwrap();
-        let data = map.get(&channel_id).cloned().unwrap_or_default();
+        let data = map
+            .get(&channel_id)
+            .cloned()
+            .unwrap_or_default();
         Ok(MockResponse::new(data))
     }
 
@@ -334,7 +344,11 @@ impl MockClient {
         let map = self.channels.lock().unwrap();
         let message = map
             .get(&channel_id)
-            .and_then(|msgs| msgs.iter().find(|m| m.id == message_id).cloned())
+            .and_then(|msgs| {
+                msgs.iter()
+                    .find(|m| m.id == message_id)
+                    .cloned()
+            })
             .unwrap_or_else(|| fake_message(message_id, channel_id, String::new(), Vec::new()));
         Ok(MockResponse::new(message))
     }
@@ -364,10 +378,7 @@ impl MockClient {
     }
 
     pub fn interaction(&self, application_id: Id<ApplicationMarker>) -> MockInteractionClient<'_> {
-        MockInteractionClient {
-            client: self,
-            application_id,
-        }
+        MockInteractionClient { client: self, application_id }
     }
 
     pub async fn current_user_application(&self) -> anyhow::Result<MockResponse<Application>> {

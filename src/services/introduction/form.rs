@@ -10,7 +10,9 @@ pub struct IntroDetails {
 }
 
 pub(crate) fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
-    let name = modal_value_of(data, "name")?.trim().to_owned();
+    let name = modal_value_of(data, "name")?
+        .trim()
+        .to_owned();
     if name.is_empty() {
         return None;
     }
@@ -30,12 +32,7 @@ pub(crate) fn parse_modal(data: &ModalInteractionData) -> Option<IntroDetails> {
         .filter(|v| !v.is_empty())
         .map(ToOwned::to_owned);
 
-    Some(IntroDetails {
-        name,
-        age,
-        ign,
-        clan,
-    })
+    Some(IntroDetails { name, age, ign, clan })
 }
 
 #[cfg(test)]

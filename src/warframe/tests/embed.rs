@@ -93,9 +93,7 @@ async fn test_steel_path_field_detects_umbra() {
     let expiry = (Utc::now() + chrono::Duration::minutes(30)).to_rfc3339();
     let activation = Utc::now().to_rfc3339();
     let data = api::SteelPathData {
-        current_reward: Some(api::SteelPathReward {
-            name: "Umbra Forma Blueprint".into(),
-        }),
+        current_reward: Some(api::SteelPathReward { name: "Umbra Forma Blueprint".into() }),
         expiry: expiry.clone(),
         activation: Some(activation),
     };
@@ -104,7 +102,10 @@ async fn test_steel_path_field_detects_umbra() {
 
     let (field, is_umbra) = steel_path_field(&ctx).await.unwrap();
     assert!(is_umbra);
-    let expected_value = format!("**Umbra Forma Blueprint**\nends {}", format_time(&expiry));
+    let expected_value = format!(
+        "**Umbra Forma Blueprint**\nends {}",
+        format_time(&expiry)
+    );
     assert_eq!(field.value, expected_value);
 }
 
@@ -114,16 +115,12 @@ async fn test_status_embed_footer_and_fields() {
     let exp = (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
 
     let news_key = format!("{CACHE_PREFIX}:wf:news");
-    let news = vec![api::NewsItem {
-        image_link: Some("https://example.com/img.png".into()),
-    }];
+    let news = vec![api::NewsItem { image_link: Some("https://example.com/img.png".into()) }];
     redis_set_ex(&ctx.redis, &news_key, &news, 60).await;
 
     let steel_key = format!("{CACHE_PREFIX}:wf:steel-path");
     let steel = api::SteelPathData {
-        current_reward: Some(api::SteelPathReward {
-            name: "Umbra Forma Blueprint".into(),
-        }),
+        current_reward: Some(api::SteelPathReward { name: "Umbra Forma Blueprint".into() }),
         expiry: exp.clone(),
         activation: Some(Utc::now().to_rfc3339()),
     };
@@ -138,21 +135,25 @@ async fn test_status_embed_footer_and_fields() {
     ];
     for (ep, _) in &cycle_endpoints {
         let key = format!("{CACHE_PREFIX}:wf:cycle:{ep}");
-        let cycle = api::Cycle {
-            state: "state".into(),
-            expiry: exp.clone(),
-        };
+        let cycle = api::Cycle { state: "state".into(), expiry: exp.clone() };
         redis_set_ex(&ctx.redis, &key, &cycle, 60).await;
     }
 
     let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
-    let guild_ref = cache.guild(guild.id).expect("guild ref");
+    let guild_ref = cache
+        .guild(guild.id)
+        .expect("guild ref");
 
-    let (embed, is_umbra) = status_embed(&ctx, &guild_ref).await.unwrap();
+    let (embed, is_umbra) = status_embed(&ctx, &guild_ref)
+        .await
+        .unwrap();
     assert!(is_umbra);
-    assert_eq!(embed.title.as_deref(), Some("[PC] Warframe Cycle Timers"));
+    assert_eq!(
+        embed.title.as_deref(),
+        Some("[PC] Warframe Cycle Timers")
+    );
     assert_eq!(embed.footer.unwrap().text, "guild");
     assert_eq!(embed.fields.len(), 6);
 }
@@ -165,11 +166,15 @@ async fn test_ttl_from_expiry_future() {
 
 #[tokio::test]
 async fn test_steel_path_field_umbra() {
-    let ctx = Arc::new(ContextBuilder::new().watchers(false).build().await.unwrap());
+    let ctx = Arc::new(
+        ContextBuilder::new()
+            .watchers(false)
+            .build()
+            .await
+            .unwrap(),
+    );
     let data = SteelPathData {
-        current_reward: Some(SteelPathReward {
-            name: "Umbra Forma Blueprint".to_string(),
-        }),
+        current_reward: Some(SteelPathReward { name: "Umbra Forma Blueprint".to_string() }),
         expiry: (Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
         activation: Some((Utc::now() - chrono::Duration::minutes(2)).to_rfc3339()),
     };

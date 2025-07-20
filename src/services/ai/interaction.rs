@@ -59,7 +59,9 @@ pub(super) async fn spawn_summary<C>(
             client::summarize(client_clone.as_ref(), &mut history, &user_name).await
         {
             let mut latest = history::load_history(&ctx.redis, user_id).await;
-            let remove = history.len().saturating_sub(KEEP_RECENT);
+            let remove = history
+                .len()
+                .saturating_sub(KEEP_RECENT);
             for _ in 0..remove {
                 if latest.is_empty() {
                     break;
@@ -111,13 +113,22 @@ pub(super) async fn build_request(
     let attachment_urls =
         attachments::append_attachments(&ctx.reqwest, &mut parts, attachments, user_name).await?;
     let ref_owner = ref_author.unwrap_or("referenced user");
-    let ref_attachment_urls =
-        attachments::append_attachments(&ctx.reqwest, &mut parts, ref_attachments, ref_owner)
-            .await?;
+    let ref_attachment_urls = attachments::append_attachments(
+        &ctx.reqwest,
+        &mut parts,
+        ref_attachments,
+        ref_owner,
+    )
+    .await?;
 
     contents.push(Content::from(parts));
 
-    Ok((system, contents, attachment_urls, ref_attachment_urls))
+    Ok((
+        system,
+        contents,
+        attachment_urls,
+        ref_attachment_urls,
+    ))
 }
 
 pub(super) async fn process_response<C>(
@@ -131,7 +142,10 @@ where
     let mut response = None;
     if response.is_none() {
         for name in MODELS {
-            match client.generate(name, system, contents.clone()).await {
+            match client
+                .generate(name, system, contents.clone())
+                .await
+            {
                 Ok(r) => {
                     response = Some(r);
                     break;

@@ -86,12 +86,20 @@ impl ChannelService {
     }
 
     pub async fn purge_list_cache(pool: &Pool, channel_type: &ChannelEnum) {
-        let redis_key = format!("{}:channels-by-type:{}", CACHE_PREFIX, channel_type.value());
+        let redis_key = format!(
+            "{}:channels-by-type:{}",
+            CACHE_PREFIX,
+            channel_type.value()
+        );
         redis_delete(pool, &redis_key).await;
     }
 
     pub async fn list_by_type(ctx: &Context, channel_type: &ChannelEnum) -> Vec<Channel> {
-        let redis_key = format!("{}:channels-by-type:{}", CACHE_PREFIX, channel_type.value());
+        let redis_key = format!(
+            "{}:channels-by-type:{}",
+            CACHE_PREFIX,
+            channel_type.value()
+        );
 
         if let Some(Some(channels)) = redis_get(&ctx.redis, &redis_key).await {
             return channels;

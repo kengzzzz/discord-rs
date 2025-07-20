@@ -23,8 +23,13 @@ fn intro_desc() -> DescLocalizations {
 impl IntroCommand {
     pub async fn handle(ctx: Arc<Context>, interaction: Interaction, _data: CommandData) {
         if let Err(e) = guild_command!(ctx.http, interaction, true, {
-            let guild_id = interaction.guild_id.context("no guild id")?;
-            let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
+            let guild_id = interaction
+                .guild_id
+                .context("no guild id")?;
+            let guild_ref = ctx
+                .cache
+                .guild(guild_id)
+                .context("no guild")?;
             if ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Introduction)
                 .await
                 .is_none()
@@ -124,10 +129,8 @@ impl IntroCommand {
                 tts: None,
             };
 
-            let response = InteractionResponse {
-                kind: InteractionResponseType::Modal,
-                data: Some(data),
-            };
+            let response =
+                InteractionResponse { kind: InteractionResponseType::Modal, data: Some(data) };
 
             if let Err(e) = ctx
                 .http

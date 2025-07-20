@@ -1,9 +1,12 @@
+pub mod bot;
 pub mod commands;
 pub mod configs;
 pub mod context;
 pub mod dbs;
+pub mod dispatch;
 pub mod events;
 pub mod macros;
+pub mod observability;
 pub mod services;
 pub mod utils;
 pub mod warframe;

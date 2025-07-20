@@ -14,13 +14,12 @@ async fn build_context_mocked_services() {
     assert_eq!(val, Some(123));
 
     use discord_bot::dbs::mongo::models::channel::{Channel, ChannelEnum};
-    let channel = Channel {
-        id: None,
-        channel_type: ChannelEnum::None,
-        channel_id: 1,
-        guild_id: 1,
-    };
-    ctx.mongo.channels.insert_one(channel).await.unwrap();
+    let channel = Channel { id: None, channel_type: ChannelEnum::None, channel_id: 1, guild_id: 1 };
+    ctx.mongo
+        .channels
+        .insert_one(channel)
+        .await
+        .unwrap();
 
     let _builder = ctx.http.create_message(Id::new(1));
 }

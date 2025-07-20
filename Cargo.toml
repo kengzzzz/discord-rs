@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 anyhow = "1.0"
 deadpool-redis = "0.22"
 mongodb = "3.2"
@@ -35,6 +36,8 @@ google-ai-rs = { version = "0.1", features = ["serde"] }
 axum = "0.8"
 tokio-util = "0.7"
 async-trait = "0.1"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.17"
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["real_blackbox"] }

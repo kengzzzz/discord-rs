@@ -67,7 +67,9 @@ fn test_not_found_embed_footer_and_title() {
     let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
-    let guild_ref = cache.guild(guild.id).expect("guild ref");
+    let guild_ref = cache
+        .guild(guild.id)
+        .expect("guild ref");
     let embed = MarketService::not_found_embed(&guild_ref).unwrap();
     assert_eq!(embed.title.as_deref(), Some("ไม่พบราคา"));
     assert_eq!(embed.footer.unwrap().text, "guild");
@@ -78,7 +80,9 @@ fn test_error_embed_footer_and_title() {
     let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
-    let guild_ref = cache.guild(guild.id).expect("guild ref");
+    let guild_ref = cache
+        .guild(guild.id)
+        .expect("guild ref");
     let embed = MarketService::error_embed(&guild_ref).unwrap();
     assert_eq!(embed.title.as_deref(), Some("เกิดข้อผิดพลาด"));
     assert_eq!(embed.footer.unwrap().text, "guild");
@@ -87,11 +91,7 @@ fn test_error_embed_footer_and_title() {
 #[test]
 fn test_build_fields_limits_and_format() {
     let orders = (1..=6)
-        .map(|i| session::OrderInfo {
-            quantity: i,
-            platinum: i * 10,
-            ign: format!("User{i}"),
-        })
+        .map(|i| session::OrderInfo { quantity: i, platinum: i * 10, ign: format!("User{i}") })
         .collect::<Vec<_>>();
     let fields = MarketService::build_fields(&orders, "item", &MarketKind::Buy, Some(3));
     assert_eq!(fields.len(), 5);
@@ -112,18 +112,12 @@ fn test_build_embed_footer_title_url_and_fields() {
     let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
-    let guild_ref = cache.guild(guild.id).expect("guild ref");
+    let guild_ref = cache
+        .guild(guild.id)
+        .expect("guild ref");
     let orders = vec![
-        session::OrderInfo {
-            quantity: 1,
-            platinum: 50,
-            ign: "Tester".into(),
-        },
-        session::OrderInfo {
-            quantity: 2,
-            platinum: 60,
-            ign: "Tester2".into(),
-        },
+        session::OrderInfo { quantity: 1, platinum: 50, ign: "Tester".into() },
+        session::OrderInfo { quantity: 2, platinum: 60, ign: "Tester2".into() },
     ];
     let embed = MarketService::build_embed(
         &guild_ref,
@@ -134,7 +128,10 @@ fn test_build_embed_footer_title_url_and_fields() {
         orders.clone(),
     )
     .unwrap();
-    assert_eq!(embed.footer.unwrap().text, "guild [ Item Rank : 1 ]");
+    assert_eq!(
+        embed.footer.unwrap().text,
+        "guild [ Item Rank : 1 ]"
+    );
     assert_eq!(embed.title.as_deref(), Some("ผู้ซื้อ mod [Rank 1]"));
     assert_eq!(
         embed.url.as_deref(),

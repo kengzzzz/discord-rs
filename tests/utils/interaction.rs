@@ -68,10 +68,7 @@ pub fn command_interaction(
     let interaction = Interaction {
         app_permissions: None,
         application_id,
-        authorizing_integration_owners: ApplicationIntegrationMap {
-            guild: None,
-            user: None,
-        },
+        authorizing_integration_owners: ApplicationIntegrationMap { guild: None, user: None },
         channel: None,
         #[allow(deprecated)]
         channel_id: None,
@@ -89,7 +86,10 @@ pub fn command_interaction(
         member: guild_id.map(|_| member),
         message: None,
         token: "token".into(),
-        user: guild_id.map(|_| user.clone()).is_none().then_some(user),
+        user: guild_id
+            .map(|_| user.clone())
+            .is_none()
+            .then_some(user),
     };
 
     (interaction, command)
@@ -102,6 +102,8 @@ pub fn command_interaction_with_options(
 ) -> (Interaction, CommandData) {
     let (mut interaction, mut data) = command_interaction(command_name, guild_id);
     data.options = options;
-    interaction.data = Some(InteractionData::ApplicationCommand(Box::new(data.clone())));
+    interaction.data = Some(InteractionData::ApplicationCommand(Box::new(
+        data.clone(),
+    )));
     (interaction, data)
 }

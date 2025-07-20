@@ -14,10 +14,7 @@ async fn build_context() -> Arc<Context> {
 #[tokio::test]
 async fn test_set_items_and_search() {
     let mut data: Vec<MarketEntry> = (0..30)
-        .map(|i| MarketEntry {
-            name: format!("Item{:02}", 29 - i),
-            url: format!("url{i}"),
-        })
+        .map(|i| MarketEntry { name: format!("Item{:02}", 29 - i), url: format!("url{i}") })
         .collect();
     data.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
     MarketService::set_items(data).await;
@@ -44,16 +41,13 @@ async fn test_maybe_refresh_updates() {
 #[tokio::test]
 async fn test_find_url() {
     let entries = vec![
-        MarketEntry {
-            name: "Apple".into(),
-            url: "apple".into(),
-        },
-        MarketEntry {
-            name: "Banana".into(),
-            url: "banana".into(),
-        },
+        MarketEntry { name: "Apple".into(), url: "apple".into() },
+        MarketEntry { name: "Banana".into(), url: "banana".into() },
     ];
     MarketService::set_items(entries).await;
-    assert_eq!(MarketService::find_url("Apple").await, Some("apple".into()));
+    assert_eq!(
+        MarketService::find_url("Apple").await,
+        Some("apple".into())
+    );
     assert_eq!(MarketService::find_url("Unknown").await, None);
 }

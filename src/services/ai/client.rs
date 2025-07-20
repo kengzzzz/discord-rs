@@ -58,9 +58,11 @@ pub(super) const SUMMARY_MODELS: &[&str] = &[
 pub async fn client() -> anyhow::Result<&'static Client> {
     CLIENT
         .get_or_try_init(|| async {
-            Client::new(google_ai_rs::Auth::ApiKey(GOOGLE_CONFIGS.api_key.clone()))
-                .await
-                .map_err(anyhow::Error::msg)
+            Client::new(google_ai_rs::Auth::ApiKey(
+                GOOGLE_CONFIGS.api_key.clone(),
+            ))
+            .await
+            .map_err(anyhow::Error::msg)
         })
         .await
 }
@@ -90,7 +92,10 @@ where
     contents.push(Content::from(Part::text(SYSTEM)));
 
     for name in SUMMARY_MODELS {
-        match client.generate(name, SYSTEM, contents.clone()).await {
+        match client
+            .generate(name, SYSTEM, contents.clone())
+            .await
+        {
             Ok(resp) => return Ok(extract_text(resp)),
             Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
         }

@@ -22,9 +22,16 @@ impl IntroductionService {
     ) {
         if let Err(e) = guild_command!(ctx.http, interaction, true, {
             defer_interaction!(ctx.http, &interaction, true).await?;
-            let guild_id = interaction.guild_id.context("no guild id")?;
-            let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
-            let user = interaction.author().context("no author")?;
+            let guild_id = interaction
+                .guild_id
+                .context("no guild id")?;
+            let guild_ref = ctx
+                .cache
+                .guild(guild_id)
+                .context("no guild")?;
+            let user = interaction
+                .author()
+                .context("no author")?;
 
             let Some(intro_channel) =
                 ChannelService::get_by_type(&ctx, guild_id.get(), &ChannelEnum::Introduction).await

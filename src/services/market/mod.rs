@@ -178,29 +178,37 @@ impl MarketService {
             url: None,
             sku_id: None,
         }));
-        vec![Component::ActionRow(ActionRow {
-            components: buttons,
-        })]
+        vec![Component::ActionRow(ActionRow { components: buttons })]
     }
 
     pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
         let mut session = session;
         session.touch();
         let token = session.expire_token.clone();
-        SESSIONS.write().await.insert(message_id, session);
+        SESSIONS
+            .write()
+            .await
+            .insert(message_id, session);
         Self::spawn_expiration(message_id, token);
     }
 
     async fn get_session_mut(message_id: Id<MessageMarker>) -> Option<MarketSession> {
-        SESSIONS.write().await.remove(&message_id).map(|mut s| {
-            s.touch();
-            s
-        })
+        SESSIONS
+            .write()
+            .await
+            .remove(&message_id)
+            .map(|mut s| {
+                s.touch();
+                s
+            })
     }
 
     async fn store_session(message_id: Id<MessageMarker>, session: MarketSession) {
         let token = session.expire_token.clone();
-        SESSIONS.write().await.insert(message_id, session);
+        SESSIONS
+            .write()
+            .await
+            .insert(message_id, session);
         Self::spawn_expiration(message_id, token);
     }
 
@@ -261,7 +269,10 @@ impl MarketService {
             _ => {}
         }
 
-        if let Some(guild_ref) = interaction.guild_id.and_then(|id| ctx.cache.guild(id)) {
+        if let Some(guild_ref) = interaction
+            .guild_id
+            .and_then(|id| ctx.cache.guild(id))
+        {
             if let Ok(embed) = Self::embed_for_session(&guild_ref, &session) {
                 let components = Self::components(&session);
                 let data = InteractionResponseDataBuilder::new()
@@ -306,11 +317,14 @@ impl MarketService {
                         continue;
                     }
                     let rank = o.mod_rank.unwrap_or(0);
-                    by_rank.entry(rank).or_default().push(session::OrderInfo {
-                        quantity: o.quantity,
-                        platinum: o.platinum,
-                        ign: o.user.ingame_name,
-                    });
+                    by_rank
+                        .entry(rank)
+                        .or_default()
+                        .push(session::OrderInfo {
+                            quantity: o.quantity,
+                            platinum: o.platinum,
+                            ign: o.user.ingame_name,
+                        });
                 }
                 if by_rank.is_empty() {
                     return Self::not_found_embed(guild);

@@ -45,22 +45,15 @@ async fn test_load_from_redis() {
     let context = build_context().await;
     let key = "redis:test:load";
     let entries = vec![
-        MarketEntry {
-            name: "beta".into(),
-            url: "beta".into(),
-        },
-        MarketEntry {
-            name: "alpha".into(),
-            url: "alpha".into(),
-        },
-        MarketEntry {
-            name: "Alpha".into(),
-            url: "alpha2".into(),
-        },
+        MarketEntry { name: "beta".into(), url: "beta".into() },
+        MarketEntry { name: "alpha".into(), url: "alpha".into() },
+        MarketEntry { name: "Alpha".into(), url: "alpha2".into() },
     ];
     redis_set(&context.redis, key, &entries).await;
 
-    let result = load_from_redis(&context.redis, key).await.unwrap();
+    let result = load_from_redis(&context.redis, key)
+        .await
+        .unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].name, "alpha");
@@ -77,29 +70,24 @@ async fn test_update_items() {
         items: ItemsResponse {
             payload: ItemsPayload {
                 items: vec![
-                    MarketItem {
-                        item_name: "Beta".into(),
-                        url_name: "beta".into(),
-                    },
-                    MarketItem {
-                        item_name: "alpha".into(),
-                        url_name: "alpha".into(),
-                    },
-                    MarketItem {
-                        item_name: "Alpha".into(),
-                        url_name: "alpha2".into(),
-                    },
+                    MarketItem { item_name: "Beta".into(), url_name: "beta".into() },
+                    MarketItem { item_name: "alpha".into(), url_name: "alpha".into() },
+                    MarketItem { item_name: "Alpha".into(), url_name: "alpha2".into() },
                 ],
             },
         },
-        orders: OrdersResponse {
-            payload: OrdersPayload { orders: vec![] },
-        },
+        orders: OrdersResponse { payload: OrdersPayload { orders: vec![] } },
     };
 
-    update_items(&client, "redis:test:update", &ITEMS, &LAST, &context.redis)
-        .await
-        .unwrap();
+    update_items(
+        &client,
+        "redis:test:update",
+        &ITEMS,
+        &LAST,
+        &context.redis,
+    )
+    .await
+    .unwrap();
 
     let guard = ITEMS.read().await;
     assert_eq!(guard.len(), 2);
@@ -117,9 +105,7 @@ async fn test_update_items() {
 #[tokio::test]
 async fn test_fetch_orders_map() {
     let client = MockClient {
-        items: ItemsResponse {
-            payload: ItemsPayload { items: vec![] },
-        },
+        items: ItemsResponse { payload: ItemsPayload { items: vec![] } },
         orders: OrdersResponse {
             payload: OrdersPayload {
                 orders: vec![
@@ -127,60 +113,42 @@ async fn test_fetch_orders_map() {
                         platinum: 10,
                         quantity: 1,
                         order_type: "sell".into(),
-                        user: OrderUser {
-                            ingame_name: "s1".into(),
-                            status: "ingame".into(),
-                        },
+                        user: OrderUser { ingame_name: "s1".into(), status: "ingame".into() },
                         mod_rank: Some(2),
                     },
                     Order {
                         platinum: 12,
                         quantity: 1,
                         order_type: "sell".into(),
-                        user: OrderUser {
-                            ingame_name: "s2".into(),
-                            status: "ingame".into(),
-                        },
+                        user: OrderUser { ingame_name: "s2".into(), status: "ingame".into() },
                         mod_rank: None,
                     },
                     Order {
                         platinum: 5,
                         quantity: 1,
                         order_type: "buy".into(),
-                        user: OrderUser {
-                            ingame_name: "b1".into(),
-                            status: "ingame".into(),
-                        },
+                        user: OrderUser { ingame_name: "b1".into(), status: "ingame".into() },
                         mod_rank: Some(3),
                     },
                     Order {
                         platinum: 30,
                         quantity: 1,
                         order_type: "buy".into(),
-                        user: OrderUser {
-                            ingame_name: "b2".into(),
-                            status: "ingame".into(),
-                        },
+                        user: OrderUser { ingame_name: "b2".into(), status: "ingame".into() },
                         mod_rank: Some(1),
                     },
                     Order {
                         platinum: 25,
                         quantity: 1,
                         order_type: "buy".into(),
-                        user: OrderUser {
-                            ingame_name: "b3".into(),
-                            status: "ingame".into(),
-                        },
+                        user: OrderUser { ingame_name: "b3".into(), status: "ingame".into() },
                         mod_rank: Some(1),
                     },
                     Order {
                         platinum: 99,
                         quantity: 1,
                         order_type: "sell".into(),
-                        user: OrderUser {
-                            ingame_name: "off".into(),
-                            status: "offline".into(),
-                        },
+                        user: OrderUser { ingame_name: "off".into(), status: "offline".into() },
                         mod_rank: Some(2),
                     },
                 ],

@@ -5,108 +5,92 @@ background tasks. The project uses the
 [Twilight](https://twilight.rs/) ecosystem and can be developed entirely in a
 container.
 
-## Prerequisites
+## Architecture Overview
+The bot runs a single Twilight shard and processes events through priority queues backed by Tokio channels. A small Axum server exposes health and metrics endpoints.
 
-* [Docker](https://www.docker.com/) and
-  [Docker Compose](https://docs.docker.com/compose/) – recommended way to run the
-  bot.
-* Rust toolchain – only required when running without Docker.
-
-## Installation
-
-1. Copy `.env.example` to `.env` and fill in your credentials.
-2. Start the development stack:
-
-   ```bash
-   docker-compose up
-   ```
-
-   The bot will rebuild automatically whenever source files change. If you wish
-   to run the binary directly use `cargo run` and ensure the environment
-   variables below are exported.
-
-## Usage
-
-### Running with Docker
-
-```bash
-# build containers and start the stack
-docker-compose up
+## Folder Structure
+```
+src/               # core bot code
+  bot/             # queue logic and worker tasks
+  commands/        # slash command handlers
+  configs/         # environment variable loaders
+  context/         # shared resources (DB, HTTP, cache)
+  observability/   # metrics and HTTP server
+  services/        # background services
+scripts/           # helper scripts
+benches/           # benchmark harnesses
+tests/             # integration tests
 ```
 
-### Running with the Rust toolchain
+## Concurrency & Backpressure Model
+Event dispatch uses three bounded mpsc queues (high, normal, low) paired with
+semaphores that limit concurrent processing. Producers block on enqueue when the
+corresponding queue is full. Workers measure how long events wait in queues and
+how long enqueue operations block, recording both via Prometheus histograms.
 
+## Metrics & Monitoring
+| name | type | unit | labels | description | alert hint |
+|------|------|------|--------|-------------|------------|
+| `bot_events_total` | counter | events | priority, event_type, result | Number of events processed or enqueued | Sudden drops may indicate disconnects |
+| `bot_handler_errors_total` | counter | errors | priority, event_type, result | Errors from event handlers | Watch for sustained increases |
+| `bot_queue_wait_ms` | histogram | milliseconds | priority | Time events spend waiting in queue (residency) | Long tails show queue saturation |
+| `bot_queue_enqueue_block_ms` | histogram | milliseconds | priority | Time producers block when queues are full | Spikes imply backpressure |
+| `bot_interaction_ack_ms` | histogram | milliseconds | kind | Time from receive to initial interaction acknowledgement | High values hurt UX |
+
+Low-cardinality labels avoid per-user or per-message dimensions to keep metric
+cardinality manageable.
+
+## /healthz and /metrics
+The Axum server listens on port 8080 and exposes:
+- `/healthz` – lightweight health indicator
+- `/metrics` – Prometheus scrape endpoint
+
+## Configuration
+All settings come from environment variables, optionally loaded from a `.env`
+file.
+
+| key | type | default | required | description |
+|-----|------|---------|----------|-------------|
+| `APP_ENV` | string | `development` | no | Environment name |
+| `DISCORD_TOKEN` | string | N/A | yes | Discord bot token |
+| `GOOGLE_API_KEY` | string | N/A | yes | Google GenAI API key |
+| `AI_BASE_PROMPT` | string | N/A | yes | AI system prompt |
+| `REDIS_URL` | string | `redis://redis:6379` | no | Redis connection URL |
+| `MONGO_URI` | string | `mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0` | no | MongoDB URI |
+| `MONGO_USERNAME` | string | `homestead` | no | MongoDB username |
+| `MONGO_PASSWORD` | string | `secret` | no | MongoDB password |
+| `MONGO_AUTH_SOURCE` | string | `admin` | no | Mongo auth database |
+| `MONGO_DATABASE` | string | `develop` | no | Mongo database name |
+| `MONGO_MAX_POOL_SIZE` | number | `30` | no | Mongo connection pool max |
+| `MONGO_MIN_POOL_SIZE` | number | `10` | no | Mongo connection pool min |
+| `MONGO_SSL` | bool | `false` | no | Enable TLS to Mongo |
+| `MONGO_TLS_CA_FILE` | string | none | no | Path to CA file |
+| `MONGO_TLS_CERT_KEY_FILE` | string | none | no | Path to client cert/key |
+| `MONGO_TLS_INSECURE` | bool | none | no | Accept invalid certificates |
+
+## Local Setup & Running
 ```bash
+# with Docker
+docker-compose up
+
+# using local Rust toolchain
 cargo run
 ```
 
-For production builds you can create a release image:
+## Observing & Debugging
+`RUST_LOG` controls logging verbosity. Metrics can be scraped from `/metrics`
+and visualized with Prometheus and Grafana. Future considerations include adding
+a readiness probe separate from `/healthz`.
 
-```bash
-docker build -f Dockerfile.production -t discord-bot .
-docker run --env-file .env discord-bot
-```
+## Interpreting Latencies
+- **queue_wait_ms** measures how long an event sat in a queue before a worker
+  picked it up (queue residency).
+- **enqueue_block_ms** tracks how long senders waited when queues were full
+  (producer backpressure).
+- **interaction_ack_ms** records time from event receipt to initial interaction
+  response, indicating perceived responsiveness.
 
-## Configuration
-
-The bot is configured entirely through environment variables. The most important
-ones are listed below; see `.env.example` for the full list.
-
-| Variable | Description |
-|----------|-------------|
-| `APP_ENV` | Environment name (`development`, `production`, etc.). Set to `production` to skip DB setup. |
-| `DISCORD_TOKEN` | Discord bot token. |
-| `GOOGLE_API_KEY` | Google GenAI API key. |
-| `AI_BASE_PROMPT` | Base system prompt for the AI. |
-| `REDIS_URL` | Redis connection string. |
-| `MONGO_URI` | MongoDB connection URI. |
-| `MONGO_USERNAME` | MongoDB user name. |
-| `MONGO_PASSWORD` | MongoDB password. |
-| `MONGO_AUTH_SOURCE` | Authentication database (default `admin`). |
-| `MONGO_DATABASE` | Database name (default `develop`). |
-| `MONGO_MAX_POOL_SIZE` | MongoDB max pool size (default `30`). |
-| `MONGO_MIN_POOL_SIZE` | MongoDB min pool size (default `10`). |
-| `MONGO_SSL` | Enable TLS connections when `true`. |
-| `MONGO_TLS_CA_FILE` | Path to CA certificate file. |
-| `MONGO_TLS_CERT_KEY_FILE` | Path to client certificate/key file. |
-| `MONGO_TLS_INSECURE` | Allow invalid certificates when `true`. |
-
-The bot exposes a health check on port `8080` at `/healthz` and shuts down
-gracefully on termination signals.
-
-### MongoDB pre/post images
-
-Change stream watchers require pre and post images on certain collections.
-Enable them with:
-
-```javascript
-db.runCommand({ collMod: "channels", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "roles", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "quarantines", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "messages", changeStreamPreAndPostImages: { enabled: true } })
-db.runCommand({ collMod: "ai_prompts", changeStreamPreAndPostImages: { enabled: true } })
-```
-
-## Project Structure
-
-```
-src/
-  commands/       # slash command implementations
-  configs/        # configuration modules
-  context/        # shared application state
-  events/         # Discord event handlers
-  services/       # background tasks and utilities
-tests/            # integration tests
-scripts/          # helper scripts (e.g. MongoDB replica set init)
-Dockerfile.*      # development and production images
-```
-
-The [`Context`](src/context/mod.rs) struct bundles shared services (HTTP client,
-database connections, caches, etc.) and is passed around using
-`Arc<Context>` to avoid global state.
-
-## Contributing
-
+## Development & Contribution
 Pull requests are welcome! Please ensure:
 
 1. Code is formatted with `cargo fmt`.
@@ -116,5 +100,4 @@ Pull requests are welcome! Please ensure:
 Issues and feature requests are also appreciated.
 
 ## License
-
-This project is licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE).

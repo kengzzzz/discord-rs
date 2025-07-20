@@ -21,16 +21,8 @@ fn embed_equals(a: &Embed, b: &Embed) -> bool {
         && a.fields == b.fields
         && match (&a.footer, &b.footer) {
             (
-                Some(EmbedFooter {
-                    text: at,
-                    icon_url: ai,
-                    ..
-                }),
-                Some(EmbedFooter {
-                    text: bt,
-                    icon_url: bi,
-                    ..
-                }),
+                Some(EmbedFooter { text: at, icon_url: ai, .. }),
+                Some(EmbedFooter { text: bt, icon_url: bi, .. }),
             ) => at == bt && ai == bi,
             (None, None) => true,
             _ => false,
@@ -87,7 +79,10 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     let guild_ref = match ctx.cache.guild(guild_id) {
         Some(g) => g,
         None => {
-            tracing::warn!(guild_id = guild_id.get(), "guild not found in cache");
+            tracing::warn!(
+                guild_id = guild_id.get(),
+                "guild not found in cache"
+            );
             return;
         }
     };
@@ -116,7 +111,9 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
             return;
         }
 
-        let mut update = ctx.http.update_message(channel_id, Id::new(msg_id));
+        let mut update = ctx
+            .http
+            .update_message(channel_id, Id::new(msg_id));
         update = update.embeds(Some(embed_slice));
         update = update.content(None);
         if update.await.is_ok() {
@@ -156,7 +153,13 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
                     tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
                 }
             }
-            storage::set(ctx, guild_id.get(), channel_id.get(), msg.id.get()).await;
+            storage::set(
+                ctx,
+                guild_id.get(),
+                channel_id.get(),
+                msg.id.get(),
+            )
+            .await;
         }
     }
 }

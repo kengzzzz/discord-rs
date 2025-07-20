@@ -22,7 +22,11 @@ pub async fn handle_bulk(ctx: Arc<Context>, event: MessageDeleteBulk) {
     };
 
     if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await {
-        if event.ids.iter().any(|id| id.get() == record.message_id) {
+        if event
+            .ids
+            .iter()
+            .any(|id| id.get() == record.message_id)
+        {
             role_message::handler::ensure_message(&ctx, guild_id).await;
         }
     }
