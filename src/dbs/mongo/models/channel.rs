@@ -22,12 +22,27 @@ pub enum ChannelEnum {
     #[option(name = "Broadcast Channel", value = "broadcast")]
     Broadcast,
 
+    #[option(name = "Broadcast Group 1", value = "broadcast_b1")]
+    BroadcastB1,
+
+    #[option(name = "Broadcast Group 2", value = "broadcast_b2")]
+    BroadcastB2,
+
     #[option(name = "Quarantine Channel", value = "quarantine")]
     Quarantine,
 
     #[option(name = "Regular Channel", value = "regular")]
     #[default]
     None,
+}
+
+impl ChannelEnum {
+    pub fn is_broadcast(self) -> bool {
+        matches!(
+            self,
+            ChannelEnum::Broadcast | ChannelEnum::BroadcastB1 | ChannelEnum::BroadcastB2
+        )
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
