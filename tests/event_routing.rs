@@ -196,6 +196,58 @@ async fn message_create_broadcasts() {
 }
 
 #[tokio::test]
+async fn message_create_broadcast_group_isolated() {
+    let ctx = build_context().await;
+    let guild_id = Id::<GuildMarker>::new(1);
+    let guild = make_guild(guild_id, "guild");
+    cache_guild(&ctx.cache, guild);
+
+    let ch_src = Channel {
+        id: None,
+        channel_type: ChannelEnum::BroadcastB1,
+        channel_id: 10,
+        guild_id: guild_id.get(),
+    };
+    let ch_dest_same = Channel {
+        id: None,
+        channel_type: ChannelEnum::BroadcastB1,
+        channel_id: 11,
+        guild_id: guild_id.get(),
+    };
+    let ch_dest_other = Channel {
+        id: None,
+        channel_type: ChannelEnum::BroadcastB2,
+        channel_id: 12,
+        guild_id: guild_id.get(),
+    };
+    ctx.mongo
+        .channels
+        .insert_one(ch_src)
+        .await
+        .unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(ch_dest_same)
+        .await
+        .unwrap();
+    ctx.mongo
+        .channels
+        .insert_one(ch_dest_other)
+        .await
+        .unwrap();
+
+    let message = make_message(1, 10, Some(guild_id.get()), 200, "hello");
+
+    message_create::handle(ctx.clone(), message).await;
+
+    let messages = ctx.http.messages.lock().unwrap();
+    assert_eq!(messages.len(), 1);
+    let record = messages.last().expect("message record");
+    assert_eq!(record.channel_id.get(), 11);
+    assert!(matches!(record.kind, MessageOp::Create));
+}
+
+#[tokio::test]
 async fn message_create_quarantine_skips_other_routes() {
     let ctx = build_context().await;
     let guild_id = Id::<GuildMarker>::new(1);
