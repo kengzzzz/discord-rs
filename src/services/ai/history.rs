@@ -83,7 +83,7 @@ pub(crate) async fn parse_history<'a>(
         .into_iter()
         .map(|c| {
             let mut parts = vec![Part::text(&c.text)];
-            let expired = now - c.created_at > chrono::Duration::hours(48);
+            let expired = now - c.created_at > chrono::Duration::hours(24);
             for url in &c.attachments {
                 if expired {
                     let label =
