@@ -42,5 +42,4 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM alpine:latest AS runtime
 WORKDIR /app
 COPY --from=builder /app/target/aarch64-unknown-linux-musl/release/discord-bot /app/discord-bot
-EXPOSE 8080
 ENTRYPOINT ["./discord-bot"]
