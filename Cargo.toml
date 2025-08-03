@@ -40,7 +40,7 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["real_blackbox"] }
+criterion = { version = "0.7", features = ["real_blackbox"] }
 
 [features]
 test-utils = []
