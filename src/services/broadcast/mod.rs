@@ -47,10 +47,9 @@ impl BroadcastService {
                         .create_message(channel_id)
                         .embeds(&embeds)
                         .await
+                        && let Ok(msg) = resp.model().await
                     {
-                        if let Ok(msg) = resp.model().await {
-                            return Some((channel.channel_id, msg.id.get()));
-                        }
+                        return Some((channel.channel_id, msg.id.get()));
                     }
                     None
                 }

@@ -70,8 +70,8 @@ pub(crate) fn notify_umbra_loop(
                         break;
                     }
                     let now_state = *rx.borrow();
-                    if now_state && !last {
-                        if let Err(e) = ctx.http
+                    if now_state && !last
+                        && let Err(e) = ctx.http
                             .create_message(channel_id)
                             .content(&format!("{} <@&{role_id}>", NOTIFICATIONS.umbra_forma))
                             .await
@@ -83,7 +83,6 @@ pub(crate) fn notify_umbra_loop(
                                 "failed to send umbra forma notification",
                             );
                         }
-                    }
                     last = now_state;
                 }
             }

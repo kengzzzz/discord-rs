@@ -27,10 +27,10 @@ pub async fn verify(
         user_id.get()
     );
 
-    if let Some(stored) = redis_get::<String>(&ctx.redis, &key).await {
-        if stored != token {
-            return false;
-        }
+    if let Some(stored) = redis_get::<String>(&ctx.redis, &key).await
+        && stored != token
+    {
+        return false;
     }
 
     if let Ok(Some(record)) = ctx
@@ -45,14 +45,12 @@ pub async fn verify(
     {
         if let Some(role) =
             RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
-        {
-            if let Err(e) = ctx
+            && let Err(e) = ctx
                 .http
                 .remove_guild_member_role(guild_id, user_id, Id::new(role.role_id))
                 .await
-            {
-                tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to remove quarantine role");
-            }
+        {
+            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to remove quarantine role");
         }
         for id in record.roles.iter() {
             if let Err(e) = ctx
@@ -121,14 +119,12 @@ pub async fn quarantine_member(
         }
         if let Some(role) =
             RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
-        {
-            if let Err(e) = ctx
+            && let Err(e) = ctx
                 .http
                 .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
                 .await
-            {
-                tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
-            }
+        {
+            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
         }
         let record = Quarantine {
             id: None,
@@ -137,8 +133,8 @@ pub async fn quarantine_member(
             token: token.to_string(),
             roles: roles.iter().map(|r| r.get()).collect(),
         };
-        if let Ok(bson) = to_bson(&record) {
-            if let Err(e) = ctx
+        if let Ok(bson) = to_bson(&record)
+            && let Err(e) = ctx
                 .mongo
                 .quarantines
                 .update_one(
@@ -147,9 +143,8 @@ pub async fn quarantine_member(
                 )
                 .upsert(true)
                 .await
-            {
-                tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
-            }
+        {
+            tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
         }
     }
 }

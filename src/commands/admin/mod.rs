@@ -87,31 +87,31 @@ impl AdminCommand {
 
             let mut choices = Vec::with_capacity(25);
 
-            if focused.0 == "role_name" {
-                if let Some(role_ids) = ctx.cache.guild_roles(guild_id) {
-                    choices.extend(
-                        role_ids
-                            .iter()
-                            .filter_map(|role_id| {
-                                ctx.cache
-                                    .role(*role_id)
-                                    .and_then(|role| {
-                                        if ascii_starts_with_icase(&role.name, focused.1) {
-                                            Some(CommandOptionChoice {
-                                                name: role.name.clone(),
-                                                value: CommandOptionChoiceValue::String(
-                                                    role.id.to_string(),
-                                                ),
-                                                name_localizations: None,
-                                            })
-                                        } else {
-                                            None
-                                        }
-                                    })
-                            })
-                            .take(25),
-                    );
-                }
+            if focused.0 == "role_name"
+                && let Some(role_ids) = ctx.cache.guild_roles(guild_id)
+            {
+                choices.extend(
+                    role_ids
+                        .iter()
+                        .filter_map(|role_id| {
+                            ctx.cache
+                                .role(*role_id)
+                                .and_then(|role| {
+                                    if ascii_starts_with_icase(&role.name, focused.1) {
+                                        Some(CommandOptionChoice {
+                                            name: role.name.clone(),
+                                            value: CommandOptionChoiceValue::String(
+                                                role.id.to_string(),
+                                            ),
+                                            name_localizations: None,
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                        })
+                        .take(25),
+                );
             }
 
             let response = InteractionResponse {

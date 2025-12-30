@@ -69,8 +69,8 @@ impl MarketService {
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS as u64 {
-            if let Err(e) = client::update_items(
+        if now.saturating_sub(last) > UPDATE_SECS as u64
+            && let Err(e) = client::update_items(
                 &ctx.reqwest,
                 REDIS_KEY,
                 &ITEMS,
@@ -78,9 +78,8 @@ impl MarketService {
                 &ctx.redis,
             )
             .await
-            {
-                tracing::warn!(error = %e, "failed to update market items");
-            }
+        {
+            tracing::warn!(error = %e, "failed to update market items");
         }
     }
 

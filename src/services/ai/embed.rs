@@ -22,10 +22,10 @@ impl AiService {
                 .map(|(i, c)| i + c.len_utf8())
                 .unwrap_or_else(|| remaining.len());
 
-            if end < remaining.len() {
-                if let Some(pos) = remaining[..end].rfind(|c: char| c.is_whitespace()) {
-                    end = pos + 1;
-                }
+            if end < remaining.len()
+                && let Some(pos) = remaining[..end].rfind(|c: char| c.is_whitespace())
+            {
+                end = pos + 1;
             }
 
             let chunk = &remaining[..end];

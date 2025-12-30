@@ -30,11 +30,11 @@ pub(crate) fn collect_attachments(message: &Message) -> (Vec<Attachment>, Vec<At
 
     let remaining = MAX_ATTACHMENTS.saturating_sub(main.len());
     let mut refs = Vec::new();
-    if remaining > 0 {
-        if let Some(ref_msg) = &message.referenced_message {
-            refs = ref_msg.attachments.clone();
-            refs.truncate(remaining);
-        }
+    if remaining > 0
+        && let Some(ref_msg) = &message.referenced_message
+    {
+        refs = ref_msg.attachments.clone();
+        refs.truncate(remaining);
     }
 
     (main, refs)
@@ -96,95 +96,93 @@ pub fn strip_mention<'a>(raw: &'a str, id: Id<UserMarker>) -> Cow<'a, str> {
 }
 
 pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
-    if let Some(user) = ctx.cache.current_user() {
-        if message
+    if let Some(user) = ctx.cache.current_user()
+        && message
             .mentions
             .iter()
             .any(|m| m.id == user.id)
+    {
+        if let Err(e) = ctx
+            .http
+            .create_typing_trigger(message.channel_id)
+            .await
         {
-            if let Err(e) = ctx
-                .http
-                .create_typing_trigger(message.channel_id)
-                .await
+            tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
+        }
+        if let Some(wait) = AiService::check_rate_limit(ctx, message.author.id).await {
+            if let Ok(embed) = AiService::rate_limit_embed(wait)
+                && let Err(e) = ctx
+                    .http
+                    .create_message(message.channel_id)
+                    .embeds(&[embed])
+                    .await
             {
-                tracing::warn!(channel_id = message.channel_id.get(), error = %e, "failed to trigger typing");
+                tracing::warn!(
+                    channel_id = message.channel_id.get(),
+                    user_id = message.author.id.get(),
+                    error = %e,
+                    "failed to send rate limit message",
+                );
             }
-            if let Some(wait) = AiService::check_rate_limit(ctx, message.author.id).await {
-                if let Ok(embed) = AiService::rate_limit_embed(wait) {
-                    if let Err(e) = ctx
-                        .http
-                        .create_message(message.channel_id)
-                        .embeds(&[embed])
-                        .await
-                    {
-                        tracing::warn!(
-                            channel_id = message.channel_id.get(),
-                            user_id = message.author.id.get(),
-                            error = %e,
-                            "failed to send rate limit message",
-                        );
-                    }
-                }
+            return;
+        }
+        let content = strip_mention(&message.content, user.id);
+        let ref_text_opt = message
+            .referenced_message
+            .as_ref()
+            .map(|m| (*m.content).as_ref());
+        let ref_author = message
+            .referenced_message
+            .as_ref()
+            .map(|m| (*m.author.name).as_ref());
+        let input = build_ai_input(content.as_ref(), ref_text_opt);
+        let (attachments, ref_attachments) = collect_attachments(message);
+        let client = match ai::client::client().await {
+            Ok(c) => Arc::new(c.clone()),
+            Err(e) => {
+                tracing::warn!(error=%e, "failed to init ai client");
                 return;
             }
-            let content = strip_mention(&message.content, user.id);
-            let ref_text_opt = message
-                .referenced_message
-                .as_ref()
-                .map(|m| (*m.content).as_ref());
-            let ref_author = message
-                .referenced_message
-                .as_ref()
-                .map(|m| (*m.author.name).as_ref());
-            let input = build_ai_input(content.as_ref(), ref_text_opt);
-            let (attachments, ref_attachments) = collect_attachments(message);
-            let client = match ai::client::client().await {
-                Ok(c) => Arc::new(c.clone()),
-                Err(e) => {
-                    tracing::warn!(error=%e, "failed to init ai client");
-                    return;
-                }
-            };
-            match AiService::handle_interaction(
-                ctx,
-                &client,
-                AiInteraction {
-                    user_id: message.author.id,
-                    user_name: &message.author.name,
-                    message: input.as_ref(),
-                    attachments,
-                    ref_text: ref_text_opt,
-                    ref_attachments,
-                    ref_author,
-                },
-            )
-            .await
-            {
-                Ok(reply) => {
-                    if let Ok(embeds) = AiService::ai_embeds(&reply) {
-                        for embed in embeds {
-                            if let Err(e) = ctx
-                                .http
-                                .create_message(message.channel_id)
-                                .embeds(&[embed])
-                                .await
-                            {
-                                tracing::warn!(
-                                    channel_id = message.channel_id.get(),
-                                    error = %e,
-                                    "failed to send AI response"
-                                );
-                            }
+        };
+        match AiService::handle_interaction(
+            ctx,
+            &client,
+            AiInteraction {
+                user_id: message.author.id,
+                user_name: &message.author.name,
+                message: input.as_ref(),
+                attachments,
+                ref_text: ref_text_opt,
+                ref_attachments,
+                ref_author,
+            },
+        )
+        .await
+        {
+            Ok(reply) => {
+                if let Ok(embeds) = AiService::ai_embeds(&reply) {
+                    for embed in embeds {
+                        if let Err(e) = ctx
+                            .http
+                            .create_message(message.channel_id)
+                            .embeds(&[embed])
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = message.channel_id.get(),
+                                error = %e,
+                                "failed to send AI response"
+                            );
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        channel_id = message.channel_id.get(),
-                        error = %e,
-                        "failed to handle AI interaction"
-                    );
-                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    channel_id = message.channel_id.get(),
+                    error = %e,
+                    "failed to handle AI interaction"
+                );
             }
         }
     }

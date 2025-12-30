@@ -43,16 +43,14 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     let channel_id = Id::new(channel.channel_id);
 
     let mut existing_message: Option<(u64, Message)> = None;
-    if let Some(record) = storage::get(ctx, guild_id.get()).await {
-        if let Ok(resp) = ctx
+    if let Some(record) = storage::get(ctx, guild_id.get()).await
+        && let Ok(resp) = ctx
             .http
             .message(channel_id, Id::new(record.message_id))
             .await
-        {
-            if let Ok(msg) = resp.model().await {
-                existing_message = Some((record.message_id, msg));
-            }
-        }
+        && let Ok(msg) = resp.model().await
+    {
+        existing_message = Some((record.message_id, msg));
     }
 
     let roles = [
@@ -64,15 +62,14 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     ];
     let mut info = Vec::with_capacity(roles.len());
     for role_type in roles.iter() {
-        if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), role_type).await {
-            if role.self_assignable {
-                if let (Some(emoji), Some(role_ref)) = (
-                    role_enum_to_emoji(role_type),
-                    ctx.cache.role(Id::new(role.role_id)),
-                ) {
-                    info.push((role_ref.name.clone(), emoji));
-                }
-            }
+        if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), role_type).await
+            && role.self_assignable
+            && let (Some(emoji), Some(role_ref)) = (
+                role_enum_to_emoji(role_type),
+                ctx.cache.role(Id::new(role.role_id)),
+            )
+        {
+            info.push((role_ref.name.clone(), emoji));
         }
     }
 
@@ -141,25 +138,25 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     let mut create = ctx.http.create_message(channel_id);
     create = create.embeds(embed_slice);
 
-    if let Ok(response) = create.await {
-        if let Ok(msg) = response.model().await {
-            for (_, emoji) in &info {
-                let reaction = RequestReactionType::Unicode { name: emoji };
-                if let Err(e) = ctx
-                    .http
-                    .create_reaction(channel_id, msg.id, &reaction)
-                    .await
-                {
-                    tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
-                }
+    if let Ok(response) = create.await
+        && let Ok(msg) = response.model().await
+    {
+        for (_, emoji) in &info {
+            let reaction = RequestReactionType::Unicode { name: emoji };
+            if let Err(e) = ctx
+                .http
+                .create_reaction(channel_id, msg.id, &reaction)
+                .await
+            {
+                tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
             }
-            storage::set(
-                ctx,
-                guild_id.get(),
-                channel_id.get(),
-                msg.id.get(),
-            )
-            .await;
         }
+        storage::set(
+            ctx,
+            guild_id.get(),
+            channel_id.get(),
+            msg.id.get(),
+        )
+        .await;
     }
 }

@@ -95,15 +95,13 @@ where
                 return Ok(());
             }
         }
-        if upsert {
-            if let Ok(set) = update.get_document("$set") {
-                let mut doc = Document::new();
-                for (k, v) in set.iter() {
-                    doc.insert(k, v.clone());
-                }
-                let item: T = mongodb::bson::from_document(doc)?;
-                data.push(item);
+        if upsert && let Ok(set) = update.get_document("$set") {
+            let mut doc = Document::new();
+            for (k, v) in set.iter() {
+                doc.insert(k, v.clone());
             }
+            let item: T = mongodb::bson::from_document(doc)?;
+            data.push(item);
         }
         Ok(())
     }
