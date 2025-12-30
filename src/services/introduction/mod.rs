@@ -77,16 +77,15 @@ impl IntroductionService {
         .await
         {
             tracing::error!(error = %e, "failed to handle intro modal");
-            if let Ok(embed) = embed::intro_error_embed() {
-                if let Err(e2) = ctx
+            if let Ok(embed) = embed::intro_error_embed()
+                && let Err(e2) = ctx
                     .http
                     .interaction(interaction.application_id)
                     .update_response(&interaction.token)
                     .embeds(Some(&[embed]))
                     .await
-                {
-                    tracing::warn!(error = %e2, "failed to send intro error response");
-                }
+            {
+                tracing::warn!(error = %e2, "failed to send intro error response");
             }
         }
     }

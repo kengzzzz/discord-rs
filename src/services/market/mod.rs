@@ -215,13 +215,12 @@ impl MarketService {
     async fn refresh(ctx: &Arc<Context>, session: &mut MarketSession) {
         if let Ok((orders, max)) =
             client::fetch_orders_map(&ctx.reqwest, &session.url, &session.kind).await
+            && !orders.is_empty()
         {
-            if !orders.is_empty() {
-                session.orders = orders;
-                session.max_rank = max;
-                session.page = 1;
-                session.rank = session.rank.min(max.unwrap_or(0));
-            }
+            session.orders = orders;
+            session.max_rank = max;
+            session.page = 1;
+            session.rank = session.rank.min(max.unwrap_or(0));
         }
     }
 
@@ -250,11 +249,11 @@ impl MarketService {
                 }
             }
             "market_next_rank" => {
-                if let Some(max) = session.max_rank {
-                    if session.rank < max {
-                        session.rank += 1;
-                        session.page = 1;
-                    }
+                if let Some(max) = session.max_rank
+                    && session.rank < max
+                {
+                    session.rank += 1;
+                    session.page = 1;
                 }
             }
             "market_prev_rank" => {
@@ -272,28 +271,27 @@ impl MarketService {
         if let Some(guild_ref) = interaction
             .guild_id
             .and_then(|id| ctx.cache.guild(id))
+            && let Ok(embed) = Self::embed_for_session(&guild_ref, &session)
         {
-            if let Ok(embed) = Self::embed_for_session(&guild_ref, &session) {
-                let components = Self::components(&session);
-                let data = InteractionResponseDataBuilder::new()
-                    .embeds([embed])
-                    .components(components.clone())
-                    .build();
-                if let Err(e) = ctx
-                    .http
-                    .interaction(interaction.application_id)
-                    .create_response(
-                        interaction.id,
-                        &interaction.token,
-                        &InteractionResponse {
-                            kind: InteractionResponseType::UpdateMessage,
-                            data: Some(data),
-                        },
-                    )
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to update market session message");
-                }
+            let components = Self::components(&session);
+            let data = InteractionResponseDataBuilder::new()
+                .embeds([embed])
+                .components(components.clone())
+                .build();
+            if let Err(e) = ctx
+                .http
+                .interaction(interaction.application_id)
+                .create_response(
+                    interaction.id,
+                    &interaction.token,
+                    &InteractionResponse {
+                        kind: InteractionResponseType::UpdateMessage,
+                        data: Some(data),
+                    },
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "failed to update market session message");
             }
         }
 

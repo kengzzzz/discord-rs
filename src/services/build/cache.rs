@@ -56,10 +56,10 @@ fn filter(item: &Item) -> bool {
     if CATEGORY.contains(&item.category.as_str()) {
         return true;
     }
-    if item.category == "Misc" {
-        if let Some(pc) = &item.product_category {
-            return pc == "Pistols" || pc == "SpecialItems";
-        }
+    if item.category == "Misc"
+        && let Some(pc) = &item.product_category
+    {
+        return pc == "Pistols" || pc == "SpecialItems";
     }
     false
 }
@@ -81,10 +81,10 @@ where
 {
     use reqwest::header::{ETAG, HeaderMap, HeaderValue, IF_NONE_MATCH};
     let mut headers = HeaderMap::new();
-    if let Some(tag) = &*ITEMS_ETAG.read().await {
-        if let Ok(v) = HeaderValue::from_str(tag) {
-            headers.insert(IF_NONE_MATCH, v);
-        }
+    if let Some(tag) = &*ITEMS_ETAG.read().await
+        && let Ok(v) = HeaderValue::from_str(tag)
+    {
+        headers.insert(IF_NONE_MATCH, v);
     }
     let resp = client
         .as_reqwest()
@@ -169,10 +169,10 @@ impl BuildService {
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS as u64 {
-            if let Err(e) = update_items(client, pool).await {
-                tracing::warn!(error = %e, "failed to update build items");
-            }
+        if now.saturating_sub(last) > UPDATE_SECS as u64
+            && let Err(e) = update_items(client, pool).await
+        {
+            tracing::warn!(error = %e, "failed to update build items");
         }
     }
 

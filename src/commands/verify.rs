@@ -34,22 +34,22 @@ impl VerifyCommand {
             let Some(token) =
                 spam::quarantine::get_token(&ctx, guild_id.get(), author.id.get()).await
             else {
-                if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-                    if let Some(embed) = verification::embed::verify_no_token_embed(&guild_ref) {
-                        let response_data = InteractionResponseData {
-                            embeds: Some(vec![embed]),
-                            flags: Some(MessageFlags::EPHEMERAL),
-                            ..Default::default()
-                        };
-                        let response = InteractionResponse {
-                            kind: InteractionResponseType::ChannelMessageWithSource,
-                            data: Some(response_data),
-                        };
-                        ctx.http
-                            .interaction(interaction.application_id)
-                            .create_response(interaction.id, &interaction.token, &response)
-                            .await?;
-                    }
+                if let Some(guild_ref) = ctx.cache.guild(guild_id)
+                    && let Some(embed) = verification::embed::verify_no_token_embed(&guild_ref)
+                {
+                    let response_data = InteractionResponseData {
+                        embeds: Some(vec![embed]),
+                        flags: Some(MessageFlags::EPHEMERAL),
+                        ..Default::default()
+                    };
+                    let response = InteractionResponse {
+                        kind: InteractionResponseType::ChannelMessageWithSource,
+                        data: Some(response_data),
+                    };
+                    ctx.http
+                        .interaction(interaction.application_id)
+                        .create_response(interaction.id, &interaction.token, &response)
+                        .await?;
                 }
                 return Ok(());
             };

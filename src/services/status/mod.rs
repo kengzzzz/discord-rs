@@ -13,6 +13,7 @@ use crate::{
     dbs::mongo::models::channel::ChannelEnum,
     services::{channel::ChannelService, status_message::StatusMessageService},
 };
+use std::slice::from_ref;
 use std::sync::Arc;
 
 pub mod embed;
@@ -53,22 +54,21 @@ impl StatusService {
             };
             let channel_id = Id::new(channel.channel_id);
             let mut existing = None;
-            if let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await {
-                if ctx
+            if let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await
+                && ctx
                     .http
                     .message(channel_id, Id::new(record.message_id))
                     .await
                     .is_ok()
-                {
-                    existing = Some(record.message_id);
-                }
+            {
+                existing = Some(record.message_id);
             }
 
             if let Some(msg_id) = existing {
                 if let Err(e) = ctx
                     .http
                     .update_message(channel_id, Id::new(msg_id))
-                    .embeds(Some(&[embed.clone()]))
+                    .embeds(Some(from_ref(&embed)))
                     .await
                 {
                     tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to update status message");
@@ -79,44 +79,42 @@ impl StatusService {
                     .http
                     .channel_messages(channel_id)
                     .await
+                    && let Ok(msgs) = resp.model().await
                 {
-                    if let Ok(msgs) = resp.model().await {
-                        let ids: Vec<_> = msgs.into_iter().map(|m| m.id).collect();
+                    let ids: Vec<_> = msgs.into_iter().map(|m| m.id).collect();
 
-                        for chunk in ids.chunks(100) {
-                            if chunk.len() == 1 {
-                                if let Err(e) = ctx
-                                    .http
-                                    .delete_message(channel_id, chunk[0])
-                                    .await
-                                {
-                                    tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
-                                }
-                            } else if let Err(e) = ctx
+                    for chunk in ids.chunks(100) {
+                        if chunk.len() == 1 {
+                            if let Err(e) = ctx
                                 .http
-                                .delete_messages(channel_id, chunk)
+                                .delete_message(channel_id, chunk[0])
                                 .await
                             {
-                                tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
+                                tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
                             }
+                        } else if let Err(e) = ctx
+                            .http
+                            .delete_messages(channel_id, chunk)
+                            .await
+                        {
+                            tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
                         }
                     }
                 }
                 if let Ok(resp) = ctx
                     .http
                     .create_message(channel_id)
-                    .embeds(&[embed.clone()])
+                    .embeds(from_ref(&embed))
                     .await
+                    && let Ok(msg) = resp.model().await
                 {
-                    if let Ok(msg) = resp.model().await {
-                        StatusMessageService::set(
-                            ctx,
-                            channel.guild_id,
-                            channel.channel_id,
-                            msg.id.get(),
-                        )
-                        .await;
-                    }
+                    StatusMessageService::set(
+                        ctx,
+                        channel.guild_id,
+                        channel.channel_id,
+                        msg.id.get(),
+                    )
+                    .await;
                 }
             }
         }

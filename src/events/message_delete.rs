@@ -9,10 +9,10 @@ pub async fn handle_single(ctx: Arc<Context>, event: MessageDelete) {
         return;
     };
 
-    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await {
-        if record.message_id == event.id.get() {
-            role_message::handler::ensure_message(&ctx, guild_id).await;
-        }
+    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await
+        && record.message_id == event.id.get()
+    {
+        role_message::handler::ensure_message(&ctx, guild_id).await;
     }
 }
 
@@ -21,13 +21,12 @@ pub async fn handle_bulk(ctx: Arc<Context>, event: MessageDeleteBulk) {
         return;
     };
 
-    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await {
-        if event
+    if let Some(record) = role_message::storage::get(&ctx, guild_id.get()).await
+        && event
             .ids
             .iter()
             .any(|id| id.get() == record.message_id)
-        {
-            role_message::handler::ensure_message(&ctx, guild_id).await;
-        }
+    {
+        role_message::handler::ensure_message(&ctx, guild_id).await;
     }
 }

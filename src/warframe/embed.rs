@@ -111,13 +111,13 @@ pub async fn steel_path_field(ctx: &Arc<Context>) -> anyhow::Result<(EmbedField,
     let mut is_umbra = false;
     if let Some(reward) = &data.current_reward {
         if reward.name == "Umbra Forma Blueprint" {
-            if let Some(act) = &data.activation {
-                if let Ok(t) = chrono::DateTime::parse_from_rfc3339(act) {
-                    let diff = (chrono::Utc::now() - t.with_timezone(&chrono::Utc))
-                        .num_minutes()
-                        .abs();
-                    is_umbra = diff <= 5;
-                }
+            if let Some(act) = &data.activation
+                && let Ok(t) = chrono::DateTime::parse_from_rfc3339(act)
+            {
+                let diff = (chrono::Utc::now() - t.with_timezone(&chrono::Utc))
+                    .num_minutes()
+                    .abs();
+                is_umbra = diff <= 5;
             }
         } else {
             is_umbra = false;
@@ -179,10 +179,10 @@ pub async fn status_embed(
             Utc::now().timestamp_micros(),
         )?);
 
-    if let Some(img) = image {
-        if let Ok(img_src) = ImageSource::url(&img) {
-            builder = builder.image(img_src);
-        }
+    if let Some(img) = image
+        && let Ok(img_src) = ImageSource::url(&img)
+    {
+        builder = builder.image(img_src);
     }
 
     let mut footer = footer_with_icon(guild)?;

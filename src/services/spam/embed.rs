@@ -57,10 +57,10 @@ pub fn quarantine_embed(
         .author(author)
         .footer(footer);
 
-    if let Some(attachment) = message.attachments.first() {
-        if let Ok(image_source) = ImageSource::url(&attachment.url) {
-            builder = builder.image(image_source);
-        }
+    if let Some(attachment) = message.attachments.first()
+        && let Ok(image_source) = ImageSource::url(&attachment.url)
+    {
+        builder = builder.image(image_source);
     }
 
     let info = builder.build();

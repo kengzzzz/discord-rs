@@ -26,14 +26,14 @@ impl VerificationService {
                 .context("no author")?;
 
             let Some(token) = form::parse_modal(&data) else {
-                if let Some(guild_ref) = ctx.cache.guild(guild_id) {
-                    if let Some(embed) = self::embed::verify_fail_embed(&guild_ref) {
-                        ctx.http
-                            .interaction(interaction.application_id)
-                            .update_response(&interaction.token)
-                            .embeds(Some(&[embed]))
-                            .await?;
-                    }
+                if let Some(guild_ref) = ctx.cache.guild(guild_id)
+                    && let Some(embed) = self::embed::verify_fail_embed(&guild_ref)
+                {
+                    ctx.http
+                        .interaction(interaction.application_id)
+                        .update_response(&interaction.token)
+                        .embeds(Some(&[embed]))
+                        .await?;
                 }
                 return Ok(());
             };
