@@ -1,45 +1,61 @@
-# syntax=docker/dockerfile:1.4
-FROM alpine:edge AS muslssl
-RUN apk add --no-cache openssl-dev openssl-libs-static
+FROM debian:trixie-slim AS chef
 
-FROM lukemathwalker/cargo-chef:latest-rust-slim-trixie AS base
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN cargo install cargo-chef
+
 WORKDIR /app
 
-FROM base AS planner
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() { println!(\"hello\"); }" > src/main.rs
+FROM chef AS planner
+
+COPY . .
+
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM base AS deps
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    musl musl-dev musl-tools pkg-config && \
-    rm -rf /var/lib/apt/lists/*
-RUN rustup target add aarch64-unknown-linux-musl
-
-COPY --from=muslssl /usr /opt/musl/usr
-
-ENV PKG_CONFIG_ALLOW_CROSS=1 \
-    PKG_CONFIG_SYSROOT_DIR=/opt/musl \
-    PKG_CONFIG_LIBDIR=/opt/musl/usr/lib/pkgconfig \
-    OPENSSL_STATIC=1 
+FROM chef AS builder
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/tmp/target \
-    cargo chef cook --release \
-      --target aarch64-unknown-linux-musl \
-      --recipe-path recipe.json
 
-FROM deps AS builder
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/tmp/target \
-    cargo build --release --target aarch64-unknown-linux-musl
+    --mount=type=cache,target=/app/target \
+    cargo chef cook --release --recipe-path recipe.json
 
-FROM alpine:latest AS runtime
+COPY . .
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bins && \
+    cp target/release/discord-bot /app/discord-bot && \
+    strip /app/discord-bot && \
+    cp target/release/healthcheck /app/healthcheck && \
+    strip /app/healthcheck
+
+RUN mkdir -p /rootfs
+
+RUN BINARY_PATH="/app/discord-bot" && \
+    HEALTH_PATH="/app/healthcheck" && \
+    install -D "$BINARY_PATH" "/rootfs$BINARY_PATH" && \
+    install -D "$HEALTH_PATH" "/rootfs$HEALTH_PATH" && \
+    LIBS=$(ldd "$BINARY_PATH" "$HEALTH_PATH" | awk '{print $3}' | grep "^/" | sort -u) && \
+    echo "$LIBS" | xargs -I '{}' cp --parents -v -L '{}' /rootfs/ && \
+    LOADER=$(ldd "$BINARY_PATH" | grep 'ld-linux' | awk '{print $1}') && \
+    cp --parents -v -L "$LOADER" /rootfs/
+
+RUN mkdir -p /rootfs/usr/lib && \
+    if [ -d "/rootfs/lib" ]; then cp -a /rootfs/lib/. /rootfs/usr/lib/ && rm -rf /rootfs/lib; fi && \
+    if [ -d "/rootfs/lib64" ]; then mkdir -p /rootfs/usr/lib64 && cp -a /rootfs/lib64/. /rootfs/usr/lib64/ && rm -rf /rootfs/lib64; fi
+
+FROM gcr.io/distroless/static-debian13:nonroot
+
 WORKDIR /app
-COPY --from=builder /app/target/aarch64-unknown-linux-musl/release/discord-bot /app/discord-bot
-ENTRYPOINT ["./discord-bot"]
+
+COPY --from=builder /rootfs /
+
+ENTRYPOINT ["/app/discord-bot"]

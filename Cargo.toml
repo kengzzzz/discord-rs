@@ -49,3 +49,9 @@ test-utils = []
 name = "ascii_bench"
 path = "benches/ascii_bench.rs"
 harness = false
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
