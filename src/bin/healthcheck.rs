@@ -6,12 +6,18 @@ fn main() {
     match TcpStream::connect(address) {
         Ok(mut stream) => {
             let request = "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-            if stream.write_all(request.as_bytes()).is_err() {
+            if stream
+                .write_all(request.as_bytes())
+                .is_err()
+            {
                 std::process::exit(1);
             }
 
             let mut buffer = String::new();
-            if stream.read_to_string(&mut buffer).is_err() {
+            if stream
+                .read_to_string(&mut buffer)
+                .is_err()
+            {
                 std::process::exit(1);
             }
 
