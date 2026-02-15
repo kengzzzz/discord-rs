@@ -17,6 +17,8 @@ jobs:
       status: ${{ steps.approve.outputs.approval-status }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: trstringer/manual-approval@v1
         id: approve
         with:
@@ -43,9 +45,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
+        
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -53,11 +57,16 @@ jobs:
           file: Dockerfile.production
           platforms: linux/arm64
           tags: |
-            discord-bot:latest
+            discord-bot
             discord-bot:${{ github.sha }}
           load: true
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
+          cache-from: type=local,src=/cache/buildx
+          cache-to: type=local,dest=/cache/buildx-new,mode=max
+
+      - name: Rotate Cache
+        run: |
+          rm -rf /cache/buildx
+          mv /cache/buildx-new /cache/buildx
 
       - name: Load ENV
         run: |
@@ -68,3 +77,7 @@ jobs:
           docker network inspect discord-bot-network >/dev/null 2>&1 || docker network create discord-bot-network
           docker network inspect services-proxy >/dev/null 2>&1 || docker network create services-proxy
           docker compose -f compose.prod.yml up -d --force-recreate --remove-orphans
+
+      - name: Cleanup
+        if: always()
+        run: rm -f .env
