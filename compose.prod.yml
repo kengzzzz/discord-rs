@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     networks:
-      - default
+      - cachenet
       - services-proxy
     healthcheck:
       test: ["CMD", "/app/healthcheck"]
@@ -16,8 +16,7 @@ services:
       start_period: 10s
 
 networks:
-  default:
-    name: discord-bot-network
+  cachenet:
     external: true
   services-proxy:
     external: true

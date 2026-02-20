@@ -74,7 +74,7 @@ jobs:
 
       - name: Deploy with Compose
         run: |
-          docker network inspect discord-bot-network >/dev/null 2>&1 || docker network create discord-bot-network
+          docker network inspect cachenet >/dev/null 2>&1 || docker network create cachenet
           docker network inspect services-proxy >/dev/null 2>&1 || docker network create services-proxy
           docker compose -f compose.prod.yml up -d --force-recreate --remove-orphans
 

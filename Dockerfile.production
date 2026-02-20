@@ -1,61 +1,60 @@
-FROM debian:trixie-slim AS chef
+FROM rust:alpine AS chef
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential pkg-config libssl-dev ca-certificates curl git \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN apk update && apk add --no-cache \
+    musl-dev \
+    build-base \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static \
+    ca-certificates \
+    tzdata
 
 RUN cargo install cargo-chef
 
 WORKDIR /app
 
 FROM chef AS planner
-
 COPY . .
-
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-
 COPY --from=planner /app/recipe.json recipe.json
+
+ENV OPENSSL_STATIC=1
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo chef cook --release --recipe-path recipe.json
+    export TARGET_TRIPLE=$(rustc -vV | sed -n 's/host: //p') && \
+    RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=native" \
+    cargo chef cook --release --target "$TARGET_TRIPLE" --recipe-path recipe.json
 
 COPY . .
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --bins && \
-    cp target/release/discord-bot /app/discord-bot && \
+    export TARGET_TRIPLE=$(rustc -vV | sed -n 's/host: //p') && \
+    RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=native" \
+    cargo build --release --target "$TARGET_TRIPLE" --bins && \
+    cp target/$TARGET_TRIPLE/release/discord-bot /app/discord-bot && \
     strip /app/discord-bot && \
-    cp target/release/healthcheck /app/healthcheck && \
+    cp target/$TARGET_TRIPLE/release/healthcheck /app/healthcheck && \
     strip /app/healthcheck
 
-RUN mkdir -p /rootfs
+RUN addgroup -g 1000 discord-bot && \
+    adduser -D -s /bin/sh -u 1000 -G discord-bot discord-bot
 
-RUN BINARY_PATH="/app/discord-bot" && \
-    HEALTH_PATH="/app/healthcheck" && \
-    install -D "$BINARY_PATH" "/rootfs$BINARY_PATH" && \
-    install -D "$HEALTH_PATH" "/rootfs$HEALTH_PATH" && \
-    LIBS=$(ldd "$BINARY_PATH" "$HEALTH_PATH" | awk '{print $3}' | grep "^/" | sort -u) && \
-    echo "$LIBS" | xargs -I '{}' cp --parents -v -L '{}' /rootfs/ && \
-    LOADER=$(ldd "$BINARY_PATH" | grep 'ld-linux' | awk '{print $1}') && \
-    cp --parents -v -L "$LOADER" /rootfs/
-
-RUN mkdir -p /rootfs/usr/lib && \
-    if [ -d "/rootfs/lib" ]; then cp -a /rootfs/lib/. /rootfs/usr/lib/ && rm -rf /rootfs/lib; fi && \
-    if [ -d "/rootfs/lib64" ]; then mkdir -p /rootfs/usr/lib64 && cp -a /rootfs/lib64/. /rootfs/usr/lib64/ && rm -rf /rootfs/lib64; fi
-
-FROM gcr.io/distroless/static-debian13:nonroot
+FROM scratch
 
 WORKDIR /app
 
-COPY --from=builder /rootfs /
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+COPY --from=builder /app/discord-bot /app/discord-bot
+COPY --from=builder /app/healthcheck /app/healthcheck
+
+USER discord-bot:discord-bot
 
 ENTRYPOINT ["/app/discord-bot"]
