@@ -11,7 +11,7 @@ services:
       - bot-target:/usr/src/discord-bot/target
     env_file:
       - .env
-    command: sh -c "cargo watch -x 'run'"
+    command: sh -c "cargo watch -x 'run --bin discord-bot'"
     ports:
       - "8080:8080"
     depends_on:

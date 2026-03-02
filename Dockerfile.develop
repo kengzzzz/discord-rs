@@ -9,9 +9,3 @@ RUN apk add --no-cache \
 WORKDIR /usr/src/discord-bot
 
 RUN cargo install cargo-watch                                                      
-
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() { println!(\"hello\"); }" > src/main.rs
-RUN cargo check
-
-EXPOSE 8080
