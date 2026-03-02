@@ -127,8 +127,7 @@ async fn test_status_embed_footer_and_fields() {
     redis_set_ex(&ctx.redis, &steel_key, &steel, 60).await;
 
     let cycle_endpoints = [
-        ("earthCycle", "Earth"),
-        ("cetusCycle", "Cetus"),
+        ("cetusCycle", "Cetus/Earth"),
         ("vallisCycle", "Vallis"),
         ("cambionCycle", "Cambion"),
         ("zarimanCycle", "Zariman"),
@@ -155,7 +154,7 @@ async fn test_status_embed_footer_and_fields() {
         Some("[PC] Warframe Cycle Timers")
     );
     assert_eq!(embed.footer.unwrap().text, "guild");
-    assert_eq!(embed.fields.len(), 6);
+    assert_eq!(embed.fields.len(), 5);
 }
 
 #[tokio::test]

@@ -149,16 +149,14 @@ pub async fn status_embed(
 ) -> anyhow::Result<(Embed, bool)> {
     let image_fut = image_link(ctx);
     let steel_fut = steel_path_field(ctx);
-    let earth_fut = cycle_field(ctx, "earthCycle", "Earth");
-    let cetus_fut = cycle_field(ctx, "cetusCycle", "Cetus");
+    let cetus_fut = cycle_field(ctx, "cetusCycle", "Cetus/Earth");
     let vallis_fut = cycle_field(ctx, "vallisCycle", "Vallis");
     let cambion_fut = cycle_field(ctx, "cambionCycle", "Cambion");
     let zariman_fut = cycle_field(ctx, "zarimanCycle", "Zariman");
 
-    let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman) = tokio::try_join!(
+    let (image, (steel, is_umbra), cetus, vallis, cambion, zariman) = tokio::try_join!(
         image_fut,
         steel_fut,
-        earth_fut,
         cetus_fut,
         vallis_fut,
         cambion_fut,
@@ -170,7 +168,6 @@ pub async fn status_embed(
         .url(URL)
         .color(COLOR)
         .field(steel)
-        .field(earth)
         .field(cetus)
         .field(vallis)
         .field(cambion)

@@ -4,7 +4,7 @@ use crate::{
     context::Context,
     services::{
         build::BuildService, health::HealthService, market::MarketService,
-        notification::NotificationService, role_message, status::StatusService,
+        notification::NotificationService, status::StatusService,
     },
 };
 use once_cell::sync::Lazy;
@@ -16,13 +16,6 @@ static INIT: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 pub async fn handle(ctx: Arc<Context>, event: Ready) {
     HealthService::set_ready(true);
     HealthService::set_discord(true);
-
-    let role_ctx = ctx.clone();
-    tokio::spawn(async move {
-        for guild in event.guilds {
-            role_message::handler::ensure_message(&role_ctx, guild.id).await;
-        }
-    });
 
     if !INIT.swap(true, Ordering::Relaxed) {
         StatusService::spawn(&ctx);

@@ -1,7 +1,9 @@
 use std::slice;
 use std::sync::Arc;
 
+use futures::future::join_all;
 use twilight_http::request::channel::reaction::RequestReactionType;
+use twilight_model::channel::message::EmojiReactionType;
 use twilight_model::channel::message::{Embed, Message, embed::EmbedFooter};
 use twilight_model::id::{Id, marker::GuildMarker};
 
@@ -60,16 +62,24 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
         RoleEnum::Eidolon,
         RoleEnum::Live,
     ];
+    let role_futures = roles
+        .iter()
+        .map(|role_type| async move {
+            let role = RoleService::get_by_type(ctx, guild_id.get(), role_type).await;
+            (role_type, role)
+        });
+    let role_results = join_all(role_futures).await;
+
     let mut info = Vec::with_capacity(roles.len());
-    for role_type in roles.iter() {
-        if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), role_type).await
+    for (role_type, role_opt) in role_results {
+        if let Some(role) = role_opt
             && role.self_assignable
             && let (Some(emoji), Some(role_ref)) = (
                 role_enum_to_emoji(role_type),
                 ctx.cache.role(Id::new(role.role_id)),
             )
         {
-            info.push((role_ref.name.clone(), emoji));
+            info.push((role_ref.name.clone(), emoji.to_string()));
         }
     }
 
@@ -95,68 +105,88 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
     let embed_slice = slice::from_ref(&embed);
 
     if let Some((msg_id, msg)) = existing_message {
-        let mut correct = true;
-        if let Some(existing) = msg.embeds.first() {
-            correct &= embed_equals(existing, &embed_slice[0]);
-            correct &= msg.embeds.len() == 1;
-            correct &= msg.content.is_empty();
-        } else {
-            correct = false;
+        let mut needs_embed_update = true;
+        let mut target_reactions: Vec<String> = info
+            .iter()
+            .map(|(_, e)| e.clone())
+            .collect();
+
+        if let Some(existing_embed) = msg.embeds.first()
+            && embed_equals(existing_embed, &embed_slice[0])
+            && msg.embeds.len() == 1
+            && msg.content.is_empty()
+        {
+            needs_embed_update = false;
         }
 
-        if correct {
+        let bot_reacted_emojis: Vec<String> = msg
+            .reactions
+            .iter()
+            .filter(|r| r.me)
+            .filter_map(|r| match &r.emoji {
+                EmojiReactionType::Unicode { name } => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+
+        target_reactions.retain(|emoji| !bot_reacted_emojis.contains(emoji));
+
+        if !needs_embed_update && target_reactions.is_empty() {
             return;
         }
 
-        let mut update = ctx
-            .http
-            .update_message(channel_id, Id::new(msg_id));
-        update = update.embeds(Some(embed_slice));
-        update = update.content(None);
-        if update.await.is_ok() {
+        if needs_embed_update {
+            let mut update = ctx
+                .http
+                .update_message(channel_id, Id::new(msg_id));
+            update = update
+                .embeds(Some(embed_slice))
+                .content(None);
+            if let Err(e) = update.await {
+                tracing::error!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to update message");
+                return;
+            }
+        }
+
+        for emoji in target_reactions {
+            let reaction = RequestReactionType::Unicode { name: &emoji };
             if let Err(e) = ctx
                 .http
-                .delete_all_reactions(channel_id, Id::new(msg_id))
+                .create_reaction(channel_id, Id::new(msg_id), &reaction)
                 .await
             {
-                tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to clear reactions");
+                tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to add reaction");
             }
-            for (_, emoji) in &info {
-                let reaction = RequestReactionType::Unicode { name: emoji };
-                if let Err(e) = ctx
-                    .http
-                    .create_reaction(channel_id, Id::new(msg_id), &reaction)
-                    .await
-                {
-                    tracing::warn!(channel_id = channel_id.get(), message_id = msg_id, error = %e, "failed to add reaction");
-                }
-            }
-            storage::set(ctx, guild_id.get(), channel_id.get(), msg_id).await;
         }
         return;
     }
     let mut create = ctx.http.create_message(channel_id);
     create = create.embeds(embed_slice);
 
-    if let Ok(response) = create.await
-        && let Ok(msg) = response.model().await
-    {
-        for (_, emoji) in &info {
-            let reaction = RequestReactionType::Unicode { name: emoji };
-            if let Err(e) = ctx
-                .http
-                .create_reaction(channel_id, msg.id, &reaction)
-                .await
-            {
-                tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
+    match create.await {
+        Ok(response) => {
+            if let Ok(msg) = response.model().await {
+                for (_, emoji) in &info {
+                    let reaction = RequestReactionType::Unicode { name: emoji };
+                    if let Err(e) = ctx
+                        .http
+                        .create_reaction(channel_id, msg.id, &reaction)
+                        .await
+                    {
+                        tracing::warn!(channel_id = channel_id.get(), message_id = msg.id.get(), error = %e, "failed to add reaction");
+                    }
+                }
+                storage::set(
+                    ctx,
+                    guild_id.get(),
+                    channel_id.get(),
+                    msg.id.get(),
+                )
+                .await;
             }
         }
-        storage::set(
-            ctx,
-            guild_id.get(),
-            channel_id.get(),
-            msg.id.get(),
-        )
-        .await;
+        Err(e) => {
+            tracing::error!(channel_id = channel_id.get(), error = %e, "failed to create role message");
+        }
     }
 }

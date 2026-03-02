@@ -73,13 +73,22 @@ impl NotificationService {
         ctx: Arc<Context>,
         token: CancellationToken,
     ) -> HashMap<u64, Vec<JoinHandle<()>>> {
-        let mut map = HashMap::new();
+        let mut map: HashMap<u64, Vec<JoinHandle<()>>> = HashMap::new();
         let channels = ChannelService::list_by_type(&ctx, &ChannelEnum::Notification).await;
+
         for ch in channels {
-            map.insert(
-                ch.guild_id,
-                Self::init_for_channel(&ctx, ch, token.clone()).await,
-            );
+            let guild_id = ch.guild_id;
+            let new_handles = Self::init_for_channel(&ctx, ch, token.clone()).await;
+
+            if let Some(old_handles) = map.insert(guild_id, new_handles) {
+                tracing::warn!(
+                    guild_id = guild_id,
+                    "Duplicate notification channel detected. Aborting previous tasks."
+                );
+                for h in old_handles {
+                    h.abort();
+                }
+            }
         }
         map
     }
@@ -117,14 +126,17 @@ impl NotificationService {
 
     pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {
         let token = shutdown::get_token();
-        let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
-        let mut guard = HANDLES.write().await;
-        if let Some(old) = guard.remove(&guild_id) {
-            for h in old {
-                h.abort();
+        {
+            let mut guard = HANDLES.write().await;
+            if let Some(old) = guard.remove(&guild_id) {
+                for h in old {
+                    h.abort();
+                }
             }
         }
+        let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
         if !new_handles.is_empty() {
+            let mut guard = HANDLES.write().await;
             guard.insert(guild_id, new_handles);
         }
     }

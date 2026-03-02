@@ -40,21 +40,25 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cp target/$TARGET_TRIPLE/release/healthcheck /app/healthcheck && \
     strip /app/healthcheck
 
-RUN addgroup -g 1000 discord-bot && \
-    adduser -D -s /bin/sh -u 1000 -G discord-bot discord-bot
+RUN echo "discord-bot:x:1000:1000:discord-bot:/app:/sbin/nologin" > /etc/passwd.custom && \
+    echo "discord-bot:x:1000:" > /etc/group.custom
 
 FROM scratch
 
 WORKDIR /app
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /etc/group /etc/group
+COPY --from=builder /usr/share/zoneinfo/Asia/Bangkok /usr/share/zoneinfo/Asia/Bangkok
+COPY --from=builder /etc/passwd.custom /etc/passwd
+COPY --from=builder /etc/group.custom /etc/group
 
 COPY --from=builder /app/discord-bot /app/discord-bot
 COPY --from=builder /app/healthcheck /app/healthcheck
 
-USER discord-bot:discord-bot
+USER 1000:1000
+
+ENV TZ=Asia/Bangkok
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/app/healthcheck"]
 
 ENTRYPOINT ["/app/discord-bot"]
