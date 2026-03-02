@@ -15,7 +15,8 @@ pub(crate) fn next_monday_duration_from(now: DateTime<Utc>) -> Duration {
         .and_hms_opt(0, 0, 0)
         .unwrap();
     let target = Utc.from_utc_datetime(&next_monday);
-    (target - now).to_std().unwrap()
+    let duration = (target - now).to_std().unwrap();
+    duration + std::time::Duration::from_secs(1)
 }
 
 pub(crate) fn notify_loop(

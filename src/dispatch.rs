@@ -4,8 +4,8 @@ use twilight_gateway::Event;
 use crate::{
     context::Context,
     events::{
-        interaction_create, member_add, member_remove, message_create, message_delete,
-        reaction_add, reaction_remove, ready,
+        guild_create, interaction_create, member_add, member_remove, message_create,
+        message_delete, reaction_add, reaction_remove, ready,
     },
 };
 
@@ -26,6 +26,7 @@ pub async fn dispatch_event(ctx: Arc<Context>, event: Event) {
         Event::ReactionRemove(boxed) => reaction_remove::handle(ctx, *boxed).await,
         Event::MessageDelete(event) => message_delete::handle_single(ctx, event).await,
         Event::MessageDeleteBulk(event) => message_delete::handle_bulk(ctx, event).await,
+        Event::GuildCreate(boxed) => guild_create::handle(ctx, *boxed).await,
         _ => {}
     }
 }
