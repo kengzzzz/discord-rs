@@ -29,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
             | Intents::GUILD_MEMBERS
             | Intents::GUILD_MESSAGES
             | Intents::GUILD_MESSAGE_REACTIONS
+            | Intents::GUILD_VOICE_STATES
             | Intents::MESSAGE_CONTENT,
     );
 

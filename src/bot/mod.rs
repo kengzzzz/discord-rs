@@ -78,6 +78,7 @@ fn classify_priority(e: &Event) -> PriorityClass {
             | Event::ReactionAdd(_)
             | Event::ReactionRemove(_)
             | Event::MemberAdd(_)
+            | Event::VoiceStateUpdate(_)
     ) {
         PriorityClass::Normal
     } else if matches!(
@@ -86,6 +87,7 @@ fn classify_priority(e: &Event) -> PriorityClass {
             | Event::MemberRemove(_)
             | Event::MessageDelete(_)
             | Event::MessageDeleteBulk(_)
+            | Event::GuildCreate(_)
     ) {
         PriorityClass::Low
     } else {
