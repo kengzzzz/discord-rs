@@ -31,6 +31,9 @@ pub enum ChannelEnum {
     #[option(name = "Quarantine Channel", value = "quarantine")]
     Quarantine,
 
+    #[option(name = "Log Channel", value = "log")]
+    Log,
+
     #[option(name = "Regular Channel", value = "regular")]
     #[default]
     None,
