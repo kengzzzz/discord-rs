@@ -18,7 +18,7 @@ impl HttpProvider for MockClient {
             let v = serde_json::to_value(&self.items).unwrap();
             return Ok(serde_json::from_value(v).unwrap());
         }
-        if url.starts_with("https://api.warframe.market/v1/items/") {
+        if url.starts_with("https://api.warframe.market/v2/items/") {
             let v = serde_json::to_value(&self.orders).unwrap();
             return Ok(serde_json::from_value(v).unwrap());
         }

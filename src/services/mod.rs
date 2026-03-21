@@ -5,7 +5,7 @@ pub mod channel;
 pub mod health;
 pub mod introduction;
 pub mod latency;
-pub mod market;
+// pub mod market;
 pub mod notification;
 pub mod role;
 pub mod role_message;

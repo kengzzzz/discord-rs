@@ -29,11 +29,33 @@ pub(crate) fn notify_loop(
 ) -> JoinHandle<()> {
     let msg = message.to_string();
     let ctx = ctx.clone();
+
+    const SEC_48_HOURS: u64 = 48 * 60 * 60;
+    const SEC_24_HOURS: u64 = 24 * 60 * 60;
+    const SEC_120_HOURS: u64 = 120 * 60 * 60;
+
     tokio::spawn(async move {
         loop {
-            let delay = calc_delay();
+            let mut delay = calc_delay();
+            while delay > Duration::from_secs(60) {
+                let sleep_time = if delay > Duration::from_secs(SEC_48_HOURS) {
+                    Duration::from_secs(SEC_24_HOURS)
+                } else if delay > Duration::from_secs(600) {
+                    Duration::from_secs(600)
+                } else {
+                    Duration::from_secs(30)
+                };
+
+                tokio::select! {
+                    _ = token.cancelled() => return,
+                    _ = tokio::time::sleep(sleep_time) => {
+                        delay = calc_delay();
+                    }
+                }
+            }
+
             tokio::select! {
-                _ = token.cancelled() => break,
+                _ = token.cancelled() => return,
                 _ = tokio::time::sleep(delay) => {
                     if let Err(e) = ctx.http
                         .create_message(channel_id)
@@ -46,6 +68,10 @@ pub(crate) fn notify_loop(
                             error = %e,
                             "failed to send notification",
                         );
+                    }
+                    tokio::select! {
+                        _ = token.cancelled() => return,
+                        _ = tokio::time::sleep(Duration::from_secs(SEC_120_HOURS)) => {}
                     }
                 }
             }

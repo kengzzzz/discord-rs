@@ -29,7 +29,7 @@ async fn test_set_items_and_search() {
 async fn test_maybe_refresh_updates() {
     let ctx = build_context().await;
     ctx.reqwest.add_json_response(
-        "https://api.warframe.market/v1/items",
+        "https://api.warframe.market/v2/items",
         "{ \"payload\": { \"items\": [] } }",
     );
     LAST_UPDATE.store(0, Ordering::Relaxed);
