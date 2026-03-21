@@ -11,25 +11,21 @@ use twilight_model::{
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
 };
 
-use crate::{
-    context::Context,
-    handle_ephemeral,
-    services::{build::BuildService, market::MarketService},
-};
+use crate::{context::Context, handle_ephemeral, services::build::BuildService};
 use std::sync::Arc;
 
 mod build;
-mod market;
+// mod market;
 use build::WarframeBuildCommand;
-use market::WarframeMarketCommand;
+// use market::WarframeMarketCommand;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "warframe", desc_localizations = "warframe_desc")]
 pub enum WarframeCommand {
     #[command(name = "build")]
     Build(WarframeBuildCommand),
-    #[command(name = "market")]
-    Market(WarframeMarketCommand),
+    // #[command(name = "market")]
+    // Market(WarframeMarketCommand),
 }
 
 fn warframe_desc() -> DescLocalizations {
@@ -60,20 +56,22 @@ impl WarframeCommand {
                 .context("failed to parse command data")?;
             match command {
                 WarframeCommand::Build(cmd) => cmd.run(ctx, interaction).await?,
-                WarframeCommand::Market(cmd) => cmd.run(ctx, interaction).await?,
+                // WarframeCommand::Market(cmd) => cmd.run(ctx, interaction).await?,
             }
         });
     }
 
     pub async fn autocomplete(ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
-        if let Some((sub, name, user_input)) = extract_focused(&data) {
+        if let Some((_sub, name, user_input)) = extract_focused(&data) {
             let mut choices = Vec::with_capacity(25);
             if name == "item" {
-                let results = if sub == "build" {
-                    BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await
-                } else {
-                    MarketService::search_with_update(&ctx, user_input).await
-                };
+                // let results = if sub == "build" {
+                //     BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await
+                // } else {
+                //     MarketService::search_with_update(&ctx, user_input).await
+                // };
+                let results =
+                    BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await;
                 choices.extend(
                     results
                         .into_iter()

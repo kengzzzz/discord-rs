@@ -14,7 +14,7 @@ use crate::utils::http::HttpProvider;
 
 use super::{MarketKind, cache::MarketEntry};
 
-const ITEMS_URL: &str = "https://api.warframe.market/v1/items";
+const ITEMS_URL: &str = "https://api.warframe.market/v2/items";
 pub(super) const ITEM_URL: &str = "https://warframe.market/items/";
 
 #[derive(Deserialize, Serialize)]
@@ -24,13 +24,23 @@ struct ItemsPayload {
 
 #[derive(Deserialize, Serialize)]
 struct ItemsResponse {
-    payload: ItemsPayload,
+    data: Vec<MarketItem>,
 }
 
 #[derive(Deserialize, Serialize)]
 struct MarketItem {
-    item_name: String,
-    url_name: String,
+    slug: String,
+    i18n: ItemI18n,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ItemI18n {
+    en: ItemLang,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ItemLang {
+    name: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -40,7 +50,7 @@ struct OrdersPayload {
 
 #[derive(Deserialize, Serialize)]
 pub(super) struct OrdersResponse {
-    payload: OrdersPayload,
+    data: Vec<Order>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -80,10 +90,9 @@ where
 {
     let data: ItemsResponse = client.get_json(ITEMS_URL).await?;
     let mut entries: Vec<MarketEntry> = data
-        .payload
-        .items
+        .data
         .into_iter()
-        .map(|item| MarketEntry { name: item.item_name, url: item.url_name })
+        .map(|item| MarketEntry { name: item.i18n.en.name, url: item.slug })
         .collect();
     entries.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
     entries.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
@@ -106,10 +115,10 @@ where
 {
     let data: OrdersResponse = client
         .get_json(&format!(
-            "https://api.warframe.market/v1/items/{url}/orders"
+            "https://api.warframe.market/v2/items/{url}/orders"
         ))
         .await?;
-    Ok(data.payload.orders)
+    Ok(data.data)
 }
 
 pub(super) async fn fetch_orders_map<H>(

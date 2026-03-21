@@ -3,15 +3,16 @@ services:
     container_name: discord-bot
     build:
       context: .
-      dockerfile: Dockerfile.develop
+      dockerfile: Dockerfile
+      target: develop
     volumes:
-      - ./:/usr/src/discord-bot
+      - ./:/app
       - bot-cargo-registry:/usr/local/cargo/registry
       - bot-cargo-git:/usr/local/cargo/git
-      - bot-target:/usr/src/discord-bot/target
+      - bot-target:/app/target
     env_file:
       - .env
-    command: sh -c "cargo watch -x 'run --bin discord-bot'"
+    command: ["cargo", "watch", "-x", "run --bin discord-bot"]
     ports:
       - "8080:8080"
     depends_on:
