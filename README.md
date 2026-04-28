@@ -8,19 +8,26 @@ container.
 ## Architecture Overview
 The bot runs a single Twilight shard and processes events through priority queues backed by Tokio channels. A small Axum server exposes health and metrics endpoints.
 
+The application is moving to a vertical-slice layout. Feature behavior is registered through `src/features/registry.rs`, which wires slash commands, autocomplete, modal handlers, and gateway events into a central registry. Shared runtime concerns stay in `bot/`, `context/`, `dbs/`, and `observability/`, while feature-specific behavior lives under `src/features/`.
+
 ## Folder Structure
 ```
-src/               # core bot code
-  bot/             # queue logic and worker tasks
-  commands/        # slash command handlers
-  configs/         # environment variable loaders
-  context/         # shared resources (DB, HTTP, cache)
+src/
+  bot/             # shard runtime, worker queues, command registration boot
+  features/        # vertical slices and the central feature registry
+  context/         # shared resources (DB, HTTP, cache, reqwest)
+  dbs/             # MongoDB and Redis clients, models, watchers
   observability/   # metrics and HTTP server
-  services/        # background services
+  services/        # legacy shared/domain modules still being migrated
+  commands/        # compatibility shims for existing command paths
+  events/          # compatibility entrypoints for gateway handlers
+  utils/           # generic helpers, embeds, modal parsing, reactions
 scripts/           # helper scripts
 benches/           # benchmark harnesses
 tests/             # integration tests
 ```
+
+Current slices include `intro`, `verification`, `member_onboarding`, `reaction_roles`, `role_messages`, `voice_logs`, `warframe`, `admin`, `ai`, `ping`, and `help`.
 
 ## Concurrency & Backpressure Model
 Event dispatch uses three bounded mpsc queues (high, normal, low) paired with
@@ -77,6 +84,15 @@ docker-compose up
 cargo run
 ```
 
+Useful development checks:
+
+```bash
+cargo fmt
+cargo check
+cargo clippy --all-targets -- -D warnings
+cargo test --all-features -- --test-threads 1
+```
+
 ## Observing & Debugging
 `RUST_LOG` controls logging verbosity. Metrics can be scraped from `/metrics`
 and visualized with Prometheus and Grafana. Future considerations include adding
@@ -94,8 +110,11 @@ a readiness probe separate from `/healthz`.
 Pull requests are welcome! Please ensure:
 
 1. Code is formatted with `cargo fmt`.
-2. `cargo clippy --all-targets -- -D warnings` runs without errors.
-3. All tests pass with `cargo test --all-features -- --test-threads 1`.
+2. The crate compiles with `cargo check`.
+3. `cargo clippy --all-targets -- -D warnings` runs without errors.
+4. All tests pass with `cargo test --all-features -- --test-threads 1`.
+
+When adding new bot behavior, prefer a new or existing slice in `src/features/` over adding more cross-cutting logic to `commands/`, `events/`, or broad shared services.
 
 Issues and feature requests are also appreciated.
 

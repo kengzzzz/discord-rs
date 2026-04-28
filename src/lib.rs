@@ -5,6 +5,7 @@ pub mod context;
 pub mod dbs;
 pub mod dispatch;
 pub mod events;
+pub mod features;
 pub mod macros;
 pub mod observability;
 pub mod services;
