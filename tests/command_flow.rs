@@ -225,6 +225,59 @@ async fn warframe_build_command_embed() {
 }
 
 #[tokio::test]
+async fn warframe_market_command_embed() {
+    let ctx = build_context().await;
+    let guild = make_guild(Id::new(1), "guild");
+    cache_guild(&ctx.cache, guild.clone());
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.market/v2/items",
+        "{\"data\":[{\"id\":\"test-id\",\"slug\":\"test_item\",\"i18n\":{\"en\":{\"name\":\"Test Item\"}}}]}",
+    );
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.market/v2/orders/itemId/test-id",
+        "{\"data\":[{\"platinum\":42,\"quantity\":3,\"type\":\"sell\",\"user\":{\"ingameName\":\"Trader\",\"status\":\"ingame\"},\"rank\":1}]}",
+    );
+    discord_bot::services::market::MarketService::init(ctx.clone()).await;
+    let options = vec![CommandDataOption {
+        name: "market".into(),
+        value: CommandOptionValue::SubCommand(vec![
+            CommandDataOption {
+                name: "item".into(),
+                value: CommandOptionValue::String("Test Item".into()),
+            },
+            CommandDataOption {
+                name: "kind".into(),
+                value: CommandOptionValue::String("buy".into()),
+            },
+        ]),
+    }];
+    let (interaction, data) = command_interaction_with_options("warframe", Some(1), options);
+
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
+    assert_eq!(
+        record.embeds[0].title.as_deref(),
+        Some("ผู้ขาย Test Item [Rank 0]")
+    );
+    assert_eq!(
+        record.embeds[0].url.as_deref(),
+        Some("https://warframe.market/items/test_item")
+    );
+
+    let response = last_interaction(&ctx.http).expect("interaction record");
+    assert_eq!(
+        response.response.kind,
+        InteractionResponseType::DeferredChannelMessageWithSource
+    );
+    assert_eq!(
+        response.response.data.unwrap().flags,
+        Some(MessageFlags::EPHEMERAL)
+    );
+}
+
+#[tokio::test]
 async fn warframe_command_dm_guild_only() {
     let ctx = build_context().await;
     let options = vec![CommandDataOption {

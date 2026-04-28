@@ -18,7 +18,7 @@ impl HttpProvider for MockClient {
             let v = serde_json::to_value(&self.items).unwrap();
             return Ok(serde_json::from_value(v).unwrap());
         }
-        if url.starts_with("https://api.warframe.market/v2/items/") {
+        if url.starts_with("https://api.warframe.market/v2/orders/itemId/") {
             let v = serde_json::to_value(&self.orders).unwrap();
             return Ok(serde_json::from_value(v).unwrap());
         }
@@ -45,9 +45,9 @@ async fn test_load_from_redis() {
     let context = build_context().await;
     let key = "redis:test:load";
     let entries = vec![
-        MarketEntry { name: "beta".into(), url: "beta".into() },
-        MarketEntry { name: "alpha".into(), url: "alpha".into() },
-        MarketEntry { name: "Alpha".into(), url: "alpha2".into() },
+        MarketEntry { name: "beta".into(), item_id: "beta-id".into(), slug: "beta".into() },
+        MarketEntry { name: "alpha".into(), item_id: "alpha-id".into(), slug: "alpha".into() },
+        MarketEntry { name: "Alpha".into(), item_id: "alpha2-id".into(), slug: "alpha2".into() },
     ];
     redis_set(&context.redis, key, &entries).await;
 
@@ -68,15 +68,25 @@ async fn test_update_items() {
 
     let client = MockClient {
         items: ItemsResponse {
-            payload: ItemsPayload {
-                items: vec![
-                    MarketItem { item_name: "Beta".into(), url_name: "beta".into() },
-                    MarketItem { item_name: "alpha".into(), url_name: "alpha".into() },
-                    MarketItem { item_name: "Alpha".into(), url_name: "alpha2".into() },
-                ],
-            },
+            data: vec![
+                MarketItem {
+                    id: "beta-id".into(),
+                    slug: "beta".into(),
+                    i18n: ItemI18n { en: ItemLang { name: "Beta".into() } },
+                },
+                MarketItem {
+                    id: "alpha-id".into(),
+                    slug: "alpha".into(),
+                    i18n: ItemI18n { en: ItemLang { name: "alpha".into() } },
+                },
+                MarketItem {
+                    id: "alpha2-id".into(),
+                    slug: "alpha2".into(),
+                    i18n: ItemI18n { en: ItemLang { name: "Alpha".into() } },
+                },
+            ],
         },
-        orders: OrdersResponse { payload: OrdersPayload { orders: vec![] } },
+        orders: OrdersResponse { data: vec![] },
     };
 
     update_items(
@@ -93,6 +103,8 @@ async fn test_update_items() {
     assert_eq!(guard.len(), 2);
     assert_eq!(guard[0].name, "alpha");
     assert_eq!(guard[1].name, "Beta");
+    assert_eq!(guard[0].item_id, "alpha-id");
+    assert_eq!(guard[1].slug, "beta");
     drop(guard);
 
     let stored = redis_get::<Vec<MarketEntry>>(&context.redis, "redis:test:update")
@@ -105,54 +117,52 @@ async fn test_update_items() {
 #[tokio::test]
 async fn test_fetch_orders_map() {
     let client = MockClient {
-        items: ItemsResponse { payload: ItemsPayload { items: vec![] } },
+        items: ItemsResponse { data: vec![] },
         orders: OrdersResponse {
-            payload: OrdersPayload {
-                orders: vec![
-                    Order {
-                        platinum: 10,
-                        quantity: 1,
-                        order_type: "sell".into(),
-                        user: OrderUser { ingame_name: "s1".into(), status: "ingame".into() },
-                        mod_rank: Some(2),
-                    },
-                    Order {
-                        platinum: 12,
-                        quantity: 1,
-                        order_type: "sell".into(),
-                        user: OrderUser { ingame_name: "s2".into(), status: "ingame".into() },
-                        mod_rank: None,
-                    },
-                    Order {
-                        platinum: 5,
-                        quantity: 1,
-                        order_type: "buy".into(),
-                        user: OrderUser { ingame_name: "b1".into(), status: "ingame".into() },
-                        mod_rank: Some(3),
-                    },
-                    Order {
-                        platinum: 30,
-                        quantity: 1,
-                        order_type: "buy".into(),
-                        user: OrderUser { ingame_name: "b2".into(), status: "ingame".into() },
-                        mod_rank: Some(1),
-                    },
-                    Order {
-                        platinum: 25,
-                        quantity: 1,
-                        order_type: "buy".into(),
-                        user: OrderUser { ingame_name: "b3".into(), status: "ingame".into() },
-                        mod_rank: Some(1),
-                    },
-                    Order {
-                        platinum: 99,
-                        quantity: 1,
-                        order_type: "sell".into(),
-                        user: OrderUser { ingame_name: "off".into(), status: "offline".into() },
-                        mod_rank: Some(2),
-                    },
-                ],
-            },
+            data: vec![
+                Order {
+                    platinum: 10,
+                    quantity: 1,
+                    order_type: "sell".into(),
+                    user: OrderUser { ingame_name: "s1".into(), status: "ingame".into() },
+                    mod_rank: Some(2),
+                },
+                Order {
+                    platinum: 12,
+                    quantity: 1,
+                    order_type: "sell".into(),
+                    user: OrderUser { ingame_name: "s2".into(), status: "ingame".into() },
+                    mod_rank: None,
+                },
+                Order {
+                    platinum: 5,
+                    quantity: 1,
+                    order_type: "buy".into(),
+                    user: OrderUser { ingame_name: "b1".into(), status: "ingame".into() },
+                    mod_rank: Some(3),
+                },
+                Order {
+                    platinum: 30,
+                    quantity: 1,
+                    order_type: "buy".into(),
+                    user: OrderUser { ingame_name: "b2".into(), status: "ingame".into() },
+                    mod_rank: Some(1),
+                },
+                Order {
+                    platinum: 25,
+                    quantity: 1,
+                    order_type: "buy".into(),
+                    user: OrderUser { ingame_name: "b3".into(), status: "ingame".into() },
+                    mod_rank: Some(1),
+                },
+                Order {
+                    platinum: 99,
+                    quantity: 1,
+                    order_type: "sell".into(),
+                    user: OrderUser { ingame_name: "off".into(), status: "offline".into() },
+                    mod_rank: Some(2),
+                },
+            ],
         },
     };
 

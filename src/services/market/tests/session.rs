@@ -4,7 +4,8 @@ use super::*;
 fn build_session(rank: u8, orders: BTreeMap<u8, Vec<OrderInfo>>) -> MarketSession {
     MarketSession {
         item: "item".to_string(),
-        url: "url".to_string(),
+        item_id: "item-id".to_string(),
+        slug: "item-slug".to_string(),
         kind: MarketKind::Buy,
         orders,
         rank,

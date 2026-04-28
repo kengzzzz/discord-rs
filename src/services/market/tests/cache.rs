@@ -14,7 +14,11 @@ async fn build_context() -> Arc<Context> {
 #[tokio::test]
 async fn test_set_items_and_search() {
     let mut data: Vec<MarketEntry> = (0..30)
-        .map(|i| MarketEntry { name: format!("Item{:02}", 29 - i), url: format!("url{i}") })
+        .map(|i| MarketEntry {
+            name: format!("Item{:02}", 29 - i),
+            item_id: format!("id{i}"),
+            slug: format!("slug{i}"),
+        })
         .collect();
     data.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
     MarketService::set_items(data).await;
@@ -30,7 +34,7 @@ async fn test_maybe_refresh_updates() {
     let ctx = build_context().await;
     ctx.reqwest.add_json_response(
         "https://api.warframe.market/v2/items",
-        "{ \"payload\": { \"items\": [] } }",
+        "{ \"data\": [] }",
     );
     LAST_UPDATE.store(0, Ordering::Relaxed);
     MarketService::maybe_refresh(&ctx).await;
@@ -39,15 +43,21 @@ async fn test_maybe_refresh_updates() {
 }
 
 #[tokio::test]
-async fn test_find_url() {
+async fn test_find_item() {
     let entries = vec![
-        MarketEntry { name: "Apple".into(), url: "apple".into() },
-        MarketEntry { name: "Banana".into(), url: "banana".into() },
+        MarketEntry { name: "Apple".into(), item_id: "apple-id".into(), slug: "apple".into() },
+        MarketEntry { name: "Banana".into(), item_id: "banana-id".into(), slug: "banana".into() },
     ];
     MarketService::set_items(entries).await;
     assert_eq!(
-        MarketService::find_url("Apple").await,
-        Some("apple".into())
+        MarketService::find_item("Apple")
+            .await
+            .map(|item| (item.item_id, item.slug)),
+        Some(("apple-id".into(), "apple".into()))
     );
-    assert_eq!(MarketService::find_url("Unknown").await, None);
+    assert!(
+        MarketService::find_item("Unknown")
+            .await
+            .is_none()
+    );
 }

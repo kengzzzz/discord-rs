@@ -4,7 +4,10 @@ use async_trait::async_trait;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::application::{
     command::Command,
-    interaction::{Interaction, application_command::CommandData},
+    interaction::{
+        Interaction, application_command::CommandData,
+        message_component::MessageComponentInteractionData,
+    },
 };
 
 use crate::{
@@ -27,6 +30,10 @@ impl FeatureSlice for WarframeFeature {
         &["warframe"]
     }
 
+    fn component_prefixes(&self) -> &'static [&'static str] {
+        &["market_"]
+    }
+
     async fn handle_command(&self, ctx: Arc<Context>, interaction: Interaction, data: CommandData) {
         WarframeCommand::handle(ctx, interaction, data).await;
     }
@@ -38,5 +45,14 @@ impl FeatureSlice for WarframeFeature {
         data: CommandData,
     ) {
         WarframeCommand::autocomplete(ctx, interaction, data).await;
+    }
+
+    async fn handle_component(
+        &self,
+        ctx: Arc<Context>,
+        interaction: Interaction,
+        data: MessageComponentInteractionData,
+    ) {
+        WarframeCommand::handle_component(ctx, interaction, data).await;
     }
 }

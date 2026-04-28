@@ -8,7 +8,7 @@ use twilight_model::{
         command::Command,
         interaction::{
             Interaction, InteractionData, InteractionType, application_command::CommandData,
-            modal::ModalInteractionData,
+            message_component::MessageComponentInteractionData, modal::ModalInteractionData,
         },
     },
     channel::Message,
@@ -45,6 +45,10 @@ pub trait FeatureSlice: Send + Sync {
         &[]
     }
 
+    fn component_prefixes(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     async fn handle_command(
         &self,
         _ctx: Arc<Context>,
@@ -66,6 +70,14 @@ pub trait FeatureSlice: Send + Sync {
         _ctx: Arc<Context>,
         _interaction: Interaction,
         _data: ModalInteractionData,
+    ) {
+    }
+
+    async fn handle_component(
+        &self,
+        _ctx: Arc<Context>,
+        _interaction: Interaction,
+        _data: MessageComponentInteractionData,
     ) {
     }
 
@@ -176,6 +188,18 @@ impl FeatureRegistry {
             .find(|slice| slice.modal_ids().contains(&modal_id))
     }
 
+    fn slice_for_component(&self, custom_id: &str) -> Option<&dyn FeatureSlice> {
+        self.slices
+            .iter()
+            .map(Box::as_ref)
+            .find(|slice| {
+                slice
+                    .component_prefixes()
+                    .iter()
+                    .any(|prefix| custom_id.starts_with(prefix))
+            })
+    }
+
     pub async fn handle_interaction(&self, ctx: Arc<Context>, interaction: Interaction) {
         let Some(user) = &interaction.author() else {
             return;
@@ -203,7 +227,13 @@ impl FeatureRegistry {
                         .await;
                 }
             }
-            Some(InteractionData::MessageComponent(_data)) => {}
+            Some(InteractionData::MessageComponent(data)) => {
+                if let Some(slice) = self.slice_for_component(&data.custom_id) {
+                    slice
+                        .handle_component(ctx, interaction, *data)
+                        .await;
+                }
+            }
             Some(InteractionData::ModalSubmit(data)) => {
                 if let Some(slice) = self.slice_for_modal(&data.custom_id) {
                     slice
