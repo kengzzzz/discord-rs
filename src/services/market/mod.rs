@@ -89,7 +89,7 @@ impl MarketService {
         Self::build_embed(
             guild,
             &session.item,
-            &session.url,
+            &session.slug,
             &session.kind,
             session.max_rank.map(|_| session.rank),
             orders,
@@ -101,17 +101,18 @@ impl MarketService {
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Option<MarketSession>> {
-        let Some(url) = Self::find_url(item).await else {
+        let Some(entry) = Self::find_item(item).await else {
             return Ok(None);
         };
-        match client::fetch_orders_map(&ctx.reqwest, &url, &kind).await {
+        match client::fetch_orders_map(&ctx.reqwest, &entry.item_id, &kind).await {
             Ok((orders, max_rank)) => {
                 if orders.is_empty() {
                     return Ok(None);
                 }
                 let session = MarketSession {
                     item: item.to_string(),
-                    url,
+                    item_id: entry.item_id,
+                    slug: entry.slug,
                     kind,
                     orders,
                     rank: 0,
@@ -132,6 +133,7 @@ impl MarketService {
     pub fn components(session: &MarketSession) -> Vec<Component> {
         let mut buttons = Vec::with_capacity(5);
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_prev_page".into()),
             disabled: session.page <= 1,
             emoji: None,
@@ -141,6 +143,7 @@ impl MarketService {
             sku_id: None,
         }));
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_next_page".into()),
             disabled: session.page >= session.lpage(),
             emoji: None,
@@ -151,6 +154,7 @@ impl MarketService {
         }));
         if let Some(max) = session.max_rank {
             buttons.push(Component::Button(Button {
+                id: None,
                 custom_id: Some("market_next_rank".into()),
                 disabled: session.rank >= max,
                 emoji: None,
@@ -160,6 +164,7 @@ impl MarketService {
                 sku_id: None,
             }));
             buttons.push(Component::Button(Button {
+                id: None,
                 custom_id: Some("market_prev_rank".into()),
                 disabled: session.rank == 0,
                 emoji: None,
@@ -170,6 +175,7 @@ impl MarketService {
             }));
         }
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_refresh".into()),
             disabled: false,
             emoji: None,
@@ -178,7 +184,7 @@ impl MarketService {
             url: None,
             sku_id: None,
         }));
-        vec![Component::ActionRow(ActionRow { components: buttons })]
+        vec![Component::ActionRow(ActionRow { id: None, components: buttons })]
     }
 
     pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {
@@ -214,7 +220,7 @@ impl MarketService {
 
     async fn refresh(ctx: &Arc<Context>, session: &mut MarketSession) {
         if let Ok((orders, max)) =
-            client::fetch_orders_map(&ctx.reqwest, &session.url, &session.kind).await
+            client::fetch_orders_map(&ctx.reqwest, &session.item_id, &session.kind).await
             && !orders.is_empty()
         {
             session.orders = orders;
@@ -238,15 +244,11 @@ impl MarketService {
         };
 
         match data.custom_id.as_str() {
-            "market_prev_page" => {
-                if session.page > 1 {
-                    session.page -= 1;
-                }
+            "market_prev_page" if session.page > 1 => {
+                session.page -= 1;
             }
-            "market_next_page" => {
-                if session.page < session.lpage() {
-                    session.page += 1;
-                }
+            "market_next_page" if session.page < session.lpage() => {
+                session.page += 1;
             }
             "market_next_rank" => {
                 if let Some(max) = session.max_rank
@@ -256,11 +258,9 @@ impl MarketService {
                     session.page = 1;
                 }
             }
-            "market_prev_rank" => {
-                if session.rank > 0 {
-                    session.rank -= 1;
-                    session.page = 1;
-                }
+            "market_prev_rank" if session.rank > 0 => {
+                session.rank -= 1;
+                session.page = 1;
             }
             "market_refresh" => {
                 Self::refresh(&ctx, &mut session).await;
@@ -304,10 +304,10 @@ impl MarketService {
         item: &str,
         kind: MarketKind,
     ) -> anyhow::Result<Embed> {
-        let Some(url) = Self::find_url(item).await else {
+        let Some(entry) = Self::find_item(item).await else {
             return Self::not_found_embed(guild);
         };
-        match client::fetch_orders(&ctx.reqwest, &url).await {
+        match client::fetch_orders(&ctx.reqwest, &entry.item_id).await {
             Ok(orders) => {
                 let mut by_rank: BTreeMap<u8, Vec<session::OrderInfo>> = BTreeMap::new();
                 for o in orders {
@@ -331,7 +331,7 @@ impl MarketService {
                     if kind.target_type() == "sell" {
                         vec.sort_unstable_by_key(|o| o.platinum);
                     } else {
-                        vec.sort_unstable_by(|a, b| b.platinum.cmp(&a.platinum));
+                        vec.sort_unstable_by_key(|o| std::cmp::Reverse(o.platinum));
                     }
                 }
                 let Some((&rank, orders)) = by_rank.iter().next() else {
@@ -340,7 +340,7 @@ impl MarketService {
                 Self::build_embed(
                     guild,
                     item,
-                    &url,
+                    &entry.slug,
                     &kind,
                     if by_rank.len() > 1 { Some(rank) } else { None },
                     orders.clone(),

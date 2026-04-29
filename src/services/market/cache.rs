@@ -22,7 +22,10 @@ const UPDATE_SECS: u16 = 60 * 60;
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct MarketEntry {
     pub name: String,
-    pub url: String,
+    #[serde(default)]
+    pub item_id: String,
+    #[serde(default, alias = "url")]
+    pub slug: String,
 }
 
 static ITEMS: Lazy<RwLock<Vec<MarketEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
@@ -92,14 +95,16 @@ impl MarketService {
         results
     }
 
-    pub(super) async fn find_url(name: &str) -> Option<String> {
+    pub(super) async fn find_item(name: &str) -> Option<MarketEntry> {
         let items = ITEMS.read().await;
         let idx =
             items.partition_point(|e| cmp_ignore_ascii_case(&e.name, name) == cmp::Ordering::Less);
         if idx < items.len()
             && cmp_ignore_ascii_case(&items[idx].name, name) == cmp::Ordering::Equal
+            && !items[idx].item_id.is_empty()
+            && !items[idx].slug.is_empty()
         {
-            Some(items[idx].url.clone())
+            Some(items[idx].clone())
         } else {
             None
         }

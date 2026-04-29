@@ -3,6 +3,9 @@ name: Check - Lint - Test
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: true
@@ -27,5 +30,3 @@ jobs:
 
       - name: Audit dependencies
         uses: actions-rust-lang/audit@v1
-        with:
-          ignore: RUSTSEC-2023-0071

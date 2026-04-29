@@ -2,139 +2,39 @@ services:
   ready_checker:
     image: alpine
     depends_on:
-      mongo-init:
+      mongo-setup:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
 
-  mongo-keygen:
-    image: alpine
-    command: >
-      sh -euxc '
-        mkdir -p /auth
-        if [ -s /auth/mongo-keyfile ]; then
-          echo "[keygen] mongo-keyfile exists - skip"; exit 0; fi
-
-        apk add --no-cache openssl
-        umask 177
-        openssl rand -base64 756 > /auth/mongo-keyfile
-        chown 999:999 /auth/mongo-keyfile || true
-        echo "[keygen] done (owner 999, mode 600)"
-      '
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    command: ["mongod", "-f", "/cfg/mongod.conf"]
     volumes:
-      - mongo-keyfile:/auth
-    restart: "no"
-
-  mongo1:
-    image: mongo:latest
-    container_name: mongo1
-    ports:
-      - "27017:27017"
-    command:
-      - mongod
-      - "--auth"
-      - "--replSet"
-      - "rs0"
-      - "--bind_ip_all"
-      - "--keyFile"
-      - "/auth/mongo-keyfile"
-    volumes:
-      - mongo1_db:/data/db
-      - mongo-keyfile:/auth:ro
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=homestead
-      - MONGO_INITDB_ROOT_PASSWORD=secret
+      - ./.mongodb/cfg/mongod.conf:/cfg/mongod.conf
     healthcheck:
-      test: [ "CMD", "mongosh", "--host", "mongo1:27017", "--eval", "rs.isMaster().ismaster" ]
+      test: ["CMD", "mongosh", "--host", "mongo:27017", "--eval", "rs.isMaster().ismaster"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
-    depends_on:
-      mongo-keygen:
-        condition: service_completed_successfully
 
-  mongo2:
-    image: mongo:latest
-    container_name: mongo2
-    ports:
-      - "27018:27017"
-    command:
-      - mongod
-      - "--auth"
-      - "--replSet"
-      - "rs0"
-      - "--bind_ip_all"
-      - "--keyFile"
-      - "/auth/mongo-keyfile"
+  mongo-setup:
+    image: mongo:7
+    container_name: mongo-setup
+    command: ["mongosh", "--host", "mongo:27017", "/cfg/init-mongo.js"]
     volumes:
-      - mongo2_db:/data/db
-      - mongo-keyfile:/auth:ro
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=homestead
-      - MONGO_INITDB_ROOT_PASSWORD=secret
-    healthcheck:
-      test: [ "CMD", "mongosh", "--host", "mongo2:27017", "--eval", "rs.isMaster().ismaster" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - ./.mongodb/cfg/mongod.conf:/cfg/mongod.conf
+      - ./.mongodb/cfg/init-mongo.js:/cfg/init-mongo.js
     depends_on:
-      mongo-keygen:
-        condition: service_completed_successfully
-
-  mongo3:
-    image: mongo:latest
-    container_name: mongo3
-    ports:
-      - "27019:27017"
-    command:
-      - mongod
-      - "--auth"
-      - "--replSet"
-      - "rs0"
-      - "--bind_ip_all"
-      - "--keyFile"
-      - "/auth/mongo-keyfile"
-    volumes:
-      - mongo3_db:/data/db
-      - mongo-keyfile:/auth:ro
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=homestead
-      - MONGO_INITDB_ROOT_PASSWORD=secret
-    healthcheck:
-      test: [ "CMD", "mongosh", "--host", "mongo3:27017", "--eval", "rs.isMaster().ismaster" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    depends_on:
-      mongo-keygen:
-        condition: service_completed_successfully
-
-  mongo-init:
-    image: mongo:latest
-    container_name: mongo-init
-    depends_on:
-      mongo1:
+      mongo:
         condition: service_healthy
-      mongo2:
-        condition: service_healthy
-      mongo3:
-        condition: service_healthy
-    entrypoint: [ "/bin/sh", "-c", "sleep 5 && mongosh --host mongo1:27017 -u homestead -p secret --authenticationDatabase admin /scripts/rs-init.js || true" ]
-    volumes:
-      - ./scripts/rs-init.js:/scripts/rs-init.js:ro
-      - mongo-keyfile:/auth:ro
 
   redis:
     image: redis:alpine
     container_name: redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       start_period: 5s
@@ -146,10 +46,3 @@ networks:
   default:
     name: discord-bot-network
     external: true
-
-volumes:
-  mongo1_db:
-  mongo2_db:
-  mongo3_db:
-  redis-data:
-  mongo-keyfile:

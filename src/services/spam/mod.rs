@@ -28,9 +28,12 @@ impl SpamService {
             .find_one(doc! {"guild_id": guild_id as i64, "user_id": user_id as i64})
             .await
             .ok()
-            .flatten();
+            .flatten()
+            .map(|record| record.token);
 
-        redis_set(&ctx.redis, &key, &res).await;
+        if let Some(token) = &res {
+            redis_set(&ctx.redis, &key, token).await;
+        }
 
         res.is_some()
     }

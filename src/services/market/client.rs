@@ -15,12 +15,8 @@ use crate::utils::http::HttpProvider;
 use super::{MarketKind, cache::MarketEntry};
 
 const ITEMS_URL: &str = "https://api.warframe.market/v2/items";
+const ORDERS_URL: &str = "https://api.warframe.market/v2/orders/itemId";
 pub(super) const ITEM_URL: &str = "https://warframe.market/items/";
-
-#[derive(Deserialize, Serialize)]
-struct ItemsPayload {
-    items: Vec<MarketItem>,
-}
 
 #[derive(Deserialize, Serialize)]
 struct ItemsResponse {
@@ -29,6 +25,7 @@ struct ItemsResponse {
 
 #[derive(Deserialize, Serialize)]
 struct MarketItem {
+    id: String,
     slug: String,
     i18n: ItemI18n,
 }
@@ -44,17 +41,13 @@ struct ItemLang {
 }
 
 #[derive(Deserialize, Serialize)]
-struct OrdersPayload {
-    orders: Vec<Order>,
-}
-
-#[derive(Deserialize, Serialize)]
 pub(super) struct OrdersResponse {
     data: Vec<Order>,
 }
 
 #[derive(Deserialize, Serialize)]
 pub(super) struct OrderUser {
+    #[serde(alias = "ingameName")]
     pub ingame_name: String,
     pub status: String,
 }
@@ -63,9 +56,10 @@ pub(super) struct OrderUser {
 pub(super) struct Order {
     pub platinum: u32,
     pub quantity: u32,
+    #[serde(rename = "type", alias = "order_type")]
     pub order_type: String,
     pub user: OrderUser,
-    #[serde(default)]
+    #[serde(default, rename = "rank", alias = "mod_rank")]
     pub mod_rank: Option<u8>,
 }
 
@@ -92,7 +86,7 @@ where
     let mut entries: Vec<MarketEntry> = data
         .data
         .into_iter()
-        .map(|item| MarketEntry { name: item.i18n.en.name, url: item.slug })
+        .map(|item| MarketEntry { name: item.i18n.en.name, item_id: item.id, slug: item.slug })
         .collect();
     entries.sort_unstable_by(|a, b| cmp_ignore_ascii_case(&a.name, &b.name));
     entries.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
@@ -109,21 +103,19 @@ where
     Ok(())
 }
 
-pub(super) async fn fetch_orders<H>(client: &H, url: &str) -> anyhow::Result<Vec<Order>>
+pub(super) async fn fetch_orders<H>(client: &H, item_id: &str) -> anyhow::Result<Vec<Order>>
 where
     H: HttpProvider + Sync,
 {
     let data: OrdersResponse = client
-        .get_json(&format!(
-            "https://api.warframe.market/v2/items/{url}/orders"
-        ))
+        .get_json(&format!("{ORDERS_URL}/{item_id}"))
         .await?;
     Ok(data.data)
 }
 
 pub(super) async fn fetch_orders_map<H>(
     client: &H,
-    url: &str,
+    item_id: &str,
     kind: &MarketKind,
 ) -> anyhow::Result<(
     BTreeMap<u8, Vec<super::session::OrderInfo>>,
@@ -132,7 +124,7 @@ pub(super) async fn fetch_orders_map<H>(
 where
     H: HttpProvider + Sync,
 {
-    let orders = fetch_orders(client, url).await?;
+    let orders = fetch_orders(client, item_id).await?;
     let mut by_rank: BTreeMap<u8, Vec<super::session::OrderInfo>> = BTreeMap::new();
     let mut max_rank: Option<u8> = None;
     for o in orders {
@@ -160,7 +152,7 @@ where
         if kind.target_type() == "sell" {
             vec.sort_unstable_by_key(|o| o.platinum);
         } else {
-            vec.sort_unstable_by(|a, b| b.platinum.cmp(&a.platinum));
+            vec.sort_unstable_by_key(|o| std::cmp::Reverse(o.platinum));
         }
     }
     Ok((by_rank, max_rank))

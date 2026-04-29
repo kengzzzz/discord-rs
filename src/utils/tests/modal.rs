@@ -1,27 +1,30 @@
 use super::*;
 use twilight_model::application::interaction::modal::{
-    ModalInteractionDataActionRow, ModalInteractionDataComponent,
+    ModalInteractionActionRow, ModalInteractionComponent, ModalInteractionData,
+    ModalInteractionTextInput,
 };
-use twilight_model::channel::message::component::ComponentType;
 
 fn build_data() -> ModalInteractionData {
     ModalInteractionData {
         custom_id: "test".into(),
+        resolved: None,
         components: vec![
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 1,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "a".into(),
-                    kind: ComponentType::TextInput,
-                    value: Some("1".into()),
-                }],
-            },
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+                    id: 11,
+                    value: "1".into(),
+                })],
+            }),
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 2,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "b".into(),
-                    kind: ComponentType::TextInput,
-                    value: None,
-                }],
-            },
+                    id: 12,
+                    value: String::new(),
+                })],
+            }),
         ],
     }
 }

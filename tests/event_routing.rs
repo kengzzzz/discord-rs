@@ -12,13 +12,19 @@ use discord_bot::{
     events::{interaction_create, message_create, message_delete, ready},
     services::health::HealthService,
 };
+use twilight_model::application::interaction::application_command::{
+    CommandDataOption, CommandOptionValue,
+};
+use twilight_model::http::interaction::InteractionResponseType;
 use twilight_model::id::{Id, marker::GuildMarker};
 use utils::{
     event::{
         make_message, message_delete as make_message_delete, message_delete_bulk, ready_event,
     },
     guild::{cache_guild, make_guild},
-    interaction::command_interaction,
+    interaction::{
+        autocomplete_interaction_with_options, command_interaction, focused_string_option,
+    },
     mock_context::build_context,
     mock_http::{MessageOp, last_interaction, last_message},
 };
@@ -152,8 +158,46 @@ async fn interaction_routing_dispatches_ping() {
     let response = last_interaction(&ctx.http).expect("interaction record");
     assert_eq!(
         response.response.kind,
-        twilight_model::http::interaction::InteractionResponseType::DeferredChannelMessageWithSource
+        InteractionResponseType::DeferredChannelMessageWithSource
     );
+}
+
+#[tokio::test]
+async fn interaction_routing_dispatches_warframe_market_autocomplete() {
+    let ctx = build_context().await;
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.market/v2/items",
+        "{\"data\":[{\"id\":\"test-id\",\"slug\":\"test_item\",\"i18n\":{\"en\":{\"name\":\"Test Item\"}}}]}",
+    );
+    discord_bot::services::market::MarketService::init(ctx.clone()).await;
+
+    let options = vec![CommandDataOption {
+        name: "market".into(),
+        value: CommandOptionValue::SubCommand(vec![
+            focused_string_option("item", "Te"),
+            CommandDataOption {
+                name: "kind".into(),
+                value: CommandOptionValue::String("buy".into()),
+            },
+        ]),
+    }];
+    let (interaction, _data) = autocomplete_interaction_with_options("warframe", Some(1), options);
+
+    interaction_create::handle(ctx.clone(), interaction).await;
+
+    let response = last_interaction(&ctx.http).expect("interaction record");
+    assert_eq!(
+        response.response.kind,
+        InteractionResponseType::ApplicationCommandAutocompleteResult
+    );
+    let choices = response
+        .response
+        .data
+        .expect("response data")
+        .choices
+        .expect("autocomplete choices");
+    assert_eq!(choices.len(), 1);
+    assert_eq!(choices[0].name, "Test Item");
 }
 
 #[tokio::test]

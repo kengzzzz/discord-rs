@@ -1,82 +1,10 @@
-use std::mem;
-use twilight_model::application::interaction::{Interaction, InteractionData, InteractionType};
-
-use crate::{
-    commands::{
-        admin::AdminCommand, ai::AiCommand, help::HelpCommand, intro::IntroCommand,
-        ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
-    },
-    context::Context,
-    services::{introduction::IntroductionService, verification::VerificationService},
-};
 use std::sync::Arc;
+use twilight_model::application::interaction::Interaction;
+
+use crate::{context::Context, features::registry};
 
 pub async fn handle(ctx: Arc<Context>, interaction: Interaction) {
-    let Some(user) = &interaction.author() else {
-        return;
-    };
-    if user.bot || user.system.unwrap_or_default() {
-        return;
-    }
-
-    let mut interaction = interaction;
-
-    let data = match mem::take(&mut interaction.data) {
-        Some(InteractionData::ApplicationCommand(data)) => {
-            if interaction.kind == InteractionType::ApplicationCommandAutocomplete {
-                match &*data.name {
-                    "admin" => AdminCommand::autocomplete(ctx, interaction, *data).await,
-                    "warframe" => WarframeCommand::autocomplete(ctx, interaction, *data).await,
-                    _ => {}
-                }
-                return;
-            }
-            *data
-        }
-        Some(InteractionData::MessageComponent(_data)) => {
-            // MarketService::handle_component(ctx, interaction, *data).await;
-            return;
-        }
-        Some(InteractionData::ModalSubmit(data)) => {
-            match data.custom_id.as_str() {
-                "intro_modal" => {
-                    IntroductionService::handle_modal(ctx, interaction, data).await;
-                }
-                "verify_modal" => {
-                    VerificationService::handle_modal(ctx, interaction, data).await;
-                }
-                _ => {}
-            }
-            return;
-        }
-        _ => {
-            tracing::warn!("ignoring non-command interaction");
-            return;
-        }
-    };
-
-    match &*data.name {
-        "admin" => {
-            AdminCommand::handle(ctx, interaction, data).await;
-        }
-        "verify" => {
-            VerifyCommand::handle(ctx, interaction, data).await;
-        }
-        "warframe" => {
-            WarframeCommand::handle(ctx, interaction, data).await;
-        }
-        "ai" => {
-            AiCommand::handle(ctx, interaction, data).await;
-        }
-        "ping" => {
-            PingCommand::handle(ctx, interaction, data).await;
-        }
-        "intro" => {
-            IntroCommand::handle(ctx, interaction, data).await;
-        }
-        "help" => {
-            HelpCommand::handle(ctx, interaction, data).await;
-        }
-        _ => {}
-    }
+    registry()
+        .handle_interaction(ctx, interaction)
+        .await;
 }

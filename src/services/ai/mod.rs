@@ -3,6 +3,7 @@ use twilight_model::{channel::Attachment, id::Id, id::marker::UserMarker};
 
 use self::history as hist;
 use self::models::ChatEntry;
+use self::scheduler::AiScheduler;
 mod interaction;
 use crate::context::Context;
 use crate::services::ai::rate_limit::check_rate_limit;
@@ -12,9 +13,11 @@ use std::sync::Arc;
 pub mod attachments;
 pub mod client;
 pub mod embed;
+pub mod genai;
 pub(crate) mod history;
 pub mod models;
 mod rate_limit;
+pub mod scheduler;
 
 const MAX_HISTORY: usize = 20;
 const KEEP_RECENT: usize = 2;
@@ -78,6 +81,7 @@ impl AiService {
 
         interaction::spawn_summary(
             Arc::clone(client),
+            ctx.ai_scheduler.clone(),
             ctx,
             user_id,
             user_name,
@@ -101,7 +105,13 @@ impl AiService {
         let (system, contents, attachment_urls, ref_attachment_urls) =
             interaction::build_request(args).await?;
 
-        let text = interaction::process_response(client.as_ref(), &system, contents).await?;
+        let text = interaction::process_response(
+            client.as_ref(),
+            &ctx.ai_scheduler,
+            &system,
+            contents,
+        )
+        .await?;
 
         history.push_back(ChatEntry::new(
             "user".into(),
@@ -126,5 +136,9 @@ impl AiService {
 
     pub async fn check_rate_limit(ctx: &Arc<Context>, user: Id<UserMarker>) -> Option<u64> {
         check_rate_limit(ctx, user).await
+    }
+
+    pub fn scheduler() -> AiScheduler {
+        AiScheduler::new()
     }
 }

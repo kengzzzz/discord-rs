@@ -7,15 +7,10 @@ use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 use twilight_gateway::StreamExt;
 use twilight_gateway::{Event, EventTypeFlags, Shard};
-use twilight_interactions::command::CreateCommand;
-use twilight_model::guild::Permissions;
 
 use crate::{
-    commands::{
-        admin::AdminCommand, ai::AiCommand, help::HelpCommand, intro::IntroCommand,
-        ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
-    },
     context::Context,
+    features::registry,
     services::{health::HealthService, latency::LatencyService},
 };
 
@@ -105,25 +100,6 @@ pub struct Bot {
 
 impl Bot {
     pub async fn new(ctx: Arc<Context>, shard: Shard) -> anyhow::Result<Self> {
-        let mut admin_commands = AdminCommand::create_command();
-        admin_commands.default_member_permissions = Some(Permissions::ADMINISTRATOR);
-        let verify_command = VerifyCommand::create_command();
-        let warframe_command = WarframeCommand::create_command();
-        let ai_command = AiCommand::create_command();
-        let ping_command = PingCommand::create_command();
-        let help_command = HelpCommand::create_command();
-        let intro_command = IntroCommand::create_command();
-
-        let commands = [
-            admin_commands.into(),
-            verify_command.into(),
-            warframe_command.into(),
-            ai_command.into(),
-            ping_command.into(),
-            intro_command.into(),
-            help_command.into(),
-        ];
-
         let application = ctx
             .http
             .current_user_application()
@@ -132,7 +108,7 @@ impl Bot {
             .await?;
         let interaction_client = ctx.http.interaction(application.id);
         interaction_client
-            .set_global_commands(&commands)
+            .set_global_commands(&registry().collect_commands())
             .await?;
 
         let high_sem = Arc::new(Semaphore::new(HIGH_PERMITS));

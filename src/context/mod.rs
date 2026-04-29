@@ -6,6 +6,8 @@ pub use context::Context;
 #[cfg(not(any(test, feature = "test-utils")))]
 mod builder;
 #[cfg(not(any(test, feature = "test-utils")))]
+pub mod discord_http;
+#[cfg(not(any(test, feature = "test-utils")))]
 pub use builder::ContextBuilder;
 
 #[cfg(any(test, feature = "test-utils"))]

@@ -24,30 +24,15 @@ services:
       file: docker-compose.db.yml
       service: ready_checker
 
-  mongo-keygen:
+  mongo:
     extends:
       file: docker-compose.db.yml
-      service: mongo-keygen
-
-  mongo1:
+      service: mongo
+  
+  mongo-setup:
     extends:
       file: docker-compose.db.yml
-      service: mongo1
-
-  mongo2:
-    extends:
-      file: docker-compose.db.yml
-      service: mongo2
-
-  mongo3:
-    extends:
-      file: docker-compose.db.yml
-      service: mongo3
-
-  mongo-init:
-    extends:
-      file: docker-compose.db.yml
-      service: mongo-init
+      service: mongo-setup
 
   redis:
     extends:
@@ -63,8 +48,3 @@ volumes:
   bot-cargo-registry:
   bot-cargo-git:
   bot-target:
-  mongo1_db:
-  mongo2_db:
-  mongo3_db:
-  redis-data:
-  mongo-keyfile:

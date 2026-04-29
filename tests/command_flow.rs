@@ -8,8 +8,10 @@ use discord_bot::{
         verify::VerifyCommand, warframe::WarframeCommand,
     },
     dbs::mongo::models::channel::{Channel, ChannelEnum},
+    features::registry,
     utils::embed,
 };
+use twilight_model::application::command::CommandOptionType;
 use twilight_model::application::interaction::application_command::{
     CommandDataOption, CommandOptionValue,
 };
@@ -221,6 +223,98 @@ async fn warframe_build_command_embed() {
     assert_eq!(
         response.response.data.unwrap().flags,
         Some(MessageFlags::EPHEMERAL)
+    );
+}
+
+#[tokio::test]
+async fn warframe_market_command_embed() {
+    let ctx = build_context().await;
+    let guild = make_guild(Id::new(1), "guild");
+    cache_guild(&ctx.cache, guild.clone());
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.market/v2/items",
+        "{\"data\":[{\"id\":\"test-id\",\"slug\":\"test_item\",\"i18n\":{\"en\":{\"name\":\"Test Item\"}}}]}",
+    );
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.market/v2/orders/itemId/test-id",
+        "{\"data\":[{\"platinum\":42,\"quantity\":3,\"type\":\"sell\",\"user\":{\"ingameName\":\"Trader\",\"status\":\"ingame\"},\"rank\":1}]}",
+    );
+    discord_bot::services::market::MarketService::init(ctx.clone()).await;
+    let options = vec![CommandDataOption {
+        name: "market".into(),
+        value: CommandOptionValue::SubCommand(vec![
+            CommandDataOption {
+                name: "item".into(),
+                value: CommandOptionValue::String("Test Item".into()),
+            },
+            CommandDataOption {
+                name: "kind".into(),
+                value: CommandOptionValue::String("buy".into()),
+            },
+        ]),
+    }];
+    let (interaction, data) = command_interaction_with_options("warframe", Some(1), options);
+
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
+    assert_eq!(
+        record.embeds[0].title.as_deref(),
+        Some("ผู้ขาย Test Item [Rank 0]")
+    );
+    assert_eq!(
+        record.embeds[0].url.as_deref(),
+        Some("https://warframe.market/items/test_item")
+    );
+
+    let response = last_interaction(&ctx.http).expect("interaction record");
+    assert_eq!(
+        response.response.kind,
+        InteractionResponseType::DeferredChannelMessageWithSource
+    );
+    assert_eq!(
+        response.response.data.unwrap().flags,
+        Some(MessageFlags::EPHEMERAL)
+    );
+}
+
+#[test]
+fn warframe_market_command_is_registered_with_item_autocomplete() {
+    let commands = registry().collect_commands();
+    let warframe = commands
+        .iter()
+        .find(|command| command.name == "warframe")
+        .expect("warframe command is registered");
+
+    let market = warframe
+        .options
+        .iter()
+        .find(|option| option.name == "market")
+        .expect("warframe market subcommand is registered");
+
+    assert_eq!(market.kind, CommandOptionType::SubCommand);
+    let market_options = market
+        .options
+        .as_ref()
+        .expect("market subcommand options");
+
+    let item = market_options
+        .iter()
+        .find(|option| option.name == "item")
+        .expect("market item option is registered");
+    assert_eq!(item.kind, CommandOptionType::String);
+    assert_eq!(item.autocomplete, Some(true));
+
+    let kind = market_options
+        .iter()
+        .find(|option| option.name == "kind")
+        .expect("market kind option is registered");
+    assert_eq!(kind.kind, CommandOptionType::String);
+    assert!(
+        kind.choices
+            .as_ref()
+            .is_some_and(|choices| !choices.is_empty())
     );
 }
 

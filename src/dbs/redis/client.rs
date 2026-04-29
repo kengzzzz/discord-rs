@@ -77,6 +77,32 @@ where
     }
 }
 
+pub async fn redis_set_nx<T>(pool: &Pool, key: &str, value: &T) -> bool
+where
+    T: Serialize + Sync,
+{
+    async {
+        let json = serde_json::to_string(value).context("serialize value for redis_set_nx")?;
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
+        let was_set = cmd("SET")
+            .arg(key)
+            .arg(json)
+            .arg("NX")
+            .query_async::<bool>(&mut conn)
+            .await
+            .context("execute SET NX in redis")?;
+        Ok::<bool, anyhow::Error>(was_set)
+    }
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!(key, error = %e, "Redis SET NX failed");
+        false
+    })
+}
+
 pub async fn redis_delete(pool: &Pool, key: &str) {
     if let Err(e) = async {
         let mut conn = pool.get().await?;

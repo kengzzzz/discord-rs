@@ -7,6 +7,9 @@ on:
       - 'README.md'
       - 'LICENSE'
 
+permissions:
+  contents: read
+
 jobs:
   approval:
     runs-on: ubuntu-latest

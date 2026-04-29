@@ -1,6 +1,5 @@
 use chrono::Utc;
 use deadpool_redis::Pool;
-use google_ai_rs::{Content, Part};
 use mongodb::bson::{doc, to_bson};
 use twilight_model::id::{Id, marker::UserMarker};
 
@@ -10,6 +9,7 @@ use crate::{
     context::Context,
     dbs::mongo::models::ai_prompt::AiPrompt,
     dbs::redis::{redis_delete, redis_get, redis_set},
+    services::ai::genai::{Content, Part},
 };
 use std::{collections::VecDeque, sync::Arc};
 

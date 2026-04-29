@@ -3,8 +3,8 @@ use twilight_model::gateway::payload::incoming::Ready;
 use crate::{
     context::Context,
     services::{
-        build::BuildService, health::HealthService, notification::NotificationService,
-        status::StatusService,
+        build::BuildService, health::HealthService, market::MarketService,
+        notification::NotificationService, status::StatusService,
     },
 };
 use once_cell::sync::Lazy;
@@ -25,10 +25,10 @@ pub async fn handle(ctx: Arc<Context>, event: Ready) {
             BuildService::init(build_ctx).await;
         });
 
-        // let market_ctx = ctx.clone();
-        // tokio::spawn(async move {
-        //     MarketService::init(market_ctx).await;
-        // });
+        let market_ctx = ctx.clone();
+        tokio::spawn(async move {
+            MarketService::init(market_ctx).await;
+        });
 
         NotificationService::spawn(ctx);
     }

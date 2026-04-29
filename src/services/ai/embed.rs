@@ -49,6 +49,16 @@ impl AiService {
             .build();
         Ok(embed)
     }
+
+    pub fn unavailable_embed() -> anyhow::Result<Embed> {
+        let embed = EmbedBuilder::new()
+            .color(COLOR)
+            .title("AI ใช้งานไม่ได้ชั่วคราว")
+            .description("ระบบ AI กำลังมีปัญหาชั่วคราว กรุณาลองใหม่อีกครั้ง")
+            .validate()?
+            .build();
+        Ok(embed)
+    }
 }
 
 #[cfg(test)]

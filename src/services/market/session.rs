@@ -11,7 +11,8 @@ pub struct OrderInfo {
 #[derive(Clone)]
 pub struct MarketSession {
     pub item: String,
-    pub url: String,
+    pub item_id: String,
+    pub slug: String,
     pub kind: super::MarketKind,
     pub orders: BTreeMap<u8, Vec<OrderInfo>>,
     pub rank: u8,
