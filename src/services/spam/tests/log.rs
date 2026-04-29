@@ -1,6 +1,7 @@
 use super::*;
 use crate::context::ContextBuilder;
 use crate::context::mock_http::MockClient as Client;
+use mongodb::bson::doc;
 use twilight_model::{
     channel::{Attachment, message::MessageType},
     id::Id,
@@ -104,6 +105,16 @@ async fn build_context() -> Arc<Context> {
     Arc::new(ctx)
 }
 
+async fn reset_spam_state(ctx: &Arc<Context>, guild_id: u64, user_id: u64) {
+    clear_log(&ctx.redis, guild_id, user_id).await;
+    quarantine::purge_cache(&ctx.redis, guild_id, user_id).await;
+    ctx.mongo
+        .quarantines
+        .delete_many(doc! {"guild_id": guild_id as i64, "user_id": user_id as i64})
+        .await
+        .expect("failed to clear quarantine records");
+}
+
 #[tokio::test]
 async fn test_hash_message() {
     let att = make_attachment(1, "file.png", 10);
@@ -124,6 +135,7 @@ async fn test_hash_message() {
 #[tokio::test]
 async fn test_log_message_and_clear() {
     let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 1).await;
 
     for i in 1..SPAM_LIMIT as u64 {
         let msg = make_message(i, i, 1, 1, "spam", Vec::new());
@@ -163,6 +175,7 @@ async fn test_log_message_and_clear() {
 #[tokio::test]
 async fn test_log_message_is_idempotent_after_quarantine_claim() {
     let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 2).await;
 
     for i in 1..SPAM_LIMIT as u64 {
         let msg = make_message(i + 100, i + 100, 1, 2, "spam", Vec::new());

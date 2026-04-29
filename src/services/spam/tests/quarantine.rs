@@ -1,5 +1,6 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
+use mongodb::bson::doc;
 
 async fn build_context() -> Arc<Context> {
     let ctx = ContextBuilder::new()
@@ -11,9 +12,19 @@ async fn build_context() -> Arc<Context> {
     Arc::new(ctx)
 }
 
+async fn reset_quarantine_state(ctx: &Arc<Context>, guild_id: u64, user_id: u64) {
+    purge_cache(&ctx.redis, guild_id, user_id).await;
+    ctx.mongo
+        .quarantines
+        .delete_many(doc! {"guild_id": guild_id as i64, "user_id": user_id as i64})
+        .await
+        .expect("failed to clear quarantine records");
+}
+
 #[tokio::test]
 async fn test_get_token_from_redis() {
     let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 1).await;
     let key = "spam:quarantine:1:1";
     redis_set(&ctx.redis, key, &"redis_token").await;
     let record = Quarantine {
@@ -35,6 +46,7 @@ async fn test_get_token_from_redis() {
 #[tokio::test]
 async fn test_get_token_fallback_to_mongo() {
     let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 2).await;
     let record = Quarantine {
         id: None,
         guild_id: 1,
@@ -59,6 +71,7 @@ async fn test_get_token_fallback_to_mongo() {
 #[tokio::test]
 async fn test_purge_cache() {
     let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 3).await;
     let log_key = "spam:log:1:3";
     let quarantine_key = "spam:quarantine:1:3";
     redis_set(&ctx.redis, log_key, &1).await;
@@ -73,6 +86,7 @@ async fn test_purge_cache() {
 #[tokio::test]
 async fn test_verify_success_and_delete_record() {
     let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 4).await;
     let record =
         Quarantine { id: None, guild_id: 1, user_id: 4, token: "token".into(), roles: Vec::new() };
     ctx.mongo
@@ -100,6 +114,7 @@ async fn test_verify_success_and_delete_record() {
 #[tokio::test]
 async fn test_verify_fails_on_mismatched_token() {
     let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 5).await;
     let record =
         Quarantine { id: None, guild_id: 1, user_id: 5, token: "token".into(), roles: Vec::new() };
     ctx.mongo

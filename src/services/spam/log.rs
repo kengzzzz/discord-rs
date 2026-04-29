@@ -89,8 +89,7 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
             }
         });
         let token = format!("{:06}", fastrand::u32(0..1_000_000));
-        return match quarantine::claim_token(&ctx, guild_id, message.author.id.get(), &token).await
-        {
+        return match quarantine::claim_token(ctx, guild_id, message.author.id.get(), &token).await {
             Ok(token) => LogOutcome::NewlyQuarantined(token),
             Err(Some(_)) => LogOutcome::AlreadyQuarantined,
             Err(None) => LogOutcome::AlreadyQuarantined,
