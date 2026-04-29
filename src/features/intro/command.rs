@@ -4,7 +4,7 @@ use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::{
     application::interaction::{Interaction, application_command::CommandData},
-    channel::message::component::{ActionRow, Component, TextInput, TextInputStyle},
+    channel::message::component::{Component, Label, TextInput, TextInputStyle},
 };
 
 use crate::{
@@ -56,54 +56,71 @@ impl IntroCommand {
                 return Ok::<_, anyhow::Error>(());
             }
 
+            #[allow(deprecated)]
             let components = vec![
-                Component::ActionRow(ActionRow {
-                    components: vec![Component::TextInput(TextInput {
+                Component::Label(Label {
+                    id: None,
+                    label: "Name".into(),
+                    description: None,
+                    component: Box::new(Component::TextInput(TextInput {
+                        id: None,
                         custom_id: "name".into(),
-                        label: "Name".into(),
+                        label: None,
                         max_length: None,
                         min_length: Some(1),
                         placeholder: Some("ชื่อของคุณ".into()),
                         required: Some(true),
                         style: TextInputStyle::Short,
                         value: None,
-                    })],
+                    })),
                 }),
-                Component::ActionRow(ActionRow {
-                    components: vec![Component::TextInput(TextInput {
+                Component::Label(Label {
+                    id: None,
+                    label: "Age".into(),
+                    description: None,
+                    component: Box::new(Component::TextInput(TextInput {
+                        id: None,
                         custom_id: "age".into(),
-                        label: "Age".into(),
+                        label: None,
                         max_length: None,
                         min_length: None,
                         placeholder: Some("อายุของคุณ(ไม่บังคับ)".into()),
                         required: Some(false),
                         style: TextInputStyle::Short,
                         value: None,
-                    })],
+                    })),
                 }),
-                Component::ActionRow(ActionRow {
-                    components: vec![Component::TextInput(TextInput {
+                Component::Label(Label {
+                    id: None,
+                    label: "IGN".into(),
+                    description: None,
+                    component: Box::new(Component::TextInput(TextInput {
+                        id: None,
                         custom_id: "ign".into(),
-                        label: "IGN".into(),
+                        label: None,
                         max_length: None,
                         min_length: None,
                         placeholder: Some("ชื่อในเกม(ไม่บังคับ)".into()),
                         required: Some(false),
                         style: TextInputStyle::Short,
                         value: None,
-                    })],
+                    })),
                 }),
-                Component::ActionRow(ActionRow {
-                    components: vec![Component::TextInput(TextInput {
+                Component::Label(Label {
+                    id: None,
+                    label: "Clan".into(),
+                    description: None,
+                    component: Box::new(Component::TextInput(TextInput {
+                        id: None,
                         custom_id: "clan".into(),
-                        label: "Clan".into(),
+                        label: None,
                         max_length: None,
                         min_length: None,
                         placeholder: Some("ชื่อแคลน(ไม่บังคับ)".into()),
                         required: Some(false),
                         style: TextInputStyle::Short,
                         value: None,
-                    })],
+                    })),
                 }),
             ];
 

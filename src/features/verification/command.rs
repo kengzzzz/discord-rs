@@ -4,7 +4,7 @@ use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::{
     application::interaction::{Interaction, application_command::CommandData},
-    channel::message::component::{ActionRow, Component, TextInput, TextInputStyle},
+    channel::message::component::{Component, Label, TextInput, TextInputStyle},
 };
 
 use crate::{context::Context, guild_command, services::spam, services::verification};
@@ -53,17 +53,22 @@ impl VerifyCommand {
                 return Ok(());
             };
 
-            let components = vec![Component::ActionRow(ActionRow {
-                components: vec![Component::TextInput(TextInput {
+            #[allow(deprecated)]
+            let components = vec![Component::Label(Label {
+                id: None,
+                label: "Token".into(),
+                description: None,
+                component: Box::new(Component::TextInput(TextInput {
+                    id: None,
                     custom_id: "token".into(),
-                    label: "Token".into(),
+                    label: None,
                     max_length: None,
                     min_length: Some(1),
                     placeholder: None,
                     required: Some(true),
                     style: TextInputStyle::Short,
                     value: Some(token),
-                })],
+                })),
             })];
 
             let data = twilight_model::http::interaction::InteractionResponseData {

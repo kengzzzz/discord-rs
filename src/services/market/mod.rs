@@ -133,6 +133,7 @@ impl MarketService {
     pub fn components(session: &MarketSession) -> Vec<Component> {
         let mut buttons = Vec::with_capacity(5);
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_prev_page".into()),
             disabled: session.page <= 1,
             emoji: None,
@@ -142,6 +143,7 @@ impl MarketService {
             sku_id: None,
         }));
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_next_page".into()),
             disabled: session.page >= session.lpage(),
             emoji: None,
@@ -152,6 +154,7 @@ impl MarketService {
         }));
         if let Some(max) = session.max_rank {
             buttons.push(Component::Button(Button {
+                id: None,
                 custom_id: Some("market_next_rank".into()),
                 disabled: session.rank >= max,
                 emoji: None,
@@ -161,6 +164,7 @@ impl MarketService {
                 sku_id: None,
             }));
             buttons.push(Component::Button(Button {
+                id: None,
                 custom_id: Some("market_prev_rank".into()),
                 disabled: session.rank == 0,
                 emoji: None,
@@ -171,6 +175,7 @@ impl MarketService {
             }));
         }
         buttons.push(Component::Button(Button {
+            id: None,
             custom_id: Some("market_refresh".into()),
             disabled: false,
             emoji: None,
@@ -179,7 +184,7 @@ impl MarketService {
             url: None,
             sku_id: None,
         }));
-        vec![Component::ActionRow(ActionRow { components: buttons })]
+        vec![Component::ActionRow(ActionRow { id: None, components: buttons })]
     }
 
     pub async fn insert_session(message_id: Id<MessageMarker>, session: MarketSession) {

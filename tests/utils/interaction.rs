@@ -37,6 +37,7 @@ pub fn command_interaction(
         mfa_enabled: None,
         name: "tester".into(),
         premium_type: None,
+        primary_guild: None,
         public_flags: None,
         system: None,
         verified: None,
@@ -44,6 +45,8 @@ pub fn command_interaction(
 
     let member = PartialMember {
         avatar: None,
+        avatar_decoration_data: None,
+        banner: None,
         communication_disabled_until: None,
         deaf: false,
         flags: MemberFlags::empty(),

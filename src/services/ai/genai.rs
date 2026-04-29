@@ -37,14 +37,10 @@ impl GenerativeModel<'_> {
 
     pub async fn generate_content(self, contents: Vec<Content>) -> anyhow::Result<Response> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
-            self.model
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            self.model, self.client.api_key
         );
-        let mut request = self
-            .client
-            .http
-            .post(url)
-            .query(&[("key", self.client.api_key.as_str())]);
+        let mut request = self.client.http.post(url);
 
         let body = GenerateContentRequest {
             system_instruction: self

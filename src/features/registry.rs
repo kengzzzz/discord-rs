@@ -237,7 +237,7 @@ impl FeatureRegistry {
             Some(InteractionData::ModalSubmit(data)) => {
                 if let Some(slice) = self.slice_for_modal(&data.custom_id) {
                     slice
-                        .handle_modal(ctx, interaction, data)
+                        .handle_modal(ctx, interaction, *data)
                         .await;
                 }
             }
@@ -323,8 +323,7 @@ impl FeatureRegistry {
                     }
                 }
             }
-            Event::Ready(boxed) => {
-                let event = *boxed;
+            Event::Ready(event) => {
                 for slice in &self.slices {
                     if slice
                         .handle_ready(ctx.clone(), event.clone())

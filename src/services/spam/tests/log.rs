@@ -56,6 +56,7 @@ fn make_message(
             mfa_enabled: None,
             name: "tester".to_owned(),
             premium_type: None,
+            primary_guild: None,
             public_flags: None,
             system: None,
             verified: None,

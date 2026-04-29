@@ -1,8 +1,8 @@
 use super::*;
 use twilight_model::application::interaction::modal::{
-    ModalInteractionDataActionRow, ModalInteractionDataComponent,
+    ModalInteractionActionRow, ModalInteractionComponent, ModalInteractionData,
+    ModalInteractionTextInput,
 };
-use twilight_model::channel::message::component::ComponentType;
 
 fn build_data(
     name: Option<&str>,
@@ -12,35 +12,40 @@ fn build_data(
 ) -> ModalInteractionData {
     ModalInteractionData {
         custom_id: "intro".into(),
+        resolved: None,
         components: vec![
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 1,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "name".into(),
-                    kind: ComponentType::TextInput,
-                    value: name.map(|v| v.to_string()),
-                }],
-            },
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+                    id: 11,
+                    value: name.unwrap_or_default().to_string(),
+                })],
+            }),
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 2,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "age".into(),
-                    kind: ComponentType::TextInput,
-                    value: age.map(|v| v.to_string()),
-                }],
-            },
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+                    id: 12,
+                    value: age.unwrap_or_default().to_string(),
+                })],
+            }),
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 3,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "ign".into(),
-                    kind: ComponentType::TextInput,
-                    value: ign.map(|v| v.to_string()),
-                }],
-            },
-            ModalInteractionDataActionRow {
-                components: vec![ModalInteractionDataComponent {
+                    id: 13,
+                    value: ign.unwrap_or_default().to_string(),
+                })],
+            }),
+            ModalInteractionComponent::ActionRow(ModalInteractionActionRow {
+                id: 4,
+                components: vec![ModalInteractionComponent::TextInput(ModalInteractionTextInput {
                     custom_id: "clan".into(),
-                    kind: ComponentType::TextInput,
-                    value: clan.map(|v| v.to_string()),
-                }],
-            },
+                    id: 14,
+                    value: clan.unwrap_or_default().to_string(),
+                })],
+            }),
         ],
     }
 }
