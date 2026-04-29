@@ -31,3 +31,14 @@ fn test_rate_limit_embed() {
     );
     assert_eq!(embed.color, Some(COLOR));
 }
+
+#[test]
+fn test_unavailable_embed() {
+    let embed = AiService::unavailable_embed().unwrap();
+    assert_eq!(embed.title.as_deref(), Some("AI ใช้งานไม่ได้ชั่วคราว"));
+    assert_eq!(
+        embed.description.as_deref(),
+        Some("ระบบ AI กำลังมีปัญหาชั่วคราว กรุณาลองใหม่อีกครั้ง")
+    );
+    assert_eq!(embed.color, Some(COLOR));
+}

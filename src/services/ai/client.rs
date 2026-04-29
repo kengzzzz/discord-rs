@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use google_ai_rs::genai::Response;
 use google_ai_rs::{Client, Content, Part};
 use tokio::sync::OnceCell;
+use tokio::time::{Duration, sleep};
 
 #[async_trait]
 pub trait AiClient {
@@ -39,21 +40,19 @@ pub(super) static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
 pub(super) const MODELS: &[&str] = &[
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-preview-tts",
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
-    "gemini-2.0-flash-preview-image-generation",
     "gemini-2.0-flash-lite",
 ];
 
 pub(super) const SUMMARY_MODELS: &[&str] = &[
-    "gemini-2.5-pro",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-preview-tts",
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
 ];
+
+const RETRY_DELAYS_MS: &[u64] = &[250, 1000];
 
 pub async fn client() -> anyhow::Result<&'static Client> {
     CLIENT
@@ -80,6 +79,61 @@ pub(super) fn extract_text(response: Response) -> String {
         .unwrap_or_default()
 }
 
+pub(super) fn is_retryable(err: &google_ai_rs::error::Error) -> bool {
+    let msg = err.to_string().to_ascii_lowercase();
+    [
+        "resource exhausted",
+        "rate limit",
+        "too many requests",
+        "deadline exceeded",
+        "service unavailable",
+        "transport failure",
+        "connection reset",
+        "temporarily unavailable",
+        "timeout",
+        "unavailable",
+        "429",
+        "500",
+        "503",
+    ]
+    .iter()
+    .any(|marker| msg.contains(marker))
+}
+
+pub(super) async fn generate_with_retries<C>(
+    client: &C,
+    model: &str,
+    system: &str,
+    contents: Vec<Content>,
+) -> Result<Response, google_ai_rs::error::Error>
+where
+    C: AiClient + Send + Sync,
+{
+    let mut attempt = 0usize;
+
+    loop {
+        match client
+            .generate(model, system, contents.clone())
+            .await
+        {
+            Ok(resp) => return Ok(resp),
+            Err(err) if attempt < RETRY_DELAYS_MS.len() && is_retryable(&err) => {
+                let delay_ms = RETRY_DELAYS_MS[attempt];
+                tracing::warn!(
+                    model = %model,
+                    attempt = attempt + 1,
+                    delay_ms,
+                    error = %err,
+                    "transient model error; retrying",
+                );
+                sleep(Duration::from_millis(delay_ms)).await;
+                attempt += 1;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
 pub(super) async fn summarize<C>(
     client: &C,
     history: &mut VecDeque<ChatEntry>,
@@ -92,10 +146,7 @@ where
     contents.push(Content::from(Part::text(SYSTEM)));
 
     for name in SUMMARY_MODELS {
-        match client
-            .generate(name, SYSTEM, contents.clone())
-            .await
-        {
+        match generate_with_retries(client, name, SYSTEM, contents.clone()).await {
             Ok(resp) => return Ok(extract_text(resp)),
             Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
         }

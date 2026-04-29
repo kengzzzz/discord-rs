@@ -142,10 +142,7 @@ where
     let mut response = None;
     if response.is_none() {
         for name in MODELS {
-            match client
-                .generate(name, system, contents.clone())
-                .await
-            {
+            match client::generate_with_retries(client, name, system, contents.clone()).await {
                 Ok(r) => {
                     response = Some(r);
                     break;

@@ -114,6 +114,13 @@ impl AiCommand {
                         Ok(c) => Arc::new(c.clone()),
                         Err(e) => {
                             tracing::warn!(error=%e, "failed to init ai client");
+                            if let Ok(embed) = AiService::unavailable_embed() {
+                                ctx.http
+                                    .interaction(interaction.application_id)
+                                    .update_response(&interaction.token)
+                                    .embeds(Some(&[embed]))
+                                    .await?;
+                            }
                             return Err(e);
                         }
                     };
@@ -157,6 +164,14 @@ impl AiCommand {
         .await
         {
             tracing::error!(error=%e, "error handling AiCommand");
+            if let Ok(embed) = AiService::unavailable_embed() {
+                let _ = ctx
+                    .http
+                    .interaction(interaction.application_id)
+                    .update_response(&interaction.token)
+                    .embeds(Some(&[embed]))
+                    .await;
+            }
         }
     }
 }

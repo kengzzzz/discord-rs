@@ -141,6 +141,19 @@ pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
             Ok(c) => Arc::new(c.clone()),
             Err(e) => {
                 tracing::warn!(error=%e, "failed to init ai client");
+                if let Ok(embed) = AiService::unavailable_embed()
+                    && let Err(send_err) = ctx
+                        .http
+                        .create_message(message.channel_id)
+                        .embeds(&[embed])
+                        .await
+                {
+                    tracing::warn!(
+                        channel_id = message.channel_id.get(),
+                        error = %send_err,
+                        "failed to send AI unavailable message",
+                    );
+                }
                 return;
             }
         };
@@ -183,6 +196,19 @@ pub async fn handle_ai(ctx: &Arc<Context>, message: &Message) {
                     error = %e,
                     "failed to handle AI interaction"
                 );
+                if let Ok(embed) = AiService::unavailable_embed()
+                    && let Err(send_err) = ctx
+                        .http
+                        .create_message(message.channel_id)
+                        .embeds(&[embed])
+                        .await
+                {
+                    tracing::warn!(
+                        channel_id = message.channel_id.get(),
+                        error = %send_err,
+                        "failed to send AI unavailable message",
+                    );
+                }
             }
         }
     }
