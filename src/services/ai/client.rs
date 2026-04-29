@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use super::models::ChatEntry;
+use super::scheduler::{AdmissionConfig, AiOperation, AiScheduler};
 use crate::configs::google::GOOGLE_CONFIGS;
 use crate::services::ai::genai::{Auth, Client, Content, Part, Response};
 use crate::services::ai::history::parse_history;
@@ -37,11 +38,85 @@ const SYSTEM: &str = "You are a conversation summarizer. Given the chat history,
 
 pub(super) static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
-pub(super) const MODELS: &[&str] =
-    &["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+#[derive(Clone, Copy)]
+pub(super) struct ModelSpec {
+    pub name: &'static str,
+    pub rpm_limit: usize,
+    pub queue_timeout: Duration,
+    pub cooldown: Duration,
+}
 
-pub(super) const SUMMARY_MODELS: &[&str] =
-    &["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+pub(super) const MODELS: &[ModelSpec] = &[
+    ModelSpec {
+        name: "gemini-2.5-flash",
+        rpm_limit: 10,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(20),
+    },
+    ModelSpec {
+        name: "gemini-2.5-flash-lite",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(15),
+    },
+    ModelSpec {
+        name: "gemini-2.0-flash",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(12),
+    },
+    ModelSpec {
+        name: "gemini-2.0-flash-lite",
+        rpm_limit: 30,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(10),
+    },
+    ModelSpec {
+        name: "gemini-2.5-flash-preview",
+        rpm_limit: 10,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(20),
+    },
+    ModelSpec {
+        name: "gemini-2.5-flash-lite-preview",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(8),
+        cooldown: Duration::from_secs(15),
+    },
+];
+
+pub(super) const SUMMARY_MODELS: &[ModelSpec] = &[
+    ModelSpec {
+        name: "gemini-2.5-flash-lite",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(5),
+        cooldown: Duration::from_secs(15),
+    },
+    ModelSpec {
+        name: "gemini-2.0-flash-lite",
+        rpm_limit: 30,
+        queue_timeout: Duration::from_secs(5),
+        cooldown: Duration::from_secs(10),
+    },
+    ModelSpec {
+        name: "gemini-2.0-flash",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(5),
+        cooldown: Duration::from_secs(12),
+    },
+    ModelSpec {
+        name: "gemini-2.5-flash",
+        rpm_limit: 10,
+        queue_timeout: Duration::from_secs(5),
+        cooldown: Duration::from_secs(20),
+    },
+    ModelSpec {
+        name: "gemini-2.5-flash-lite-preview",
+        rpm_limit: 15,
+        queue_timeout: Duration::from_secs(5),
+        cooldown: Duration::from_secs(15),
+    },
+];
 
 const RETRY_DELAYS_MS: &[u64] = &[250, 1000];
 
@@ -122,6 +197,7 @@ where
 
 pub(super) async fn summarize<C>(
     client: &C,
+    scheduler: &AiScheduler,
     history: &mut VecDeque<ChatEntry>,
     user_name: &str,
 ) -> anyhow::Result<String>
@@ -131,10 +207,31 @@ where
     let mut contents = parse_history(&*history, user_name).await;
     contents.push(Content::from(Part::text(SYSTEM)));
 
-    for name in SUMMARY_MODELS {
-        match generate_with_retries(client, name, SYSTEM, contents.clone()).await {
+    for spec in SUMMARY_MODELS {
+        let guard = scheduler
+            .acquire(
+                spec.name,
+                AiOperation::Summary,
+                AdmissionConfig { rpm_limit: spec.rpm_limit, queue_timeout: spec.queue_timeout },
+            )
+            .await;
+
+        let guard = match guard {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::warn!(model = spec.name, error = %e, "summary model queue failed");
+                continue;
+            }
+        };
+
+        match generate_with_retries(client, spec.name, SYSTEM, contents.clone()).await {
             Ok(resp) => return Ok(extract_text(resp)),
-            Err(e) => tracing::warn!(model = %name, error = %e, "summary model failed"),
+            Err(e) => {
+                if is_retryable(&e) {
+                    guard.cool_down(spec.cooldown).await;
+                }
+                tracing::warn!(model = spec.name, error = %e, "summary model failed");
+            }
         }
     }
 

@@ -8,12 +8,12 @@ use anyhow::anyhow;
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use twilight_http::Client as RawClient;
 use twilight_http::request::channel::reaction::RequestReactionType;
-use twilight_http::response::marker::ListBody;
 use twilight_http::response::Response;
+use twilight_http::response::marker::ListBody;
 use twilight_model::application::command::Command;
-use twilight_model::channel::{Channel, Message};
 use twilight_model::channel::message::component::Component;
 use twilight_model::channel::message::{Embed, MessageFlags};
+use twilight_model::channel::{Channel, Message};
 use twilight_model::http::interaction::InteractionResponse;
 use twilight_model::id::Id;
 use twilight_model::id::marker::{
@@ -119,13 +119,8 @@ struct Job {
 }
 
 enum OwnedReaction {
-    Custom {
-        id: Id<twilight_model::id::marker::EmojiMarker>,
-        name: Option<String>,
-    },
-    Unicode {
-        name: String,
-    },
+    Custom { id: Id<twilight_model::id::marker::EmojiMarker>, name: Option<String> },
+    Unicode { name: String },
 }
 
 #[derive(Default)]
@@ -140,35 +135,63 @@ struct QueueDepth {
 impl QueueDepth {
     fn increment(&self, priority: DiscordPriority) {
         let depth = match priority {
-            DiscordPriority::Critical => self.critical.fetch_add(1, Ordering::Relaxed) + 1,
-            DiscordPriority::High => self.high.fetch_add(1, Ordering::Relaxed) + 1,
-            DiscordPriority::Normal => self.normal.fetch_add(1, Ordering::Relaxed) + 1,
+            DiscordPriority::Critical => {
+                self.critical
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1
+            }
+            DiscordPriority::High => {
+                self.high
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1
+            }
+            DiscordPriority::Normal => {
+                self.normal
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1
+            }
             DiscordPriority::Low => self.low.fetch_add(1, Ordering::Relaxed) + 1,
         };
-        metrics::gauge!("discord_http_queue_depth", "priority" => priority.as_str()).set(depth as f64);
+        metrics::gauge!("discord_http_queue_depth", "priority" => priority.as_str())
+            .set(depth as f64);
     }
 
     fn decrement(&self, priority: DiscordPriority) {
         let depth = match priority {
-            DiscordPriority::Critical => {
-                self.critical.fetch_sub(1, Ordering::Relaxed).saturating_sub(1)
-            }
-            DiscordPriority::High => self.high.fetch_sub(1, Ordering::Relaxed).saturating_sub(1),
-            DiscordPriority::Normal => {
-                self.normal.fetch_sub(1, Ordering::Relaxed).saturating_sub(1)
-            }
-            DiscordPriority::Low => self.low.fetch_sub(1, Ordering::Relaxed).saturating_sub(1),
+            DiscordPriority::Critical => self
+                .critical
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1),
+            DiscordPriority::High => self
+                .high
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1),
+            DiscordPriority::Normal => self
+                .normal
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1),
+            DiscordPriority::Low => self
+                .low
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1),
         };
-        metrics::gauge!("discord_http_queue_depth", "priority" => priority.as_str()).set(depth as f64);
+        metrics::gauge!("discord_http_queue_depth", "priority" => priority.as_str())
+            .set(depth as f64);
     }
 
     fn in_flight_inc(&self) {
-        let count = self.in_flight.fetch_add(1, Ordering::Relaxed) + 1;
+        let count = self
+            .in_flight
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
         metrics::gauge!("discord_http_in_flight").set(count as f64);
     }
 
     fn in_flight_dec(&self) {
-        let count = self.in_flight.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
+        let count = self
+            .in_flight
+            .fetch_sub(1, Ordering::Relaxed)
+            .saturating_sub(1);
         metrics::gauge!("discord_http_in_flight").set(count as f64);
     }
 }
@@ -206,14 +229,7 @@ impl Client {
         ));
 
         Self {
-            inner: Arc::new(ClientInner {
-                raw,
-                critical_tx,
-                high_tx,
-                normal_tx,
-                low_tx,
-                depth,
-            }),
+            inner: Arc::new(ClientInner { raw, critical_tx, high_tx, normal_tx, low_tx, depth }),
         }
     }
 
@@ -381,7 +397,11 @@ impl Client {
     }
 
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> CreateMessage {
-        CreateMessage::new(self.clone(), channel_id, DiscordOpKind::CreateMessage.default_priority())
+        CreateMessage::new(
+            self.clone(),
+            channel_id,
+            DiscordOpKind::CreateMessage.default_priority(),
+        )
     }
 
     pub fn update_message(
@@ -404,7 +424,11 @@ impl Client {
         self.execute(
             DiscordOpKind::ListChannelMessages.default_priority(),
             DiscordOpKind::ListChannelMessages,
-            move |client| async move { client.channel_messages(channel_id).await },
+            move |client| async move {
+                client
+                    .channel_messages(channel_id)
+                    .await
+            },
         )
         .await
     }
@@ -454,7 +478,11 @@ impl Client {
         self.execute(
             DiscordOpKind::GetMessage.default_priority(),
             DiscordOpKind::GetMessage,
-            move |client| async move { client.message(channel_id, message_id).await },
+            move |client| async move {
+                client
+                    .message(channel_id, message_id)
+                    .await
+            },
         )
         .await
     }
@@ -466,23 +494,21 @@ impl Client {
         reaction: &RequestReactionType<'_>,
     ) -> anyhow::Result<()> {
         let reaction = match reaction {
-            RequestReactionType::Custom { id, name } => OwnedReaction::Custom {
-                id: *id,
-                name: name.map(ToString::to_string),
-            },
-            RequestReactionType::Unicode { name } => OwnedReaction::Unicode {
-                name: (*name).to_string(),
-            },
+            RequestReactionType::Custom { id, name } => {
+                OwnedReaction::Custom { id: *id, name: name.map(ToString::to_string) }
+            }
+            RequestReactionType::Unicode { name } => {
+                OwnedReaction::Unicode { name: (*name).to_string() }
+            }
         };
         self.execute(
             DiscordOpKind::CreateReaction.default_priority(),
             DiscordOpKind::CreateReaction,
             move |client| async move {
                 let request = match &reaction {
-                    OwnedReaction::Custom { id, name } => RequestReactionType::Custom {
-                        id: *id,
-                        name: name.as_deref(),
-                    },
+                    OwnedReaction::Custom { id, name } => {
+                        RequestReactionType::Custom { id: *id, name: name.as_deref() }
+                    }
                     OwnedReaction::Unicode { name } => RequestReactionType::Unicode { name },
                 };
                 client
@@ -501,19 +527,25 @@ impl Client {
         self.execute(
             DiscordOpKind::CreatePrivateChannel.default_priority(),
             DiscordOpKind::CreatePrivateChannel,
-            move |client| async move { client.create_private_channel(user_id).await },
+            move |client| async move {
+                client
+                    .create_private_channel(user_id)
+                    .await
+            },
         )
         .await
     }
 
-    pub async fn create_typing_trigger(
-        &self,
-        channel_id: Id<ChannelMarker>,
-    ) -> anyhow::Result<()> {
+    pub async fn create_typing_trigger(&self, channel_id: Id<ChannelMarker>) -> anyhow::Result<()> {
         self.execute(
             DiscordOpKind::CreateTypingTrigger.default_priority(),
             DiscordOpKind::CreateTypingTrigger,
-            move |client| async move { client.create_typing_trigger(channel_id).await.map(|_| ()) },
+            move |client| async move {
+                client
+                    .create_typing_trigger(channel_id)
+                    .await
+                    .map(|_| ())
+            },
         )
         .await
     }
@@ -681,22 +713,26 @@ impl IntoFuture for CreateMessage {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             self.http
-                .execute(self.priority, DiscordOpKind::CreateMessage, move |client| async move {
-                    let mut req = client.create_message(self.channel_id);
-                    if let Some(content) = &self.content {
-                        req = req.content(content);
-                    }
-                    if !self.embeds.is_empty() {
-                        req = req.embeds(&self.embeds);
-                    }
-                    if !self.components.is_empty() {
-                        req = req.components(&self.components);
-                    }
-                    if let Some(flags) = self.flags {
-                        req = req.flags(flags);
-                    }
-                    req.await
-                })
+                .execute(
+                    self.priority,
+                    DiscordOpKind::CreateMessage,
+                    move |client| async move {
+                        let mut req = client.create_message(self.channel_id);
+                        if let Some(content) = &self.content {
+                            req = req.content(content);
+                        }
+                        if !self.embeds.is_empty() {
+                            req = req.embeds(&self.embeds);
+                        }
+                        if !self.components.is_empty() {
+                            req = req.components(&self.components);
+                        }
+                        if let Some(flags) = self.flags {
+                            req = req.flags(flags);
+                        }
+                        req.await
+                    },
+                )
                 .await
         })
     }
@@ -758,19 +794,23 @@ impl IntoFuture for UpdateMessage {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             self.http
-                .execute(self.priority, DiscordOpKind::UpdateMessage, move |client| async move {
-                    let mut req = client.update_message(self.channel_id, self.message_id);
-                    if let Some(content) = &self.content {
-                        req = req.content(content.as_deref());
-                    }
-                    if let Some(embeds) = &self.embeds {
-                        req = req.embeds(embeds.as_deref());
-                    }
-                    if let Some(components) = &self.components {
-                        req = req.components(components.as_deref());
-                    }
-                    req.await
-                })
+                .execute(
+                    self.priority,
+                    DiscordOpKind::UpdateMessage,
+                    move |client| async move {
+                        let mut req = client.update_message(self.channel_id, self.message_id);
+                        if let Some(content) = &self.content {
+                            req = req.content(content.as_deref());
+                        }
+                        if let Some(embeds) = &self.embeds {
+                            req = req.embeds(embeds.as_deref());
+                        }
+                        if let Some(components) = &self.components {
+                            req = req.components(components.as_deref());
+                        }
+                        req.await
+                    },
+                )
                 .await
         })
     }

@@ -7,6 +7,7 @@ use crate::context::test_utils::mock_context::Context;
 use crate::context::test_utils::mock_http::MockClient as Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
+use crate::services::ai::AiService;
 
 pub struct ContextBuilder {
     http: Option<Client>,
@@ -83,6 +84,6 @@ impl ContextBuilder {
 
         let reqwest = self.reqwest.unwrap_or_default();
 
-        Ok(Context { http, cache, redis, mongo, reqwest })
+        Ok(Context { http, cache, redis, mongo, reqwest, ai_scheduler: AiService::scheduler() })
     }
 }

@@ -2,6 +2,7 @@ use super::{
     KEEP_RECENT, MAX_HISTORY, attachments,
     client::{self, MODELS, extract_text},
     models::ChatEntry,
+    scheduler::{AdmissionConfig, AiOperation, AiScheduler},
 };
 use crate::{configs::google::GOOGLE_CONFIGS, services::ai::history::parse_history};
 use crate::{context::Context, services::ai::history};
@@ -32,6 +33,7 @@ pub(super) static RUNNING: Lazy<RwLock<HashSet<u64>>> = Lazy::new(|| RwLock::new
 
 pub(super) async fn spawn_summary<C>(
     client: Arc<C>,
+    scheduler: AiScheduler,
     ctx: &Arc<Context>,
     user_id: Id<UserMarker>,
     user_name: &str,
@@ -56,8 +58,13 @@ pub(super) async fn spawn_summary<C>(
     let mut history = history.clone();
     let client_clone = client.clone();
     tokio::spawn(async move {
-        if let Ok(summary) =
-            client::summarize(client_clone.as_ref(), &mut history, &user_name).await
+        if let Ok(summary) = client::summarize(
+            client_clone.as_ref(),
+            &scheduler,
+            &mut history,
+            &user_name,
+        )
+        .await
         {
             let mut latest = history::load_history(&ctx.redis, user_id).await;
             let remove = history
@@ -134,24 +141,39 @@ pub(super) async fn build_request(
 
 pub(super) async fn process_response<C>(
     client: &C,
+    scheduler: &AiScheduler,
     system: &str,
     contents: Vec<Content>,
 ) -> anyhow::Result<String>
 where
     C: client::AiClient + Send + Sync,
 {
-    let mut response = None;
-    if response.is_none() {
-        for name in MODELS {
-            match client::generate_with_retries(client, name, system, contents.clone()).await {
-                Ok(r) => {
-                    response = Some(r);
-                    break;
-                }
-                Err(e) => tracing::warn!(model = %name, error = %e, "model failed"),
+    for spec in MODELS {
+        let guard = match scheduler
+            .acquire(
+                spec.name,
+                AiOperation::Chat,
+                AdmissionConfig { rpm_limit: spec.rpm_limit, queue_timeout: spec.queue_timeout },
+            )
+            .await
+        {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::warn!(model = spec.name, error = %e, "model queue failed");
+                continue;
             }
-        }
+        };
+
+        match client::generate_with_retries(client, spec.name, system, contents.clone()).await {
+            Ok(r) => return Ok(extract_text(r)),
+            Err(e) => {
+                if client::is_retryable(&e) {
+                    guard.cool_down(spec.cooldown).await;
+                }
+                tracing::warn!(model = spec.name, error = %e, "model failed");
+            }
+        };
     }
-    let response = response.ok_or_else(|| anyhow::anyhow!("all models failed"))?;
-    Ok(extract_text(response))
+
+    Err(anyhow::anyhow!("all models failed"))
 }

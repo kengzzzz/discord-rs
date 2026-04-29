@@ -6,10 +6,11 @@ use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
 use twilight_http::Client as RawClient;
 
 use crate::configs::discord::DISCORD_CONFIGS;
-use crate::context::discord_http::Client;
 use crate::context::Context;
+use crate::context::discord_http::Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
+use crate::services::ai::AiService;
 
 pub struct ContextBuilder {
     http: Option<RawClient>,
@@ -97,6 +98,6 @@ impl ContextBuilder {
                 .expect("Failed to build Client"),
         };
 
-        Ok(Context { http, cache, redis, mongo, reqwest })
+        Ok(Context { http, cache, redis, mongo, reqwest, ai_scheduler: AiService::scheduler() })
     }
 }
