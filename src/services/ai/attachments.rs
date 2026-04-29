@@ -1,12 +1,12 @@
 use anyhow::Context as AnyhowContext;
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use futures::{StreamExt, stream::FuturesUnordered};
-use google_ai_rs::Part;
 use reqwest::{Body, header::CONTENT_TYPE};
 use std::str::FromStr;
 use twilight_model::channel::Attachment;
 
 use crate::configs::google::GOOGLE_CONFIGS;
+use crate::services::ai::genai::Part;
 
 use async_trait::async_trait;
 

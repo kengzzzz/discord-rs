@@ -12,6 +12,7 @@ use std::sync::Arc;
 pub mod attachments;
 pub mod client;
 pub mod embed;
+pub mod genai;
 pub(crate) mod history;
 pub mod models;
 mod rate_limit;

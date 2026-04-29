@@ -5,7 +5,6 @@ use super::{
 };
 use crate::{configs::google::GOOGLE_CONFIGS, services::ai::history::parse_history};
 use crate::{context::Context, services::ai::history};
-use google_ai_rs::{Content, Part};
 use once_cell::sync::Lazy;
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
@@ -14,6 +13,8 @@ use twilight_model::{
     channel::Attachment,
     id::{Id, marker::UserMarker},
 };
+
+use crate::services::ai::genai::{Content, Part};
 
 pub(super) struct BuildRequest<'a> {
     pub ctx: &'a Arc<Context>,
