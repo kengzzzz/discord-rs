@@ -1,3 +1,4 @@
+use twilight_model::application::command::CommandOptionType;
 use twilight_model::application::command::CommandType;
 use twilight_model::application::interaction::{
     Interaction, InteractionData, InteractionType,
@@ -106,4 +107,28 @@ pub fn command_interaction_with_options(
         data.clone(),
     )));
     (interaction, data)
+}
+
+pub fn autocomplete_interaction_with_options(
+    command_name: &str,
+    guild_id: Option<u64>,
+    options: Vec<CommandDataOption>,
+) -> (Interaction, CommandData) {
+    let (mut interaction, mut data) = command_interaction(command_name, guild_id);
+    data.options = options;
+    interaction.kind = InteractionType::ApplicationCommandAutocomplete;
+    interaction.data = Some(InteractionData::ApplicationCommand(Box::new(
+        data.clone(),
+    )));
+    (interaction, data)
+}
+
+pub fn focused_string_option(name: &str, value: &str) -> CommandDataOption {
+    CommandDataOption {
+        name: name.into(),
+        value: twilight_model::application::interaction::application_command::CommandOptionValue::Focused(
+            value.into(),
+            CommandOptionType::String,
+        ),
+    }
 }

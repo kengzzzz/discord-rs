@@ -8,8 +8,10 @@ use discord_bot::{
         verify::VerifyCommand, warframe::WarframeCommand,
     },
     dbs::mongo::models::channel::{Channel, ChannelEnum},
+    features::registry,
     utils::embed,
 };
+use twilight_model::application::command::CommandOptionType;
 use twilight_model::application::interaction::application_command::{
     CommandDataOption, CommandOptionValue,
 };
@@ -274,6 +276,45 @@ async fn warframe_market_command_embed() {
     assert_eq!(
         response.response.data.unwrap().flags,
         Some(MessageFlags::EPHEMERAL)
+    );
+}
+
+#[test]
+fn warframe_market_command_is_registered_with_item_autocomplete() {
+    let commands = registry().collect_commands();
+    let warframe = commands
+        .iter()
+        .find(|command| command.name == "warframe")
+        .expect("warframe command is registered");
+
+    let market = warframe
+        .options
+        .iter()
+        .find(|option| option.name == "market")
+        .expect("warframe market subcommand is registered");
+
+    assert_eq!(market.kind, CommandOptionType::SubCommand);
+    let market_options = market
+        .options
+        .as_ref()
+        .expect("market subcommand options");
+
+    let item = market_options
+        .iter()
+        .find(|option| option.name == "item")
+        .expect("market item option is registered");
+    assert_eq!(item.kind, CommandOptionType::String);
+    assert_eq!(item.autocomplete, Some(true));
+
+    let kind = market_options
+        .iter()
+        .find(|option| option.name == "kind")
+        .expect("market kind option is registered");
+    assert_eq!(kind.kind, CommandOptionType::String);
+    assert!(
+        kind.choices
+            .as_ref()
+            .is_some_and(|choices| !choices.is_empty())
     );
 }
 
