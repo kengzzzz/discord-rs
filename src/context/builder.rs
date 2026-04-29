@@ -3,15 +3,16 @@ use std::time::Duration;
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::{DefaultInMemoryCache, ResourceType};
-use twilight_http::Client;
+use twilight_http::Client as RawClient;
 
 use crate::configs::discord::DISCORD_CONFIGS;
+use crate::context::discord_http::Client;
 use crate::context::Context;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
 
 pub struct ContextBuilder {
-    http: Option<Client>,
+    http: Option<RawClient>,
     cache: Option<DefaultInMemoryCache>,
     redis: Option<Pool>,
     mongo: Option<MongoDB>,
@@ -30,7 +31,7 @@ impl ContextBuilder {
         Self { http: None, cache: None, redis: None, mongo: None, reqwest: None, watchers: true }
     }
 
-    pub fn http(mut self, http: Client) -> Self {
+    pub fn http(mut self, http: RawClient) -> Self {
         self.http = Some(http);
         self
     }
@@ -63,7 +64,8 @@ impl ContextBuilder {
     pub async fn build(self) -> anyhow::Result<Context> {
         let http = self
             .http
-            .unwrap_or_else(|| Client::new(DISCORD_CONFIGS.discord_token.clone()));
+            .unwrap_or_else(|| RawClient::new(DISCORD_CONFIGS.discord_token.clone()));
+        let http = Client::new(http);
 
         let cache = self.cache.unwrap_or_else(|| {
             DefaultInMemoryCache::builder()

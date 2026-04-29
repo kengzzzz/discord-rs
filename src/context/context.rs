@@ -1,9 +1,9 @@
 use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::DefaultInMemoryCache;
-use twilight_http::Client;
 
 use crate::context::ContextBuilder;
+use crate::context::discord_http::Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis;
 
