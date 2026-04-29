@@ -9,7 +9,7 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::{quarantine::Quarantine, role::RoleEnum},
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set, redis_set_nx},
     },
     services::role::RoleService,
 };
@@ -74,6 +74,10 @@ pub async fn verify(
             tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to delete quarantine record");
         }
 
+        redis_delete(&ctx.redis, &key).await;
+        let log_key = format!("spam:log:{}:{}", guild_id.get(), user_id.get());
+        redis_delete(&ctx.redis, &log_key).await;
+
         return true;
     }
 
@@ -95,9 +99,25 @@ pub async fn get_token(ctx: &Arc<Context>, guild_id: u64, user_id: u64) -> Optio
         .flatten()
         .map(|r| r.token);
 
-    redis_set(&ctx.redis, &key, &token).await;
+    if let Some(stored) = &token {
+        redis_set(&ctx.redis, &key, stored).await;
+    }
 
     token
+}
+
+pub async fn claim_token(
+    ctx: &Arc<Context>,
+    guild_id: u64,
+    user_id: u64,
+    token: &str,
+) -> Result<String, Option<String>> {
+    let key = format!("spam:quarantine:{guild_id}:{user_id}");
+    if redis_set_nx(&ctx.redis, &key, &token).await {
+        return Ok(token.to_owned());
+    }
+
+    Err(get_token(ctx, guild_id, user_id).await)
 }
 
 pub async fn quarantine_member(
@@ -146,6 +166,16 @@ pub async fn quarantine_member(
         {
             tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
         }
+        redis_set(
+            &ctx.redis,
+            &format!(
+                "spam:quarantine:{}:{}",
+                guild_id.get(),
+                user_id.get()
+            ),
+            &token,
+        )
+        .await;
     }
 }
 

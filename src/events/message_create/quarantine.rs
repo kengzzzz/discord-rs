@@ -60,38 +60,46 @@ pub async fn handle_quarantine(ctx: &Arc<Context>, message: &Message) -> bool {
                 }
             }
             return true;
-        } else if let Some(token) =
-            crate::services::spam::log::log_message(ctx, guild_id.get(), message).await
-        {
-            if let Some(guild_ref) = ctx.cache.guild(guild_id)
-                && let Ok(embeds) =
-                    spam::embed::quarantine_embed(&guild_ref, message, channel.channel_id, &token)
-            {
-                let channel_id = Id::new(channel.channel_id);
-                if let Err(e) = ctx
-                    .http
-                    .create_message(channel_id)
-                    .content(&format!("<@{}>", message.author.id))
-                    .embeds(&embeds)
-                    .await
-                {
-                    tracing::warn!(
-                        channel_id = channel_id.get(),
-                        user_id = message.author.id.get(),
-                        error = %e,
-                        "failed to send quarantine notice"
-                    );
+        } else {
+            match crate::services::spam::log::log_message(ctx, guild_id.get(), message).await {
+                spam::log::LogOutcome::None => {}
+                spam::log::LogOutcome::AlreadyQuarantined => return true,
+                spam::log::LogOutcome::NewlyQuarantined(token) => {
+                    if let Some(guild_ref) = ctx.cache.guild(guild_id)
+                        && let Ok(embeds) = spam::embed::quarantine_embed(
+                            &guild_ref,
+                            message,
+                            channel.channel_id,
+                            &token,
+                        )
+                    {
+                        let channel_id = Id::new(channel.channel_id);
+                        if let Err(e) = ctx
+                            .http
+                            .create_message(channel_id)
+                            .content(&format!("<@{}>", message.author.id))
+                            .embeds(&embeds)
+                            .await
+                        {
+                            tracing::warn!(
+                                channel_id = channel_id.get(),
+                                user_id = message.author.id.get(),
+                                error = %e,
+                                "failed to send quarantine notice"
+                            );
+                        }
+                    }
+
+                    crate::services::spam::quarantine::quarantine_member(
+                        ctx,
+                        guild_id,
+                        message.author.id,
+                        &token,
+                    )
+                    .await;
+                    return true;
                 }
             }
-
-            crate::services::spam::quarantine::quarantine_member(
-                ctx,
-                guild_id,
-                message.author.id,
-                &token,
-            )
-            .await;
-            return true;
         }
     }
 

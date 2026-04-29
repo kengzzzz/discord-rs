@@ -81,6 +81,7 @@ async fn test_verify_success_and_delete_record() {
         .await
         .unwrap();
     redis_set(&ctx.redis, "spam:quarantine:1:4", &"token").await;
+    redis_set(&ctx.redis, "spam:log:1:4", &123).await;
     let ok = verify(&ctx, Id::new(1), Id::new(4), "token").await;
     assert!(ok);
     let remaining = ctx
@@ -90,6 +91,10 @@ async fn test_verify_success_and_delete_record() {
         .await
         .unwrap();
     assert!(remaining.is_none());
+    let cached_quarantine: Option<String> = redis_get(&ctx.redis, "spam:quarantine:1:4").await;
+    assert!(cached_quarantine.is_none());
+    let cached_log: Option<i32> = redis_get(&ctx.redis, "spam:log:1:4").await;
+    assert!(cached_log.is_none());
 }
 
 #[tokio::test]

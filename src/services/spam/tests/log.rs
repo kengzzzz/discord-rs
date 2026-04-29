@@ -127,22 +127,29 @@ async fn test_log_message_and_clear() {
 
     for i in 1..SPAM_LIMIT as u64 {
         let msg = make_message(i, i, 1, 1, "spam", Vec::new());
-        assert!(
-            log_message(&ctx, 1, &msg)
-                .await
-                .is_none()
-        );
+        assert!(matches!(
+            log_message(&ctx, 1, &msg).await,
+            LogOutcome::None
+        ));
     }
     let msg = make_message(99, SPAM_LIMIT as u64, 1, 1, "spam", Vec::new());
-    assert!(
-        log_message(&ctx, 1, &msg)
-            .await
-            .is_some()
-    );
+    let token = match log_message(&ctx, 1, &msg).await {
+        LogOutcome::NewlyQuarantined(token) => token,
+        _ => panic!("expected quarantine trigger"),
+    };
+
+    let quarantine_key = "spam:quarantine:1:1";
+    let stored: String = redis_get(&ctx.redis, quarantine_key)
+        .await
+        .unwrap();
+    assert_eq!(stored, token);
+
+    let key = "spam:log:1:1";
+    let cleared: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(cleared.is_none());
 
     let new_msg = make_message(100, 1, 1, 1, "different", Vec::new());
     log_message(&ctx, 1, &new_msg).await;
-    let key = "spam:log:1:1";
     let record: SpamRecord = redis_get(&ctx.redis, key)
         .await
         .unwrap();
@@ -151,4 +158,56 @@ async fn test_log_message_and_clear() {
     clear_log(&ctx.redis, 1, 1).await;
     let none: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
     assert!(none.is_none());
+}
+
+#[tokio::test]
+async fn test_log_message_is_idempotent_after_quarantine_claim() {
+    let ctx = build_context().await;
+
+    for i in 1..SPAM_LIMIT as u64 {
+        let msg = make_message(i + 100, i + 100, 1, 2, "spam", Vec::new());
+        assert!(matches!(
+            log_message(&ctx, 1, &msg).await,
+            LogOutcome::None
+        ));
+    }
+
+    let msg = make_message(
+        199,
+        SPAM_LIMIT as u64 + 100,
+        1,
+        2,
+        "spam",
+        Vec::new(),
+    );
+    let first_token = match log_message(&ctx, 1, &msg).await {
+        LogOutcome::NewlyQuarantined(token) => token,
+        _ => panic!("expected first quarantine trigger"),
+    };
+
+    for i in 1..SPAM_LIMIT as u64 {
+        let msg = make_message(i + 200, i + 200, 1, 2, "spam", Vec::new());
+        assert!(matches!(
+            log_message(&ctx, 1, &msg).await,
+            LogOutcome::None
+        ));
+    }
+
+    let msg = make_message(
+        299,
+        SPAM_LIMIT as u64 + 200,
+        1,
+        2,
+        "spam",
+        Vec::new(),
+    );
+    assert!(matches!(
+        log_message(&ctx, 1, &msg).await,
+        LogOutcome::AlreadyQuarantined
+    ));
+
+    let stored: String = redis_get(&ctx.redis, "spam:quarantine:1:2")
+        .await
+        .unwrap();
+    assert_eq!(stored, first_token);
 }

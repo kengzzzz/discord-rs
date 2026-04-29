@@ -1,13 +1,15 @@
+use anyhow::Error as AnyError;
 use chrono::Utc;
 use deadpool_redis::Pool;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use twilight_http::{Error as HttpError, api_error::ApiError, error::ErrorType};
 use twilight_model::{channel::Message, id::Id};
 
 use crate::{
     context::Context,
     dbs::redis::{redis_delete, redis_get, redis_set_ex},
-    services::broadcast::BroadcastService,
+    services::{broadcast::BroadcastService, spam::quarantine},
 };
 use std::sync::Arc;
 
@@ -21,12 +23,18 @@ struct SpamRecord {
     timestamp: i64,
 }
 
+pub enum LogOutcome {
+    None,
+    NewlyQuarantined(String),
+    AlreadyQuarantined,
+}
+
 pub async fn clear_log(pool: &Pool, guild_id: u64, user_id: u64) {
     let key = format!("spam:log:{guild_id}:{user_id}");
     redis_delete(pool, &key).await;
 }
 
-pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -> Option<String> {
+pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -> LogOutcome {
     let hash = hash_message(message).await;
     let key = format!("spam:log:{guild_id}:{}", message.author.id.get());
     let now = Utc::now().timestamp();
@@ -58,26 +66,40 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
 
     if record.histories.len() >= SPAM_LIMIT {
         let to_delete = record.histories.clone();
+        clear_log(&ctx.redis, guild_id, message.author.id.get()).await;
         BroadcastService::delete_replicas(ctx, &to_delete).await;
-        let ctx = ctx.clone();
+        let delete_ctx = ctx.clone();
         tokio::spawn(async move {
             for (c_id, m_id) in to_delete {
-                if let Err(e) = ctx
+                if let Err(e) = delete_ctx
                     .http
                     .delete_message(Id::new(c_id), Id::new(m_id))
                     .await
                 {
-                    tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
+                    if is_unknown_message_error(&e) {
+                        tracing::debug!(
+                            channel_id = c_id,
+                            message_id = m_id,
+                            "spam message was already deleted"
+                        );
+                    } else {
+                        tracing::warn!(channel_id = c_id, message_id = m_id, error = %e, "failed to delete spam message");
+                    }
                 }
             }
         });
         let token = format!("{:06}", fastrand::u32(0..1_000_000));
-        return Some(token);
+        return match quarantine::claim_token(&ctx, guild_id, message.author.id.get(), &token).await
+        {
+            Ok(token) => LogOutcome::NewlyQuarantined(token),
+            Err(Some(_)) => LogOutcome::AlreadyQuarantined,
+            Err(None) => LogOutcome::AlreadyQuarantined,
+        };
     }
 
     redis_set_ex(&ctx.redis, &key, &record, LOG_TTL).await;
 
-    None
+    LogOutcome::None
 }
 
 async fn hash_message(message: &Message) -> String {
@@ -97,6 +119,16 @@ async fn hash_message(message: &Message) -> String {
         }
     }
     hex::encode(hasher.finalize())
+}
+
+fn is_unknown_message_error(error: &AnyError) -> bool {
+    matches!(
+        error.downcast_ref::<HttpError>().map(HttpError::kind),
+        Some(ErrorType::Response {
+            error: ApiError::General(api_error),
+            ..
+        }) if api_error.code == 10008
+    )
 }
 
 #[cfg(test)]

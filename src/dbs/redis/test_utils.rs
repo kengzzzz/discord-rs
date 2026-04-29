@@ -37,6 +37,19 @@ where
     redis_set(pool, key, value).await
 }
 
+pub async fn redis_set_nx<T>(_pool: &Pool, key: &str, value: &T) -> bool
+where
+    T: Serialize + Sync,
+{
+    let json = serde_json::to_string(value).expect("serialize value for redis_set_nx");
+    let mut store = REDIS_STORE.lock().await;
+    if store.contains_key(key) {
+        return false;
+    }
+    store.insert(key.to_string(), json);
+    true
+}
+
 pub async fn redis_delete(_pool: &Pool, key: &str) {
     let mut store = REDIS_STORE.lock().await;
     store.remove(key);
