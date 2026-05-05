@@ -36,7 +36,8 @@ axum = "0.8.9"
 tokio-util = "0.7.18"
 async-trait = "0.1.89"
 metrics = "0.24.4"
-metrics-exporter-prometheus = "0.18.2"
+metrics-exporter-prometheus = "0.18.3"
+mockall = "0.13.1"
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["real_blackbox"] }

@@ -4,6 +4,7 @@ mod utils;
 
 use axum::http::StatusCode;
 use discord_bot::{
+    configs::CACHE_PREFIX,
     dbs::mongo::models::{
         channel::{Channel, ChannelEnum},
         message::{Message, MessageEnum},
@@ -11,10 +12,13 @@ use discord_bot::{
     },
     events::{interaction_create, message_create, message_delete, ready},
     services::health::HealthService,
+    services::spam::log,
 };
+use tokio::task::yield_now;
 use twilight_model::application::interaction::application_command::{
     CommandDataOption, CommandOptionValue,
 };
+use twilight_model::channel::Attachment;
 use twilight_model::http::interaction::InteractionResponseType;
 use twilight_model::id::{Id, marker::GuildMarker};
 use utils::{
@@ -28,6 +32,25 @@ use utils::{
     mock_context::build_context,
     mock_http::{MessageOp, last_interaction, last_message},
 };
+
+fn image_attachment(id: u64, name: &str, size: u64, width: u64, height: u64) -> Attachment {
+    Attachment {
+        content_type: Some("image/png".to_owned()),
+        ephemeral: false,
+        duration_secs: None,
+        filename: name.to_owned(),
+        flags: None,
+        description: None,
+        height: Some(height),
+        id: Id::new(id),
+        proxy_url: String::new(),
+        size,
+        title: None,
+        url: String::new(),
+        waveform: None,
+        width: Some(width),
+    }
+}
 
 #[tokio::test]
 async fn message_delete_triggers_role_message_update() {
@@ -336,6 +359,128 @@ async fn message_create_quarantine_skips_other_routes() {
     let record = last_message(&ctx.http).expect("message record");
     assert_eq!(record.channel_id.get(), 99);
     assert!(matches!(record.kind, MessageOp::Create));
+}
+
+#[tokio::test]
+async fn message_create_campaign_quarantine_clears_broadcast_replicas() {
+    let ctx = build_context().await;
+    let guild_id = Id::<GuildMarker>::new(1);
+    let guild = make_guild(guild_id, "guild");
+    cache_guild(&ctx.cache, guild);
+
+    let q_channel = Channel {
+        id: None,
+        channel_type: ChannelEnum::Quarantine,
+        channel_id: 99,
+        guild_id: guild_id.get(),
+    };
+    ctx.mongo
+        .channels
+        .insert_one(q_channel)
+        .await
+        .unwrap();
+
+    let q_role = Role {
+        id: None,
+        role_type: RoleEnum::Quarantine,
+        role_id: 55,
+        guild_id: guild_id.get(),
+        self_assignable: false,
+    };
+    ctx.mongo
+        .roles
+        .insert_one(q_role)
+        .await
+        .unwrap();
+
+    for (message_id, channel_id, suffix) in
+        [(1001_u64, 10_u64, "111111"), (1002_u64, 11_u64, "222222"), (1003_u64, 12_u64, "333333")]
+    {
+        let mut seeded = make_message(
+            message_id,
+            channel_id,
+            Some(guild_id.get()),
+            200,
+            &format!("check this https://discord.com/invite/{suffix}"),
+        );
+        seeded.attachments = vec![
+            image_attachment(
+                message_id * 10 + 1,
+                "a.png",
+                10 + channel_id,
+                100 + channel_id,
+                200 + channel_id,
+            ),
+            image_attachment(
+                message_id * 10 + 2,
+                "b.png",
+                20 + channel_id,
+                300 + channel_id,
+                400 + channel_id,
+            ),
+            image_attachment(
+                message_id * 10 + 3,
+                "c.png",
+                30 + channel_id,
+                500 + channel_id,
+                600 + channel_id,
+            ),
+        ];
+
+        assert!(matches!(
+            log::log_message(&ctx, guild_id.get(), &seeded).await,
+            log::LogOutcome::None
+        ));
+    }
+
+    ctx.redis_set(
+        &format!("{CACHE_PREFIX}:broadcast:1002"),
+        &vec![(77_u64, 8800_u64)],
+    )
+    .await;
+
+    let mut trigger = make_message(
+        1004,
+        13,
+        Some(guild_id.get()),
+        200,
+        "check this https://discord.com/invite/444444",
+    );
+    trigger.attachments = vec![
+        image_attachment(2001, "d.png", 99, 150, 250),
+        image_attachment(2002, "e.png", 109, 350, 450),
+        image_attachment(2003, "f.png", 119, 550, 650),
+    ];
+
+    message_create::handle(ctx.clone(), trigger).await;
+
+    for _ in 0..5 {
+        yield_now().await;
+    }
+
+    let records = ctx
+        .http
+        .messages
+        .lock()
+        .unwrap()
+        .clone();
+    let deletes: Vec<_> = records
+        .iter()
+        .filter(|record| matches!(record.kind, MessageOp::Delete))
+        .map(|record| (record.channel_id.get(), record.message_id.get()))
+        .collect();
+
+    assert!(deletes.contains(&(10, 1001)));
+    assert!(deletes.contains(&(11, 1002)));
+    assert!(deletes.contains(&(12, 1003)));
+    assert!(deletes.contains(&(13, 1004)));
+    assert!(deletes.contains(&(77, 8800)));
+
+    let quarantine_notice = records
+        .iter()
+        .find(|record| matches!(record.kind, MessageOp::Create) && record.channel_id.get() == 99)
+        .expect("quarantine notice");
+    assert_eq!(quarantine_notice.channel_id.get(), 99);
 }
 
 #[tokio::test]

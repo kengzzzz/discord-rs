@@ -1,6 +1,14 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
 use mongodb::bson::doc;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct TestCampaignRecord {
+    histories: Vec<(u64, u64)>,
+    first_seen: i64,
+    last_seen: i64,
+}
 
 async fn build_context() -> Arc<Context> {
     let ctx = ContextBuilder::new()
@@ -132,4 +140,40 @@ async fn test_verify_fails_on_mismatched_token() {
         .await
         .unwrap();
     assert!(remaining.is_some());
+}
+
+#[tokio::test]
+async fn test_verify_clears_campaign_records() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 6).await;
+    let record =
+        Quarantine { id: None, guild_id: 1, user_id: 6, token: "token".into(), roles: Vec::new() };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+
+    let campaign_key = "spam:campaign:1:6:abc";
+    redis_set(
+        &ctx.redis,
+        campaign_key,
+        &TestCampaignRecord { histories: vec![(1, 10)], first_seen: 1, last_seen: 1 },
+    )
+    .await;
+    redis_set(
+        &ctx.redis,
+        "spam:campaign:1:6",
+        &vec![campaign_key.to_owned()],
+    )
+    .await;
+    redis_set(&ctx.redis, "spam:quarantine:1:6", &"token").await;
+
+    let ok = verify(&ctx, Id::new(1), Id::new(6), "token").await;
+    assert!(ok);
+
+    let campaign: Option<TestCampaignRecord> = redis_get(&ctx.redis, campaign_key).await;
+    let campaign_index: Option<Vec<String>> = redis_get(&ctx.redis, "spam:campaign:1:6").await;
+    assert!(campaign.is_none());
+    assert!(campaign_index.is_none());
 }

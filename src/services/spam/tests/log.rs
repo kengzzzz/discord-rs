@@ -28,6 +28,14 @@ fn make_attachment(id: u64, name: &str, size: u64) -> Attachment {
     }
 }
 
+fn make_image_attachment(id: u64, name: &str, size: u64, width: u64, height: u64) -> Attachment {
+    let mut attachment = make_attachment(id, name, size);
+    attachment.content_type = Some("image/png".to_owned());
+    attachment.width = Some(width);
+    attachment.height = Some(height);
+    attachment
+}
+
 fn make_message(
     id: u64,
     channel_id: u64,
@@ -120,16 +128,226 @@ async fn test_hash_message() {
     let att = make_attachment(1, "file.png", 10);
     let msg1 = make_message(1, 1, 1, 1, "hello", vec![att.clone()]);
     let msg2 = make_message(2, 1, 1, 1, "hello", vec![att.clone()]);
-    let hash1 = hash_message(&msg1).await;
-    let hash2 = hash_message(&msg2).await;
+    let hash1 = hash_message(&msg1);
+    let hash2 = hash_message(&msg2);
     assert_eq!(hash1, hash2);
 
     let msg3 = make_message(3, 1, 1, 1, "world", vec![att.clone()]);
-    assert_ne!(hash1, hash_message(&msg3).await);
+    assert_ne!(hash1, hash_message(&msg3));
 
     let att2 = make_attachment(2, "other.png", 5);
     let msg4 = make_message(4, 1, 1, 1, "hello", vec![att, att2]);
-    assert_ne!(hash1, hash_message(&msg4).await);
+    assert_ne!(hash1, hash_message(&msg4));
+}
+
+#[tokio::test]
+async fn test_hash_message_ignores_attachment_filenames_and_order() {
+    let first = make_image_attachment(1, "a.png", 10, 100, 200);
+    let second = make_image_attachment(2, "b.png", 20, 300, 400);
+
+    let original = make_message(
+        1,
+        1,
+        1,
+        1,
+        "",
+        vec![first.clone(), second.clone()],
+    );
+
+    let renamed_first = make_image_attachment(3, "renamed-1.png", 10, 100, 200);
+    let renamed_second = make_image_attachment(4, "renamed-2.png", 20, 300, 400);
+    let reordered = make_message(
+        2,
+        2,
+        1,
+        1,
+        "",
+        vec![renamed_second, renamed_first],
+    );
+
+    assert_eq!(hash_message(&original), hash_message(&reordered));
+}
+
+#[tokio::test]
+async fn test_log_message_quarantines_multi_attachment_spam_with_renamed_files() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 9).await;
+
+    for index in 1..SPAM_LIMIT as u64 {
+        let message = make_message(
+            500 + index,
+            index,
+            1,
+            9,
+            "",
+            vec![
+                make_image_attachment(
+                    index * 10 + 1,
+                    &format!("img-{index}-1.png"),
+                    10,
+                    100,
+                    200,
+                ),
+                make_image_attachment(
+                    index * 10 + 2,
+                    &format!("img-{index}-2.png"),
+                    20,
+                    300,
+                    400,
+                ),
+                make_image_attachment(
+                    index * 10 + 3,
+                    &format!("img-{index}-3.png"),
+                    30,
+                    500,
+                    600,
+                ),
+            ],
+        );
+
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let final_message = make_message(
+        599,
+        SPAM_LIMIT as u64,
+        1,
+        9,
+        "",
+        vec![
+            make_image_attachment(91, "final-a.png", 10, 100, 200),
+            make_image_attachment(92, "final-b.png", 20, 300, 400),
+            make_image_attachment(93, "final-c.png", 30, 500, 600),
+        ],
+    );
+
+    assert!(matches!(
+        log_message(&ctx, 1, &final_message).await,
+        LogOutcome::NewlyQuarantined(_)
+    ));
+}
+
+#[tokio::test]
+async fn test_log_message_quarantines_campaign_with_different_image_sizes() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 10).await;
+
+    for index in 1..CAMPAIGN_LIMIT as u64 {
+        let message = make_message(
+            600 + index,
+            index,
+            1,
+            10,
+            "check this out https://discord.com/invite/abc123",
+            vec![
+                make_image_attachment(
+                    index * 20 + 1,
+                    "promo-a.png",
+                    10 + index,
+                    100 + index,
+                    200 + index,
+                ),
+                make_image_attachment(
+                    index * 20 + 2,
+                    "promo-b.png",
+                    20 + index,
+                    300 + index,
+                    400 + index,
+                ),
+                make_image_attachment(
+                    index * 20 + 3,
+                    "promo-c.png",
+                    30 + index,
+                    500 + index,
+                    600 + index,
+                ),
+            ],
+        );
+
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let trigger = make_message(
+        699,
+        CAMPAIGN_LIMIT as u64,
+        1,
+        10,
+        "check this out https://discord.com/invite/zzz999",
+        vec![
+            make_image_attachment(201, "final-1.png", 44, 144, 244),
+            make_image_attachment(202, "final-2.png", 54, 344, 444),
+            make_image_attachment(203, "final-3.png", 64, 544, 644),
+        ],
+    );
+
+    assert!(matches!(
+        log_message(&ctx, 1, &trigger).await,
+        LogOutcome::NewlyQuarantined(_)
+    ));
+}
+
+#[tokio::test]
+async fn test_log_message_campaign_does_not_double_count_same_channel() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 11).await;
+
+    for message_id in 1..=CAMPAIGN_LIMIT as u64 {
+        let message = make_message(
+            700 + message_id,
+            55,
+            1,
+            11,
+            "visit https://example.com/deal/123456",
+            vec![make_image_attachment(message_id, "image.png", 20 + message_id, 100, 200)],
+        );
+
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+}
+
+#[tokio::test]
+async fn test_log_message_campaign_separates_different_domains() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 12).await;
+
+    for channel_id in 1..=2_u64 {
+        let message = make_message(
+            800 + channel_id,
+            channel_id,
+            1,
+            12,
+            "check https://discord.com/invite/abc123",
+            vec![make_image_attachment(channel_id, "first.png", 20, 100, 200)],
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    for channel_id in 3..=4_u64 {
+        let message = make_message(
+            800 + channel_id,
+            channel_id,
+            1,
+            12,
+            "check https://bad.example/malware/123456",
+            vec![make_image_attachment(channel_id, "second.png", 20, 100, 200)],
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
 }
 
 #[tokio::test]

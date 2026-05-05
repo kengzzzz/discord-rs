@@ -11,7 +11,7 @@ use crate::{
         mongo::models::{quarantine::Quarantine, role::RoleEnum},
         redis::{redis_delete, redis_get, redis_set, redis_set_nx},
     },
-    services::role::RoleService,
+    services::{role::RoleService, spam::log},
 };
 use std::sync::Arc;
 
@@ -75,8 +75,7 @@ pub async fn verify(
         }
 
         redis_delete(&ctx.redis, &key).await;
-        let log_key = format!("spam:log:{}:{}", guild_id.get(), user_id.get());
-        redis_delete(&ctx.redis, &log_key).await;
+        log::clear_log(&ctx.redis, guild_id.get(), user_id.get()).await;
 
         return true;
     }
@@ -180,9 +179,8 @@ pub async fn quarantine_member(
 }
 
 pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
-    let log_key = format!("spam:log:{guild_id}:{user_id}");
     let quarantine_key = format!("spam:quarantine:{guild_id}:{user_id}");
-    redis_delete(pool, &log_key).await;
+    log::clear_log(pool, guild_id, user_id).await;
     redis_delete(pool, &quarantine_key).await;
 }
 
