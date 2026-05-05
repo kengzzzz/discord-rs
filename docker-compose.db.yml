@@ -23,10 +23,10 @@ services:
   mongo-setup:
     image: mongo:7
     container_name: mongo-setup
-    command: ["mongosh", "--host", "mongo:27017", "/cfg/init-mongo.js"]
+    command: ["bash", "/cfg/init-mongo.sh"]
     volumes:
       - ./.mongodb/cfg/mongod.conf:/cfg/mongod.conf
-      - ./.mongodb/cfg/init-mongo.js:/cfg/init-mongo.js
+      - ./.mongodb/cfg/init-mongo.sh:/cfg/init-mongo.sh
     depends_on:
       mongo:
         condition: service_healthy
