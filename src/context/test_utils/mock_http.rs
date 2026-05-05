@@ -36,6 +36,7 @@ pub struct MessageRecord {
 pub enum MessageOp {
     Create,
     Update,
+    Delete,
 }
 
 #[derive(Debug, Clone)]
@@ -296,9 +297,20 @@ impl MockClient {
 
     pub async fn delete_message(
         &self,
-        _channel_id: Id<ChannelMarker>,
-        _message_id: Id<MessageMarker>,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
     ) -> anyhow::Result<()> {
+        let record = MessageRecord {
+            channel_id,
+            message_id,
+            content: None,
+            embeds: Vec::new(),
+            kind: MessageOp::Delete,
+        };
+        self.messages
+            .lock()
+            .unwrap()
+            .push(record);
         Ok(())
     }
 
