@@ -3,6 +3,7 @@ use crate::{
     dbs::mongo::models::{channel::ChannelEnum, role::RoleEnum},
     services::{
         channel::ChannelService,
+        guild_settings::GuildSettingsService,
         role::RoleService,
         spam::{self, SpamService},
     },
@@ -99,6 +100,10 @@ pub async fn handle_quarantine(ctx: &Arc<Context>, message: &Message) -> bool {
                     .await;
                     return true;
                 }
+            }
+            if GuildSettingsService::scam_detect_enabled(ctx, guild_id.get()).await {
+                ctx.scam_detect
+                    .try_enqueue(ctx.clone(), message, channel.channel_id);
             }
         }
     }

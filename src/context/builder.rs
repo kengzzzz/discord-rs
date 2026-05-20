@@ -10,7 +10,7 @@ use crate::context::Context;
 use crate::context::discord_http::Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
-use crate::services::ai::AiService;
+use crate::services::{ai::AiService, scam_detect::ScamDetectQueue};
 
 pub struct ContextBuilder {
     http: Option<RawClient>,
@@ -18,6 +18,7 @@ pub struct ContextBuilder {
     redis: Option<Pool>,
     mongo: Option<MongoDB>,
     reqwest: Option<ReqwestClient>,
+    scam_detect: Option<ScamDetectQueue>,
     watchers: bool,
 }
 
@@ -29,7 +30,15 @@ impl Default for ContextBuilder {
 
 impl ContextBuilder {
     pub fn new() -> Self {
-        Self { http: None, cache: None, redis: None, mongo: None, reqwest: None, watchers: true }
+        Self {
+            http: None,
+            cache: None,
+            redis: None,
+            mongo: None,
+            reqwest: None,
+            scam_detect: None,
+            watchers: true,
+        }
     }
 
     pub fn http(mut self, http: RawClient) -> Self {
@@ -54,6 +63,11 @@ impl ContextBuilder {
 
     pub fn reqwest(mut self, reqwest: ReqwestClient) -> Self {
         self.reqwest = Some(reqwest);
+        self
+    }
+
+    pub fn scam_detect(mut self, scam_detect: ScamDetectQueue) -> Self {
+        self.scam_detect = Some(scam_detect);
         self
     }
 
@@ -98,6 +112,18 @@ impl ContextBuilder {
                 .expect("Failed to build Client"),
         };
 
-        Ok(Context { http, cache, redis, mongo, reqwest, ai_scheduler: AiService::scheduler() })
+        let scam_detect = self
+            .scam_detect
+            .unwrap_or_else(ScamDetectQueue::from_env);
+
+        Ok(Context {
+            http,
+            cache,
+            redis,
+            mongo,
+            reqwest,
+            ai_scheduler: AiService::scheduler(),
+            scam_detect,
+        })
     }
 }

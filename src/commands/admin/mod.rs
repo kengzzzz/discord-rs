@@ -12,7 +12,9 @@ use twilight_model::{
 };
 
 use crate::{
-    commands::admin::{channel::AdminChannelCommand, role::AdminRoleCommand},
+    commands::admin::{
+        channel::AdminChannelCommand, role::AdminRoleCommand, scam_detect::AdminScamDetectCommand,
+    },
     context::Context,
     handle_ephemeral,
     utils::ascii::ascii_starts_with_icase,
@@ -21,6 +23,7 @@ use std::sync::Arc;
 
 pub mod channel;
 pub mod role;
+pub mod scam_detect;
 
 #[derive(CommandModel, CreateCommand, Debug)]
 #[command(name = "admin", desc_localizations = "admin_desc")]
@@ -29,6 +32,8 @@ pub enum AdminCommand {
     Channel(AdminChannelCommand),
     #[command(name = "role")]
     Role(AdminRoleCommand),
+    #[command(name = "scam-detect")]
+    ScamDetect(AdminScamDetectCommand),
 }
 
 fn admin_desc() -> DescLocalizations {
@@ -74,6 +79,7 @@ impl AdminCommand {
             match command {
                 AdminCommand::Channel(command) => command.run(ctx, interaction).await,
                 AdminCommand::Role(command) => command.run(ctx, interaction).await,
+                AdminCommand::ScamDetect(command) => command.run(ctx, interaction).await,
             }?;
         });
     }

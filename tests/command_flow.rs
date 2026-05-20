@@ -4,11 +4,12 @@ mod utils;
 
 use discord_bot::{
     commands::{
-        ai::AiCommand, help::HelpCommand, intro::IntroCommand, ping::PingCommand,
-        verify::VerifyCommand, warframe::WarframeCommand,
+        admin::AdminCommand, ai::AiCommand, help::HelpCommand, intro::IntroCommand,
+        ping::PingCommand, verify::VerifyCommand, warframe::WarframeCommand,
     },
     dbs::mongo::models::channel::{Channel, ChannelEnum},
     features::registry,
+    services::guild_settings::GuildSettingsService,
     utils::embed,
 };
 use twilight_model::application::command::CommandOptionType;
@@ -24,6 +25,16 @@ use utils::{
     mock_context::build_context,
     mock_http::{MessageOp, last_interaction, last_message},
 };
+
+fn admin_scam_detect_options(action: &str) -> Vec<CommandDataOption> {
+    vec![CommandDataOption {
+        name: "scam-detect".into(),
+        value: CommandOptionValue::SubCommand(vec![CommandDataOption {
+            name: "choice".into(),
+            value: CommandOptionValue::String(action.into()),
+        }]),
+    }]
+}
 
 #[tokio::test]
 async fn ping_command_sends_pong() {
@@ -318,6 +329,46 @@ fn warframe_market_command_is_registered_with_item_autocomplete() {
     );
 }
 
+#[test]
+fn admin_command_registers_scam_detect_controls() {
+    let commands = registry().collect_commands();
+    let admin = commands
+        .iter()
+        .find(|command| command.name == "admin")
+        .expect("admin command is registered");
+
+    let scam_detect = admin
+        .options
+        .iter()
+        .find(|option| option.name == "scam-detect")
+        .expect("admin scam-detect subcommand is registered");
+    assert_eq!(scam_detect.kind, CommandOptionType::SubCommand);
+
+    let options = scam_detect
+        .options
+        .as_ref()
+        .expect("scam-detect options");
+    let choice = options
+        .iter()
+        .find(|option| option.name == "choice")
+        .expect("scam-detect choice option is registered");
+    assert_eq!(choice.kind, CommandOptionType::String);
+    let choices = choice
+        .choices
+        .as_ref()
+        .expect("scam-detect choice values");
+    assert!(
+        choices
+            .iter()
+            .any(|choice| choice.name == "Enable")
+    );
+    assert!(
+        choices
+            .iter()
+            .any(|choice| choice.name == "Disable")
+    );
+}
+
 #[tokio::test]
 async fn warframe_command_dm_guild_only() {
     let ctx = build_context().await;
@@ -371,4 +422,47 @@ async fn ai_prompt_command_embed() {
         response.response.data.unwrap().flags,
         Some(MessageFlags::EPHEMERAL)
     );
+}
+
+#[tokio::test]
+async fn admin_scam_detect_enable_sets_guild_setting() {
+    let ctx = build_context().await;
+    let guild = make_guild(Id::new(1), "guild");
+    cache_guild(&ctx.cache, guild);
+    let (interaction, data) = command_interaction_with_options(
+        "admin",
+        Some(1),
+        admin_scam_detect_options("enable"),
+    );
+
+    AdminCommand::handle(ctx.clone(), interaction, data).await;
+
+    assert!(GuildSettingsService::scam_detect_enabled(&ctx, 1).await);
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
+    assert_eq!(
+        record.embeds[0].title.as_deref(),
+        Some("Scam image detection")
+    );
+}
+
+#[tokio::test]
+async fn admin_scam_detect_disable_sets_guild_setting() {
+    let ctx = build_context().await;
+    let guild = make_guild(Id::new(1), "guild");
+    cache_guild(&ctx.cache, guild);
+    GuildSettingsService::set_scam_detect_enabled(&ctx, 1, true)
+        .await
+        .unwrap();
+    let (interaction, data) = command_interaction_with_options(
+        "admin",
+        Some(1),
+        admin_scam_detect_options("disable"),
+    );
+
+    AdminCommand::handle(ctx.clone(), interaction, data).await;
+
+    assert!(!GuildSettingsService::scam_detect_enabled(&ctx, 1).await);
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
 }

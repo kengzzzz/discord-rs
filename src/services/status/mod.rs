@@ -1,3 +1,5 @@
+use std::slice::from_ref;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -5,6 +7,9 @@ use once_cell::sync::Lazy;
 use tokio::sync::watch;
 
 use tokio::task::JoinHandle;
+use twilight_http::Error as HttpError;
+use twilight_http::api_error::ApiError;
+use twilight_http::error::ErrorType;
 use twilight_model::id::Id;
 
 use crate::services::shutdown;
@@ -13,14 +18,24 @@ use crate::{
     dbs::mongo::models::channel::ChannelEnum,
     services::{channel::ChannelService, status_message::StatusMessageService},
 };
-use std::slice::from_ref;
-use std::sync::Arc;
+
+const RETRY_DELAYS_MS: &[u64] = &[500, 1000, 2000];
 
 pub mod embed;
 
 static UMBRA_FORMA: AtomicBool = AtomicBool::new(true);
 static UMBRA_CHANNEL: Lazy<(watch::Sender<bool>, watch::Receiver<bool>)> =
     Lazy::new(|| watch::channel(true));
+
+fn is_message_not_found(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<HttpError>().map(HttpError::kind),
+        Some(ErrorType::Response {
+            error: ApiError::General(api_error),
+            ..
+        }) if api_error.code == 10008
+    )
+}
 
 pub struct StatusService;
 
@@ -54,14 +69,34 @@ impl StatusService {
             };
             let channel_id = Id::new(channel.channel_id);
             let mut existing = None;
-            if let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await
-                && ctx
-                    .http
-                    .message(channel_id, Id::new(record.message_id))
-                    .await
-                    .is_ok()
-            {
-                existing = Some(record.message_id);
+            if let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await {
+                let mid = Id::new(record.message_id);
+                for (i, delay) in RETRY_DELAYS_MS.iter().enumerate() {
+                    match ctx.http.message(channel_id, mid).await {
+                        Ok(_) => {
+                            existing = Some(record.message_id);
+                            break;
+                        }
+                        Err(e) if is_message_not_found(&e) => break,
+                        Err(e) => {
+                            if i == RETRY_DELAYS_MS.len() - 1 {
+                                tracing::warn!(
+                                    attempt = i + 1,
+                                    error = %e,
+                                    "all retries exhausted, optimistically assuming message still exists",
+                                );
+                                existing = Some(record.message_id);
+                                break;
+                            }
+                            tracing::warn!(
+                                attempt = i + 1,
+                                error = %e,
+                                "transient error verifying status message, retrying",
+                            );
+                            tokio::time::sleep(Duration::from_millis(*delay)).await;
+                        }
+                    }
+                }
             }
 
             if let Some(msg_id) = existing {

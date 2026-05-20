@@ -108,6 +108,37 @@ pub fn set_role_embed(
     Ok(embed.build())
 }
 
+pub fn set_scam_detect_embed(
+    guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
+    enabled: bool,
+    service_configured: bool,
+    setter: &str,
+) -> anyhow::Result<Embed> {
+    let now = Utc::now().timestamp();
+    let mut footer = footer_with_icon(guild)?;
+    footer.text = guild.name().to_string();
+    let state = if enabled { "enabled" } else { "disabled" };
+    let service_state = if service_configured { "configured" } else { "not configured" };
+
+    let embed = EmbedBuilder::new()
+        .color(COLOR)
+        .title("Scam image detection")
+        .description(format!(
+            "Scam image detection is now **{state}** for this server."
+        ))
+        .field(EmbedFieldBuilder::new("Guild setting", state))
+        .field(EmbedFieldBuilder::new(
+            "Scanner service",
+            service_state,
+        ))
+        .field(EmbedFieldBuilder::new("ผู้ตั้งค่า", setter).inline())
+        .field(EmbedFieldBuilder::new("เวลา", format!("<t:{now}:R>")).inline())
+        .footer(footer)
+        .validate()?;
+
+    Ok(embed.build())
+}
+
 pub fn role_message_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
     roles: &[(impl Display, impl Display)],

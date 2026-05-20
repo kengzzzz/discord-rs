@@ -4,6 +4,7 @@ pub mod google;
 pub mod mongo;
 pub mod notifications;
 pub mod redis;
+pub mod scam_detect;
 
 pub const CACHE_PREFIX: &str = "discord-bot";
 

@@ -12,8 +12,8 @@ use crate::{
     configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
     dbs::mongo::{
         models::{
-            ai_prompt::AiPrompt, channel::Channel, message::Message, quarantine::Quarantine,
-            role::Role,
+            ai_prompt::AiPrompt, channel::Channel, guild_settings::GuildSettings, message::Message,
+            quarantine::Quarantine, role::Role,
         },
         monitor, watchers,
     },
@@ -28,6 +28,7 @@ pub struct MongoDB {
     pub quarantines: Collection<Quarantine>,
     pub messages: Collection<Message>,
     pub ai_prompts: Collection<AiPrompt>,
+    pub guild_settings: Collection<GuildSettings>,
 }
 
 impl MongoDB {
@@ -59,7 +60,8 @@ impl MongoDB {
         let client = Client::with_options(opts)?;
         let database = client.database(&MONGO_CONFIGS.database);
 
-        for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts"] {
+        for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts", "guild_settings"]
+        {
             if let Err(e) = database.create_collection(coll).await {
                 tracing::debug!(collection = coll, error = %e, "failed to create collection (might already exist)");
             }
@@ -111,6 +113,15 @@ impl MongoDB {
             {
                 tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
             }
+            if let Err(e) = database
+                .run_command(doc! {
+                    "collMod": "guild_settings",
+                    "changeStreamPreAndPostImages": { "enabled": true }
+                })
+                .await
+            {
+                tracing::debug!(collection = "guild_settings", error = %e, "failed to update collection options");
+            }
         }
 
         let channels = database.collection::<Channel>("channels");
@@ -118,6 +129,7 @@ impl MongoDB {
         let quarantines = database.collection::<Quarantine>("quarantines");
         let messages = database.collection::<Message>("messages");
         let ai_prompts = database.collection::<AiPrompt>("ai_prompts");
+        let guild_settings = database.collection::<GuildSettings>("guild_settings");
 
         let idx1 = IndexModel::builder()
             .keys(doc! { "guild_id": 1, "channel_type": 1 })
@@ -193,7 +205,20 @@ impl MongoDB {
             tracing::warn!(collection = "ai_prompts", error = %e, "failed to create index");
         }
 
-        let repo = Self { client, channels, roles, quarantines, messages, ai_prompts };
+        let idx = IndexModel::builder()
+            .keys(doc! { "guild_id": 1 })
+            .options(
+                IndexOptions::builder()
+                    .unique(true)
+                    .build(),
+            )
+            .build();
+        if let Err(e) = guild_settings.create_index(idx).await {
+            tracing::warn!(collection = "guild_settings", error = %e, "failed to create index");
+        }
+
+        let repo =
+            Self { client, channels, roles, quarantines, messages, ai_prompts, guild_settings };
 
         if watchers {
             let options = ChangeStreamOptions::builder()
@@ -232,6 +257,13 @@ impl MongoDB {
             .await?;
             watchers::spawn_ai_prompt_watcher(
                 repo.ai_prompts.clone(),
+                options.clone(),
+                redis.clone(),
+                token.clone(),
+            )
+            .await?;
+            watchers::spawn_guild_settings_watcher(
+                repo.guild_settings.clone(),
                 options,
                 redis.clone(),
                 token.clone(),
