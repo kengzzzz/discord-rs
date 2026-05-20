@@ -7,7 +7,7 @@ use crate::context::test_utils::mock_context::Context;
 use crate::context::test_utils::mock_http::MockClient as Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
-use crate::services::ai::AiService;
+use crate::services::{ai::AiService, scam_detect::ScamDetectQueue};
 
 pub struct ContextBuilder {
     http: Option<Client>,
@@ -15,6 +15,7 @@ pub struct ContextBuilder {
     redis: Option<Pool>,
     mongo: Option<MongoDB>,
     reqwest: Option<MockReqwest>,
+    scam_detect: Option<ScamDetectQueue>,
     watchers: bool,
 }
 
@@ -26,7 +27,15 @@ impl Default for ContextBuilder {
 
 impl ContextBuilder {
     pub fn new() -> Self {
-        Self { http: None, cache: None, redis: None, mongo: None, reqwest: None, watchers: true }
+        Self {
+            http: None,
+            cache: None,
+            redis: None,
+            mongo: None,
+            reqwest: None,
+            scam_detect: None,
+            watchers: true,
+        }
     }
 
     pub fn http(mut self, http: Client) -> Self {
@@ -51,6 +60,11 @@ impl ContextBuilder {
 
     pub fn reqwest(mut self, reqwest: MockReqwest) -> Self {
         self.reqwest = Some(reqwest);
+        self
+    }
+
+    pub fn scam_detect(mut self, scam_detect: ScamDetectQueue) -> Self {
+        self.scam_detect = Some(scam_detect);
         self
     }
 
@@ -83,7 +97,16 @@ impl ContextBuilder {
         };
 
         let reqwest = self.reqwest.unwrap_or_default();
+        let scam_detect = self.scam_detect.unwrap_or_default();
 
-        Ok(Context { http, cache, redis, mongo, reqwest, ai_scheduler: AiService::scheduler() })
+        Ok(Context {
+            http,
+            cache,
+            redis,
+            mongo,
+            reqwest,
+            ai_scheduler: AiService::scheduler(),
+            scam_detect,
+        })
     }
 }

@@ -9,7 +9,8 @@ use std::task::{Context, Poll};
 use tokio::sync::RwLock;
 
 use super::models::{
-    ai_prompt::AiPrompt, channel::Channel, message::Message, quarantine::Quarantine, role::Role,
+    ai_prompt::AiPrompt, channel::Channel, guild_settings::GuildSettings, message::Message,
+    quarantine::Quarantine, role::Role,
 };
 
 #[derive(Clone)]
@@ -164,6 +165,7 @@ pub struct MongoDB {
     pub quarantines: MockCollection<Quarantine>,
     pub messages: MockCollection<Message>,
     pub ai_prompts: MockCollection<AiPrompt>,
+    pub guild_settings: MockCollection<GuildSettings>,
 }
 
 impl MongoDB {

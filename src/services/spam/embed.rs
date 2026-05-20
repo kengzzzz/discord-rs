@@ -50,9 +50,12 @@ pub fn quarantine_embed(
         .validate()?
         .build();
 
+    let sample_title =
+        if message.content.trim().is_empty() { "Image attachment" } else { &message.content };
+
     let mut builder = EmbedBuilder::new()
         .color(COLOR_INVALID)
-        .title(&message.content)
+        .title(sample_title)
         .description("ตัวอย่างข้อความต้องสงสัย")
         .author(author)
         .footer(footer);

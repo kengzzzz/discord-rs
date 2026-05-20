@@ -2,11 +2,11 @@ use deadpool_redis::Pool;
 use reqwest::Client as ReqwestClient;
 use twilight_cache_inmemory::DefaultInMemoryCache;
 
-use crate::context::ContextBuilder;
 use crate::context::discord_http::Client;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis;
 use crate::services::ai::scheduler::AiScheduler;
+use crate::{context::ContextBuilder, services::scam_detect::ScamDetectQueue};
 
 pub struct Context {
     pub http: Client,
@@ -15,6 +15,7 @@ pub struct Context {
     pub mongo: MongoDB,
     pub reqwest: ReqwestClient,
     pub ai_scheduler: AiScheduler,
+    pub scam_detect: ScamDetectQueue,
 }
 
 impl Context {

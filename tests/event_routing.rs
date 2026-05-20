@@ -2,9 +2,11 @@
 
 mod utils;
 
+use async_trait::async_trait;
 use axum::http::StatusCode;
 use discord_bot::{
     configs::CACHE_PREFIX,
+    configs::scam_detect::ScamDetectConfig,
     dbs::mongo::models::{
         channel::{Channel, ChannelEnum},
         message::{Message, MessageEnum},
@@ -12,8 +14,13 @@ use discord_bot::{
     },
     events::{interaction_create, message_create, message_delete, ready},
     services::health::HealthService,
-    services::spam::log,
+    services::{
+        guild_settings::GuildSettingsService,
+        scam_detect::{ImageSize, ScamDetectQueue, ScamDetector, ScanResponse},
+        spam::log,
+    },
 };
+use std::{sync::Arc, time::Duration};
 use tokio::task::yield_now;
 use twilight_model::application::interaction::application_command::{
     CommandDataOption, CommandOptionValue,
@@ -50,6 +57,63 @@ fn image_attachment(id: u64, name: &str, size: u64, width: u64, height: u64) -> 
         waveform: None,
         width: Some(width),
     }
+}
+
+struct FakeScamDetector {
+    result: anyhow::Result<ScanResponse>,
+}
+
+#[async_trait]
+impl ScamDetector for FakeScamDetector {
+    async fn scan(&self, _attachment: &Attachment) -> anyhow::Result<ScanResponse> {
+        match &self.result {
+            Ok(response) => Ok(response.clone()),
+            Err(error) => Err(anyhow::anyhow!(error.to_string())),
+        }
+    }
+}
+
+fn scam_detect_config() -> Arc<ScamDetectConfig> {
+    Arc::new(ScamDetectConfig {
+        url: Some("http://detector.test".to_owned()),
+        token: None,
+        queue_capacity: 8,
+        workers: 2,
+        max_images_per_message: 3,
+        max_upload_mb: 10,
+        download_timeout: Duration::from_secs(1),
+        scan_timeout: Duration::from_secs(1),
+        job_ttl: Duration::from_secs(30),
+    })
+}
+
+fn scan_response(action: &str, is_spam: bool) -> ScanResponse {
+    ScanResponse {
+        is_spam,
+        risk: if is_spam { 0.91 } else { 0.2 },
+        action: action.to_owned(),
+        score_raw: if is_spam { 18 } else { 2 },
+        reasons: vec!["withdrawal success".to_owned()],
+        ocr_text: String::new(),
+        ocr_text_length: 0,
+        processing_ms: 1,
+        image_size: ImageSize { width: 1280, height: 720 },
+    }
+}
+
+async fn build_context_with_detector(
+    result: anyhow::Result<ScanResponse>,
+) -> Arc<discord_bot::context::Context> {
+    let detector = Arc::new(FakeScamDetector { result });
+    let queue = ScamDetectQueue::with_detector(scam_detect_config(), detector);
+    let ctx = discord_bot::context::ContextBuilder::new()
+        .http(discord_bot::context::mock_http::MockClient::new())
+        .scam_detect(queue)
+        .watchers(false)
+        .build()
+        .await
+        .expect("failed to build Context");
+    Arc::new(ctx)
 }
 
 #[tokio::test]
@@ -481,6 +545,187 @@ async fn message_create_campaign_quarantine_clears_broadcast_replicas() {
         .find(|record| matches!(record.kind, MessageOp::Create) && record.channel_id.get() == 99)
         .expect("quarantine notice");
     assert_eq!(quarantine_notice.channel_id.get(), 99);
+}
+
+#[tokio::test]
+async fn message_create_scam_image_quarantines_in_background() {
+    let ctx = build_context_with_detector(Ok(scan_response("block", true))).await;
+    let guild_id = Id::<GuildMarker>::new(1);
+    let guild = make_guild(guild_id, "guild");
+    cache_guild(&ctx.cache, guild);
+
+    ctx.mongo
+        .channels
+        .insert_one(Channel {
+            id: None,
+            channel_type: ChannelEnum::Quarantine,
+            channel_id: 99,
+            guild_id: guild_id.get(),
+        })
+        .await
+        .unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(Role {
+            id: None,
+            role_type: RoleEnum::Quarantine,
+            role_id: 55,
+            guild_id: guild_id.get(),
+            self_assignable: false,
+        })
+        .await
+        .unwrap();
+    GuildSettingsService::set_scam_detect_enabled(&ctx, guild_id.get(), true)
+        .await
+        .unwrap();
+
+    let mut msg = make_message(5001, 10, Some(guild_id.get()), 200, "");
+    let mut attachment = image_attachment(1, "scam.png", 1024, 640, 360);
+    attachment.url = "https://cdn.example/scam.png".to_owned();
+    msg.attachments = vec![attachment];
+
+    message_create::handle(ctx.clone(), msg).await;
+
+    for _ in 0..20 {
+        yield_now().await;
+    }
+
+    let records = ctx
+        .http
+        .messages
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(records.iter().any(|record| {
+        matches!(record.kind, MessageOp::Delete)
+            && record.channel_id.get() == 10
+            && record.message_id.get() == 5001
+    }));
+    assert!(records.iter().any(|record| {
+        matches!(record.kind, MessageOp::Create) && record.channel_id.get() == 99
+    }));
+
+    let stored: Option<String> = ctx
+        .redis_get("spam:quarantine:1:200")
+        .await;
+    assert!(stored.is_some());
+}
+
+#[tokio::test]
+async fn message_create_scam_detector_unavailable_fails_open() {
+    let ctx = build_context_with_detector(Err(anyhow::anyhow!("service unavailable"))).await;
+    let guild_id = Id::<GuildMarker>::new(1);
+    let guild = make_guild(guild_id, "guild");
+    cache_guild(&ctx.cache, guild);
+
+    ctx.mongo
+        .channels
+        .insert_one(Channel {
+            id: None,
+            channel_type: ChannelEnum::Quarantine,
+            channel_id: 99,
+            guild_id: guild_id.get(),
+        })
+        .await
+        .unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(Role {
+            id: None,
+            role_type: RoleEnum::Quarantine,
+            role_id: 55,
+            guild_id: guild_id.get(),
+            self_assignable: false,
+        })
+        .await
+        .unwrap();
+    GuildSettingsService::set_scam_detect_enabled(&ctx, guild_id.get(), true)
+        .await
+        .unwrap();
+
+    let mut msg = make_message(5002, 10, Some(guild_id.get()), 201, "");
+    let mut attachment = image_attachment(2, "maybe.png", 1024, 640, 360);
+    attachment.url = "https://cdn.example/maybe.png".to_owned();
+    msg.attachments = vec![attachment];
+
+    message_create::handle(ctx.clone(), msg).await;
+
+    for _ in 0..20 {
+        yield_now().await;
+    }
+
+    let records = ctx
+        .http
+        .messages
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(
+        !records
+            .iter()
+            .any(|record| matches!(record.kind, MessageOp::Delete))
+    );
+    let stored: Option<String> = ctx
+        .redis_get("spam:quarantine:1:201")
+        .await;
+    assert!(stored.is_none());
+}
+
+#[tokio::test]
+async fn message_create_scam_detect_disabled_by_default() {
+    let ctx = build_context_with_detector(Ok(scan_response("block", true))).await;
+    let guild_id = Id::<GuildMarker>::new(1);
+    let guild = make_guild(guild_id, "guild");
+    cache_guild(&ctx.cache, guild);
+
+    ctx.mongo
+        .channels
+        .insert_one(Channel {
+            id: None,
+            channel_type: ChannelEnum::Quarantine,
+            channel_id: 99,
+            guild_id: guild_id.get(),
+        })
+        .await
+        .unwrap();
+    ctx.mongo
+        .roles
+        .insert_one(Role {
+            id: None,
+            role_type: RoleEnum::Quarantine,
+            role_id: 55,
+            guild_id: guild_id.get(),
+            self_assignable: false,
+        })
+        .await
+        .unwrap();
+
+    let mut msg = make_message(5003, 10, Some(guild_id.get()), 202, "");
+    let mut attachment = image_attachment(3, "scam.png", 1024, 640, 360);
+    attachment.url = "https://cdn.example/scam.png".to_owned();
+    msg.attachments = vec![attachment];
+
+    message_create::handle(ctx.clone(), msg).await;
+
+    for _ in 0..20 {
+        yield_now().await;
+    }
+
+    let records = ctx
+        .http
+        .messages
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(
+        !records
+            .iter()
+            .any(|record| matches!(record.kind, MessageOp::Delete))
+    );
+    let stored: Option<String> = ctx
+        .redis_get("spam:quarantine:1:202")
+        .await;
+    assert!(stored.is_none());
 }
 
 #[tokio::test]

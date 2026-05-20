@@ -7,6 +7,7 @@ use crate::context::test_utils::mock_reqwest::MockReqwest;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis;
 use crate::services::ai::scheduler::AiScheduler;
+use crate::services::scam_detect::ScamDetectQueue;
 
 pub struct Context {
     pub http: Client,
@@ -15,6 +16,7 @@ pub struct Context {
     pub mongo: MongoDB,
     pub reqwest: MockReqwest,
     pub ai_scheduler: AiScheduler,
+    pub scam_detect: ScamDetectQueue,
 }
 
 impl Context {

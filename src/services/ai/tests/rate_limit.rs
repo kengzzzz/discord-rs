@@ -4,7 +4,7 @@ use crate::context::mock_http::MockClient as Client;
 use crate::context::mock_reqwest::MockReqwest;
 use crate::dbs::mongo::MongoDB;
 use crate::dbs::redis::new_pool;
-use crate::services::ai::scheduler::AiScheduler;
+use crate::services::{ai::scheduler::AiScheduler, scam_detect::ScamDetectQueue};
 use twilight_cache_inmemory::DefaultInMemoryCache;
 
 async fn test_context() -> Arc<Context> {
@@ -18,7 +18,15 @@ async fn test_context() -> Arc<Context> {
 
     let reqwest = MockReqwest::new();
 
-    Arc::new(Context { http, cache, redis, mongo, reqwest, ai_scheduler: AiScheduler::new() })
+    Arc::new(Context {
+        http,
+        cache,
+        redis,
+        mongo,
+        reqwest,
+        ai_scheduler: AiScheduler::new(),
+        scam_detect: ScamDetectQueue::disabled(),
+    })
 }
 
 #[tokio::test]

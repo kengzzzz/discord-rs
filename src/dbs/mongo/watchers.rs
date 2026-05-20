@@ -6,6 +6,7 @@ use crate::dbs::mongo::{
     models::{
         ai_prompt::AiPrompt,
         channel::Channel,
+        guild_settings::GuildSettings,
         message::{Message, MessageEnum},
         quarantine::Quarantine,
         role::Role,
@@ -13,8 +14,8 @@ use crate::dbs::mongo::{
     watcher::spawn_watcher,
 };
 use crate::services::{
-    ai::AiService, channel::ChannelService, role::RoleService, role_message, spam,
-    status_message::StatusMessageService,
+    ai::AiService, channel::ChannelService, guild_settings::GuildSettingsService,
+    role::RoleService, role_message, spam, status_message::StatusMessageService,
 };
 
 use deadpool_redis::Pool;
@@ -204,6 +205,40 @@ pub async fn spawn_ai_prompt_watcher(
                         {
                             AiService::purge_prompt_cache(&pool, doc.user_id).await;
                             AiService::clear_history(&pool, Id::new(doc.user_id)).await;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        },
+        token,
+    )
+    .await
+}
+
+pub async fn spawn_guild_settings_watcher(
+    coll: Collection<GuildSettings>,
+    options: ChangeStreamOptions,
+    pool: Pool,
+    token: CancellationToken,
+) -> anyhow::Result<()> {
+    spawn_watcher(
+        coll,
+        options,
+        pool.clone(),
+        move |evt| {
+            let pool = pool.clone();
+            async move {
+                match evt.operation_type {
+                    OperationType::Insert
+                    | OperationType::Update
+                    | OperationType::Replace
+                    | OperationType::Delete => {
+                        if let Some(doc) = evt
+                            .full_document
+                            .or(evt.full_document_before_change)
+                        {
+                            GuildSettingsService::purge_cache(&pool, doc.guild_id).await;
                         }
                     }
                     _ => {}
