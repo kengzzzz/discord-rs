@@ -101,6 +101,17 @@ fn scan_response(action: &str, is_spam: bool) -> ScanResponse {
     }
 }
 
+fn embed_field<'a>(
+    embed: &'a twilight_model::channel::message::Embed,
+    name: &str,
+) -> Option<&'a str> {
+    embed
+        .fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.value.as_str())
+}
+
 async fn build_context_with_detector(
     result: anyhow::Result<ScanResponse>,
 ) -> Arc<discord_bot::context::Context> {
@@ -542,9 +553,35 @@ async fn message_create_campaign_quarantine_clears_broadcast_replicas() {
 
     let quarantine_notice = records
         .iter()
-        .find(|record| matches!(record.kind, MessageOp::Create) && record.channel_id.get() == 99)
+        .find(|record| {
+            matches!(record.kind, MessageOp::Create)
+                && record.channel_id.get() == 99
+                && record
+                    .embeds
+                    .first()
+                    .and_then(|embed| embed.title.as_deref())
+                    == Some("ตรวจพบไฟล์แนบต้องสงสัย")
+        })
         .expect("quarantine notice");
     assert_eq!(quarantine_notice.channel_id.get(), 99);
+    assert_eq!(quarantine_notice.embeds.len(), 1);
+    let embed = &quarantine_notice.embeds[0];
+    assert_eq!(
+        embed.title.as_deref(),
+        Some("ตรวจพบไฟล์แนบต้องสงสัย")
+    );
+    assert!(embed.image.is_none());
+    assert_eq!(embed_field(embed, "เหตุผล"), Some("ไฟล์แนบรูปภาพ"));
+    assert!(
+        embed_field(embed, "ตัวอย่างข้อความ")
+            .expect("message preview")
+            .contains("discord.com/invite/444444")
+    );
+    assert!(
+        embed_field(embed, "ไฟล์แนบ")
+            .expect("attachment summary")
+            .contains("d.png")
+    );
 }
 
 #[tokio::test]
@@ -579,7 +616,7 @@ async fn message_create_scam_image_quarantines_in_background() {
         .await
         .unwrap();
 
-    let mut msg = make_message(5001, 10, Some(guild_id.get()), 200, "");
+    let mut msg = make_message(5001, 10, Some(guild_id.get()), 240, "");
     let mut attachment = image_attachment(1, "scam.png", 1024, 640, 360);
     attachment.url = "https://cdn.example/scam.png".to_owned();
     msg.attachments = vec![attachment];
@@ -604,9 +641,33 @@ async fn message_create_scam_image_quarantines_in_background() {
     assert!(records.iter().any(|record| {
         matches!(record.kind, MessageOp::Create) && record.channel_id.get() == 99
     }));
+    let quarantine_notice = records
+        .iter()
+        .find(|record| {
+            matches!(record.kind, MessageOp::Create)
+                && record.channel_id.get() == 99
+                && record
+                    .embeds
+                    .first()
+                    .and_then(|embed| embed.title.as_deref())
+                    == Some("ตรวจพบไฟล์แนบต้องสงสัย")
+        })
+        .expect("quarantine notice");
+    assert_eq!(quarantine_notice.embeds.len(), 1);
+    let embed = &quarantine_notice.embeds[0];
+    assert_eq!(
+        embed.title.as_deref(),
+        Some("ตรวจพบไฟล์แนบต้องสงสัย")
+    );
+    assert!(embed.image.is_none());
+    assert!(
+        embed_field(embed, "ไฟล์แนบ")
+            .expect("attachment summary")
+            .contains("scam.png")
+    );
 
     let stored: Option<String> = ctx
-        .redis_get("spam:quarantine:1:200")
+        .redis_get("spam:quarantine:1:240")
         .await;
     assert!(stored.is_some());
 }
