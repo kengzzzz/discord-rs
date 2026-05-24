@@ -20,7 +20,7 @@ pub fn quarantine_embed(
     message: &Message,
     channel_id: u64,
     token: &str,
-) -> anyhow::Result<[Embed; 2]> {
+) -> anyhow::Result<Embed> {
     let mut footer = footer_with_icon(guild)?;
     footer.text = guild.name().to_string();
 
@@ -35,40 +35,47 @@ pub fn quarantine_embed(
     }
     let author = builder.build();
 
-    let alert = EmbedBuilder::new()
-        .color(COLOR_INVALID)
-        .title("🚨 ตรวจพบกิจกรรมต้องสงสัย")
-        .description(format!(
-            "เพื่อปลดล็อค กรุณาใช้คำสั่ง /verify ใน <#{channel_id}>"
-        ))
-        .field(EmbedFieldBuilder::new("🔑 token สำหรับ verify", format!("```{token}```")).inline())
-        .field(EmbedFieldBuilder::new("💬 วิธีการยืนยัน", "กรอก token ในหน้าต่าง /verify").inline())
-        .footer(footer.clone())
-        .timestamp(Timestamp::from_micros(
-            Utc::now().timestamp_micros(),
-        )?)
-        .validate()?
-        .build();
-
-    let sample_title =
-        if message.content.trim().is_empty() { "Image attachment" } else { &message.content };
+    let attachment = message.attachments.first();
+    let title = if attachment.is_some() {
+        "ตรวจพบไฟล์แนบต้องสงสัย"
+    } else {
+        "ตรวจพบข้อความต้องสงสัย"
+    };
+    let reason = if attachment.is_some() {
+        "ไฟล์แนบรูปภาพ"
+    } else {
+        "ข้อความตรงกับรูปแบบสแปม"
+    };
+    let preview = message_preview(message);
 
     let mut builder = EmbedBuilder::new()
         .color(COLOR_INVALID)
-        .title(sample_title)
-        .description("ตัวอย่างข้อความต้องสงสัย")
+        .title(title)
+        .description("ระบบป้องกันสแปมกักกันผู้ใช้นี้ไว้ชั่วคราวและต้องยืนยันตัวตน")
         .author(author)
-        .footer(footer);
+        .field(EmbedFieldBuilder::new("ผู้ใช้", format!("<@{}>", message.author.id)).inline())
+        .field(EmbedFieldBuilder::new("ช่องทาง", format!("<#{}>", message.channel_id)).inline())
+        .field(EmbedFieldBuilder::new("เหตุผล", reason).inline())
+        .field(
+            EmbedFieldBuilder::new(
+                "ต้องดำเนินการ",
+                format!("ใช้คำสั่ง `/verify` ใน <#{channel_id}>"),
+            )
+            .inline(),
+        )
+        .field(EmbedFieldBuilder::new("Token สำหรับยืนยัน", format!("```{token}```")).inline())
+        .field(EmbedFieldBuilder::new("ตัวอย่างข้อความ", preview))
+        .footer(footer)
+        .timestamp(Timestamp::from_micros(
+            Utc::now().timestamp_micros(),
+        )?);
 
-    if let Some(attachment) = message.attachments.first()
-        && let Ok(image_source) = ImageSource::url(&attachment.url)
-    {
-        builder = builder.image(image_source);
+    if let Some(attachment) = attachment {
+        builder = builder
+            .field(EmbedFieldBuilder::new("ไฟล์แนบ", attachment_summary(attachment)).inline());
     }
 
-    let info = builder.build();
-
-    Ok([alert, info])
+    Ok(builder.validate()?.build())
 }
 
 pub fn quarantine_reminder_embed(
@@ -81,12 +88,58 @@ pub fn quarantine_reminder_embed(
 
     let embed = EmbedBuilder::new()
         .color(COLOR_INVALID)
-        .title("⏳ ต้องทำการยืนยันตัวตน")
+        .title("ต้องทำการยืนยันตัวตน")
         .description(format!(
-            "คุณถูกกักกัน ใช้คำสั่ง `/verify` ในช่อง <#{channel_id}> แล้วกรอก token `{token}` เพื่อสนทนาอีกครั้ง"
+            "คุณถูกกักกันชั่วคราว ใช้คำสั่ง `/verify` ในช่อง <#{channel_id}> แล้วกรอก token `{token}` เพื่อกลับมาสนทนาอีกครั้ง"
         ))
         .footer(footer)
         .validate()?;
 
     Ok(embed.build())
+}
+
+fn message_preview(message: &Message) -> String {
+    let content = message.content.trim();
+    if content.is_empty() {
+        return "ไม่มีข้อความ (มีไฟล์แนบ)".to_string();
+    }
+
+    truncate_field(content)
+}
+
+fn attachment_summary(attachment: &twilight_model::channel::Attachment) -> String {
+    let size = format_bytes(attachment.size);
+    let dimensions = match (attachment.width, attachment.height) {
+        (Some(width), Some(height)) => format!("{width}x{height}px"),
+        _ => "ไม่ทราบขนาดภาพ".to_string(),
+    };
+
+    format!(
+        "`{}`\n{}\n{}",
+        attachment.filename, size, dimensions
+    )
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 {
+        format!("{:.1} MB", bytes as f64 / 1024.0 / 1024.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn truncate_field(value: &str) -> String {
+    const MAX_FIELD_CHARS: usize = 900;
+    if value.chars().count() <= MAX_FIELD_CHARS {
+        return value.to_string();
+    }
+
+    let mut truncated: String = value
+        .chars()
+        .take(MAX_FIELD_CHARS - 1)
+        .collect();
+    truncated.push('…');
+    truncated
 }

@@ -67,7 +67,7 @@ pub async fn handle_quarantine(ctx: &Arc<Context>, message: &Message) -> bool {
                 spam::log::LogOutcome::AlreadyQuarantined => return true,
                 spam::log::LogOutcome::NewlyQuarantined(token) => {
                     if let Some(guild_ref) = ctx.cache.guild(guild_id)
-                        && let Ok(embeds) = spam::embed::quarantine_embed(
+                        && let Ok(embed) = spam::embed::quarantine_embed(
                             &guild_ref,
                             message,
                             channel.channel_id,
@@ -79,7 +79,7 @@ pub async fn handle_quarantine(ctx: &Arc<Context>, message: &Message) -> bool {
                             .http
                             .create_message(channel_id)
                             .content(&format!("<@{}>", message.author.id))
-                            .embeds(&embeds)
+                            .embeds(&[embed])
                             .await
                         {
                             tracing::warn!(

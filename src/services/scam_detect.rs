@@ -362,7 +362,7 @@ async fn quarantine_detected(ctx: &Arc<Context>, job: &ScamScanJob, scan: &ScanR
         };
 
     if let Some(guild_ref) = ctx.cache.guild(guild_id)
-        && let Ok(embeds) = spam::embed::quarantine_embed(
+        && let Ok(embed) = spam::embed::quarantine_embed(
             &guild_ref,
             &job.message,
             job.quarantine_channel_id,
@@ -374,7 +374,7 @@ async fn quarantine_detected(ctx: &Arc<Context>, job: &ScamScanJob, scan: &ScanR
             .http
             .create_message(channel_id)
             .content(&format!("<@{}>", user_id))
-            .embeds(&embeds)
+            .embeds(&[embed])
             .await
         {
             tracing::warn!(

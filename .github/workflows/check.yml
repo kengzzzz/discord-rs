@@ -30,5 +30,3 @@ jobs:
 
       - name: Audit dependencies
         uses: actions-rust-lang/audit@v1
-        with:
-          ignore: RUSTSEC-2026-0118,RUSTSEC-2026-0119
