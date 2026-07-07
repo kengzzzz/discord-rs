@@ -113,6 +113,14 @@ pub async fn claim_token(
     user_id: u64,
     token: &str,
 ) -> Result<String, Option<String>> {
+    // A quarantine record may already exist in Mongo even when the Redis key is
+    // missing (eviction/restart/flush). Check Mongo first so we reuse the token
+    // that was already handed out instead of minting a new one Redis would
+    // happily NX-claim, which would desync Redis from Mongo's token.
+    if let Some(existing) = get_token(ctx, guild_id, user_id).await {
+        return Err(Some(existing));
+    }
+
     let key = format!("spam:quarantine:{guild_id}:{user_id}");
     if redis_set_nx(&ctx.redis, &key, &token).await {
         return Ok(token.to_owned());

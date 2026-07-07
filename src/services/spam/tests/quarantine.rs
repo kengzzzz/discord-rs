@@ -145,6 +145,36 @@ async fn test_verify_fails_on_mismatched_token() {
 }
 
 #[tokio::test]
+async fn test_claim_token_reuses_mongo_token_after_redis_loss() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 7).await;
+
+    let record =
+        Quarantine { id: None, guild_id: 1, user_id: 7, token: "token-a".into(), roles: Vec::new() };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set(&ctx.redis, "spam:quarantine:1:7", &"token-a").await;
+
+    // Simulate Redis losing the key (restart/eviction/flush) while Mongo still
+    // has the record with the token that was already DMed to the user.
+    redis_delete(&ctx.redis, "spam:quarantine:1:7").await;
+
+    let claimed = claim_token(&ctx, 1, 7, "token-b").await;
+    assert_eq!(claimed, Err(Some("token-a".into())));
+
+    // Redis should be repopulated with the original token, not overwritten.
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:1:7").await;
+    assert_eq!(cached, Some("token-a".into()));
+
+    // The user's original verification link (token A) must still work.
+    let ok = verify(&ctx, Id::new(1), Id::new(7), "token-a").await;
+    assert!(ok);
+}
+
+#[tokio::test]
 async fn test_verify_clears_campaign_records() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 6).await;
