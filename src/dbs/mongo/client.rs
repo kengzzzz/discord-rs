@@ -34,6 +34,7 @@ pub struct MongoDB {
 impl MongoDB {
     pub async fn init(redis: Pool, watchers: bool) -> anyhow::Result<Self> {
         let mut opts = ClientOptions::parse(&MONGO_CONFIGS.uri).await?;
+        MONGO_CONFIGS.apply_pool_size(&mut opts);
         opts.credential = Some(
             Credential::builder()
                 .username(MONGO_CONFIGS.username.clone())
