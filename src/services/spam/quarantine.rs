@@ -9,11 +9,13 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::{quarantine::Quarantine, role::RoleEnum},
-        redis::{redis_delete, redis_get, redis_set, redis_set_nx},
+        redis::{redis_delete, redis_get, redis_set_ex, redis_set_nx},
     },
     services::{role::RoleService, spam::log},
 };
 use std::sync::Arc;
+
+const CACHE_TTL: usize = 3600;
 
 pub async fn verify(
     ctx: &Arc<Context>,
@@ -99,7 +101,7 @@ pub async fn get_token(ctx: &Arc<Context>, guild_id: u64, user_id: u64) -> Optio
         .map(|r| r.token);
 
     if let Some(stored) = &token {
-        redis_set(&ctx.redis, &key, stored).await;
+        redis_set_ex(&ctx.redis, &key, stored, CACHE_TTL).await;
     }
 
     token
@@ -165,7 +167,7 @@ pub async fn quarantine_member(
         {
             tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
         }
-        redis_set(
+        redis_set_ex(
             &ctx.redis,
             &format!(
                 "spam:quarantine:{}:{}",
@@ -173,6 +175,7 @@ pub async fn quarantine_member(
                 user_id.get()
             ),
             &token,
+            CACHE_TTL,
         )
         .await;
     }

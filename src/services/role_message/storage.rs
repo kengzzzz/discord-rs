@@ -7,9 +7,11 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::message::{Message, MessageEnum},
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set_ex},
     },
 };
+
+const CACHE_TTL: usize = 3600;
 
 pub async fn get(ctx: &Arc<Context>, guild_id: u64) -> Option<Message> {
     let redis_key = format!("{CACHE_PREFIX}:role-message:{guild_id}");
@@ -26,7 +28,7 @@ pub async fn get(ctx: &Arc<Context>, guild_id: u64) -> Option<Message> {
         )
         .await
     {
-        redis_set(&ctx.redis, &redis_key, &msg).await;
+        redis_set_ex(&ctx.redis, &redis_key, &msg, CACHE_TTL).await;
         return Some(msg);
     }
 

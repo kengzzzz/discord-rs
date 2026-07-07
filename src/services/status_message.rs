@@ -3,11 +3,13 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::message::{Message, MessageEnum},
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set_ex},
     },
 };
 use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
+
+const CACHE_TTL: usize = 3600;
 
 pub struct StatusMessageService;
 
@@ -24,7 +26,7 @@ impl StatusMessageService {
             .find_one(doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()})
             .await
         {
-            redis_set(&ctx.redis, &redis_key, &msg).await;
+            redis_set_ex(&ctx.redis, &redis_key, &msg, CACHE_TTL).await;
             return Some(msg);
         }
 

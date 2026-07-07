@@ -6,9 +6,11 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::role::{Role, RoleEnum},
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set_ex},
     },
 };
+
+const CACHE_TTL: usize = 3600;
 
 pub struct RoleService;
 
@@ -28,7 +30,7 @@ impl RoleService {
             })
             .await
         {
-            redis_set(&ctx.redis, &redis_key, &role).await;
+            redis_set_ex(&ctx.redis, &redis_key, &role, CACHE_TTL).await;
             return Some(role);
         }
 
@@ -58,7 +60,7 @@ impl RoleService {
             .find_one(doc! {"guild_id": guild_id as i64, "role_type": role_type.value()})
             .await
         {
-            redis_set(&ctx.redis, &redis_key, &role).await;
+            redis_set_ex(&ctx.redis, &redis_key, &role, CACHE_TTL).await;
             return Some(role);
         }
 

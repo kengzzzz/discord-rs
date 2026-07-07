@@ -9,7 +9,7 @@ use mongodb::{
 };
 
 use crate::{
-    configs::{app::APP_CONFIG, mongo::MONGO_CONFIGS},
+    configs::mongo::MONGO_CONFIGS,
     dbs::mongo::{
         models::{
             ai_prompt::AiPrompt, channel::Channel, guild_settings::GuildSettings, message::Message,
@@ -68,61 +68,59 @@ impl MongoDB {
             }
         }
 
-        if !APP_CONFIG.is_atlas() {
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "channels",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
-            }
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "roles",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
-            }
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "quarantines",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
-            }
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "messages",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
-            }
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "ai_prompts",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
-            }
-            if let Err(e) = database
-                .run_command(doc! {
-                    "collMod": "guild_settings",
-                    "changeStreamPreAndPostImages": { "enabled": true }
-                })
-                .await
-            {
-                tracing::debug!(collection = "guild_settings", error = %e, "failed to update collection options");
-            }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "channels",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
+        }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "roles",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
+        }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "quarantines",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
+        }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "messages",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
+        }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "ai_prompts",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
+        }
+        if let Err(e) = database
+            .run_command(doc! {
+                "collMod": "guild_settings",
+                "changeStreamPreAndPostImages": { "enabled": true }
+            })
+            .await
+        {
+            tracing::debug!(collection = "guild_settings", error = %e, "failed to update collection options");
         }
 
         let channels = database.collection::<Channel>("channels");

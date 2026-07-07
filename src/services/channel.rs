@@ -7,9 +7,11 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::channel::{Channel, ChannelEnum},
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set_ex},
     },
 };
+
+const CACHE_TTL: usize = 3600;
 
 pub struct ChannelService;
 
@@ -35,7 +37,7 @@ impl ChannelService {
                 channels.push(channel);
             }
 
-            redis_set(&ctx.redis, &redis_key, &channels).await;
+            redis_set_ex(&ctx.redis, &redis_key, &channels, CACHE_TTL).await;
         }
 
         channels
@@ -68,7 +70,7 @@ impl ChannelService {
             .find_one(doc! {"guild_id": guild_id as i64, "channel_type": channel_type.value()})
             .await
         {
-            redis_set(&ctx.redis, &redis_key, &ch).await;
+            redis_set_ex(&ctx.redis, &redis_key, &ch, CACHE_TTL).await;
             return Some(ch);
         }
 
@@ -116,7 +118,7 @@ impl ChannelService {
                 channels.push(channel);
             }
 
-            redis_set(&ctx.redis, &redis_key, &channels).await;
+            redis_set_ex(&ctx.redis, &redis_key, &channels, CACHE_TTL).await;
         }
 
         channels

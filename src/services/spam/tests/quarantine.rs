@@ -1,5 +1,7 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
+#[allow(unused_imports)]
+use crate::dbs::redis::redis_set;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 

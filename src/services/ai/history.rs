@@ -8,10 +8,12 @@ use crate::{
     configs::CACHE_PREFIX,
     context::Context,
     dbs::mongo::models::ai_prompt::AiPrompt,
-    dbs::redis::{redis_delete, redis_get, redis_set},
+    dbs::redis::{redis_delete, redis_get, redis_set, redis_set_ex},
     services::ai::genai::{Content, Part},
 };
 use std::{collections::VecDeque, sync::Arc};
+
+const PROMPT_CACHE_TTL: usize = 3600;
 
 async fn history_key(user: Id<UserMarker>) -> String {
     format!("{CACHE_PREFIX}:ai:history:{}", user.get())
@@ -44,7 +46,7 @@ pub(crate) async fn get_prompt(ctx: &Arc<Context>, user: Id<UserMarker>) -> Opti
         .find_one(doc! {"user_id": user.get() as i64})
         .await
     {
-        redis_set(&ctx.redis, &key, &record.prompt).await;
+        redis_set_ex(&ctx.redis, &key, &record.prompt, PROMPT_CACHE_TTL).await;
         return Some(record.prompt);
     }
     None

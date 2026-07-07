@@ -6,9 +6,11 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::guild_settings::GuildSettings,
-        redis::{redis_delete, redis_get, redis_set},
+        redis::{redis_delete, redis_get, redis_set_ex},
     },
 };
+
+const CACHE_TTL: usize = 3600;
 
 pub struct GuildSettingsService;
 
@@ -28,7 +30,7 @@ impl GuildSettingsService {
             .flatten()
             .unwrap_or(GuildSettings { id: None, guild_id, scam_detect_enabled: false });
 
-        redis_set(&ctx.redis, &redis_key, &settings).await;
+        redis_set_ex(&ctx.redis, &redis_key, &settings, CACHE_TTL).await;
         settings
     }
 
@@ -57,10 +59,11 @@ impl GuildSettingsService {
             .upsert(true)
             .await?;
 
-        redis_set(
+        redis_set_ex(
             &ctx.redis,
             &cache_key(guild_id),
             &GuildSettings { id: None, guild_id, scam_detect_enabled: enabled },
+            CACHE_TTL,
         )
         .await;
 
