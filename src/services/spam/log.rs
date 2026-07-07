@@ -1,6 +1,7 @@
 use anyhow::Error as AnyError;
 use chrono::Utc;
 use deadpool_redis::Pool;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use twilight_http::{Error as HttpError, api_error::ApiError, error::ErrorType};
@@ -14,12 +15,25 @@ use crate::{
     dbs::redis::{redis_delete, redis_get, redis_set_ex},
     services::{broadcast::BroadcastService, spam::quarantine},
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 
 const SPAM_LIMIT: usize = 4;
 const LOG_TTL: usize = 600;
 const CAMPAIGN_LIMIT: usize = 4;
 const CAMPAIGN_TTL: usize = 600;
+const LOCK_SHARDS: usize = 256;
+
+static USER_LOCKS: Lazy<Vec<AsyncMutex<()>>> =
+    Lazy::new(|| (0..LOCK_SHARDS).map(|_| AsyncMutex::new(())).collect());
+
+fn lock_shard(guild_id: u64, user_id: u64) -> &'static AsyncMutex<()> {
+    let mut hasher = DefaultHasher::new();
+    (guild_id, user_id).hash(&mut hasher);
+    &USER_LOCKS[(hasher.finish() as usize) % LOCK_SHARDS]
+}
 
 #[derive(Serialize, Deserialize)]
 struct SpamRecord {
@@ -59,6 +73,9 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
     let campaign_hash = campaign_hash_message(message);
     let key = exact_log_key(guild_id, message.author.id.get());
     let now = Utc::now().timestamp();
+    let _guard = lock_shard(guild_id, message.author.id.get())
+        .lock()
+        .await;
     let mut record = redis_get(&ctx.redis, &key)
         .await
         .unwrap_or(SpamRecord {

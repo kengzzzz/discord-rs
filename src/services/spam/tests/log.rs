@@ -391,6 +391,35 @@ async fn test_log_message_and_clear() {
 }
 
 #[tokio::test]
+async fn test_log_message_concurrent_calls_do_not_lose_updates() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 20).await;
+
+    let msg_a = make_message(901, 1, 1, 20, "same content", Vec::new());
+    let msg_b = make_message(902, 2, 1, 20, "same content", Vec::new());
+
+    let ctx_a = ctx.clone();
+    let ctx_b = ctx.clone();
+    let (result_a, result_b) = tokio::join!(
+        log_message(&ctx_a, 1, &msg_a),
+        log_message(&ctx_b, 1, &msg_b),
+    );
+
+    assert!(matches!(result_a, LogOutcome::None));
+    assert!(matches!(result_b, LogOutcome::None));
+
+    let key = "spam:log:1:20";
+    let record: SpamRecord = redis_get(&ctx.redis, key)
+        .await
+        .expect("expected spam record after concurrent calls");
+    assert_eq!(
+        record.histories.len(),
+        2,
+        "both concurrent history entries should be recorded, not just the last writer's"
+    );
+}
+
+#[tokio::test]
 async fn test_log_message_is_idempotent_after_quarantine_claim() {
     let ctx = build_context().await;
     reset_spam_state(&ctx, 1, 2).await;

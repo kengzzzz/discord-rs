@@ -16,6 +16,7 @@ pub async fn redis_get<T>(_pool: &Pool, key: &str) -> Option<T>
 where
     T: DeserializeOwned + Send + Sync,
 {
+    tokio::task::yield_now().await;
     let store = REDIS_STORE.lock().await;
     let json = store.get(key)?.clone();
     serde_json::from_str(&json).ok()
@@ -25,6 +26,7 @@ pub async fn redis_set<T>(_pool: &Pool, key: &str, value: &T)
 where
     T: Serialize + Sync,
 {
+    tokio::task::yield_now().await;
     let json = serde_json::to_string(value).expect("serialize value for redis_set_json");
     let mut store = REDIS_STORE.lock().await;
     store.insert(key.to_string(), json);
