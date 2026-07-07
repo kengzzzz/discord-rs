@@ -126,18 +126,24 @@ impl NotificationService {
 
     pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {
         let token = shutdown::get_token();
-        {
-            let mut guard = HANDLES.write().await;
-            if let Some(old) = guard.remove(&guild_id) {
-                for h in old {
-                    h.abort();
-                }
+        // Hold the lock across remove+spawn+insert so concurrent reload_guild calls
+        // for the same guild are serialized: the second call's remove step always
+        // sees (and aborts) whatever the first call inserted, instead of both
+        // spawning independently and one insert silently dropping the other's
+        // still-running handles.
+        let mut guard = HANDLES.write().await;
+        if let Some(old) = guard.remove(&guild_id) {
+            for h in old {
+                h.abort();
             }
         }
         let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
         if !new_handles.is_empty() {
-            let mut guard = HANDLES.write().await;
             guard.insert(guild_id, new_handles);
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod.rs"]
+mod tests;
