@@ -23,12 +23,12 @@ fn test_parse_env_returns_default_when_missing() {
 }
 
 #[test]
-fn test_parse_env_returns_type_default_on_invalid() {
+fn test_parse_env_returns_configured_default_on_invalid() {
     let key = "TEST_PARSE_ENV_INVALID";
     unsafe {
         env::set_var(key, "invalid");
     }
-    assert_eq!(parse_env::<u32>(key, "5"), 0);
+    assert_eq!(parse_env::<u32>(key, "5"), 5);
     unsafe {
         env::remove_var(key);
     }
