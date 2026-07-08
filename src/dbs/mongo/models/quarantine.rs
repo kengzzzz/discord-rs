@@ -10,4 +10,6 @@ pub struct Quarantine {
     pub user_id: u64,
     pub token: String,
     pub roles: Vec<u64>,
+    #[serde(default)]
+    pub released: bool,
 }

@@ -44,7 +44,9 @@ pub async fn verify(
             "token": token,
         })
         .await
+        .map(|record| record.filter(|record| !record.released))
     {
+        let mut unrestored_roles = Vec::new();
         if let Some(role) =
             RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
             && let Err(e) = ctx
@@ -61,7 +63,37 @@ pub async fn verify(
                 .await
             {
                 tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "failed to restore member role");
+                unrestored_roles.push(*id);
             }
+        }
+
+        if !unrestored_roles.is_empty() {
+            tracing::error!(
+                guild_id = guild_id.get(),
+                user_id = user_id.get(),
+                unrestored_roles = ?unrestored_roles,
+                saved_roles = ?record.roles,
+                "failed to restore all quarantined member roles; keeping quarantine record for retry"
+            );
+            return false;
+        }
+
+        if let Err(e) = ctx
+            .mongo
+            .quarantines
+            .update_one(
+                doc! {
+                    "guild_id": guild_id.get() as i64,
+                    "user_id": user_id.get() as i64,
+                    "token": token,
+                },
+                doc! {"$set": {"released": true}},
+            )
+            .upsert(false)
+            .await
+        {
+            tracing::error!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to mark quarantine record released");
+            return false;
         }
 
         if let Err(e) = ctx
@@ -73,7 +105,7 @@ pub async fn verify(
             })
             .await
         {
-            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to delete quarantine record");
+            tracing::error!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to delete released quarantine record");
         }
 
         redis_delete(&ctx.redis, &key).await;
@@ -98,6 +130,7 @@ pub async fn get_token(ctx: &Arc<Context>, guild_id: u64, user_id: u64) -> Optio
         .await
         .ok()
         .flatten()
+        .filter(|record| !record.released)
         .map(|r| r.token);
 
     if let Some(stored) = &token {
@@ -153,6 +186,7 @@ pub async fn quarantine_member(
         user_id: user_id.get(),
         token: token.to_string(),
         roles: roles.iter().map(|r| r.get()).collect(),
+        released: false,
     };
 
     let Ok(bson) = to_bson(&record) else {

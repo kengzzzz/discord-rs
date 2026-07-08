@@ -18,11 +18,16 @@ use super::models::{
 pub struct MockCollection<T> {
     data: Arc<RwLock<Vec<T>>>,
     fail_next_update_one: Arc<AtomicBool>,
+    fail_next_delete_one: Arc<AtomicBool>,
 }
 
 impl<T> Default for MockCollection<T> {
     fn default() -> Self {
-        Self { data: Arc::new(RwLock::new(Vec::new())), fail_next_update_one: Arc::default() }
+        Self {
+            data: Arc::new(RwLock::new(Vec::new())),
+            fail_next_update_one: Arc::default(),
+            fail_next_delete_one: Arc::default(),
+        }
     }
 }
 
@@ -31,11 +36,20 @@ where
     T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
 {
     pub fn new() -> Self {
-        Self { data: Arc::new(RwLock::new(Vec::new())), fail_next_update_one: Arc::default() }
+        Self {
+            data: Arc::new(RwLock::new(Vec::new())),
+            fail_next_update_one: Arc::default(),
+            fail_next_delete_one: Arc::default(),
+        }
     }
 
     pub fn fail_next_update_one(&self) {
         self.fail_next_update_one
+            .store(true, Ordering::SeqCst);
+    }
+
+    pub fn fail_next_delete_one(&self) {
+        self.fail_next_delete_one
             .store(true, Ordering::SeqCst);
     }
 
@@ -68,6 +82,13 @@ where
     }
 
     pub async fn delete_one(&self, filter: Document) -> Result<()> {
+        if self
+            .fail_next_delete_one
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow!("mock delete_one failure"));
+        }
+
         let mut data = self.data.write().await;
         if let Some(pos) = data
             .iter()

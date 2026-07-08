@@ -150,6 +150,7 @@ async fn test_get_token_from_redis() {
         user_id: 1,
         token: "mongo_token".into(),
         roles: Vec::new(),
+        released: false,
     };
     ctx.mongo
         .quarantines
@@ -170,6 +171,7 @@ async fn test_get_token_fallback_to_mongo() {
         user_id: 2,
         token: "mongo_token".into(),
         roles: Vec::new(),
+        released: false,
     };
     ctx.mongo
         .quarantines
@@ -204,8 +206,14 @@ async fn test_purge_cache() {
 async fn test_verify_success_and_delete_record() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 4).await;
-    let record =
-        Quarantine { id: None, guild_id: 1, user_id: 4, token: "token".into(), roles: Vec::new() };
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 4,
+        token: "token".into(),
+        roles: Vec::new(),
+        released: false,
+    };
     ctx.mongo
         .quarantines
         .insert_one(record)
@@ -232,8 +240,14 @@ async fn test_verify_success_and_delete_record() {
 async fn test_verify_fails_on_mismatched_token() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 5).await;
-    let record =
-        Quarantine { id: None, guild_id: 1, user_id: 5, token: "token".into(), roles: Vec::new() };
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 5,
+        token: "token".into(),
+        roles: Vec::new(),
+        released: false,
+    };
     ctx.mongo
         .quarantines
         .insert_one(record)
@@ -252,6 +266,88 @@ async fn test_verify_fails_on_mismatched_token() {
 }
 
 #[tokio::test]
+async fn test_verify_delete_failure_marks_record_released() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 10).await;
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 10,
+        token: "token".into(),
+        roles: Vec::new(),
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set(&ctx.redis, "spam:quarantine:1:10", &"token").await;
+    redis_set(&ctx.redis, "spam:log:1:10", &123).await;
+    ctx.mongo
+        .quarantines
+        .fail_next_delete_one();
+
+    let ok = verify(&ctx, Id::new(1), Id::new(10), "token").await;
+    assert!(ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 1i64, "user_id": 10i64})
+        .await
+        .unwrap()
+        .expect("released tombstone should remain after failed delete");
+    assert!(remaining.released);
+
+    let cached_quarantine: Option<String> = redis_get(&ctx.redis, "spam:quarantine:1:10").await;
+    assert!(cached_quarantine.is_none());
+    let cached_log: Option<i32> = redis_get(&ctx.redis, "spam:log:1:10").await;
+    assert!(cached_log.is_none());
+    assert!(!crate::services::spam::SpamService::is_quarantined(&ctx, 1, 10).await);
+    let resurrected: Option<String> = redis_get(&ctx.redis, "spam:quarantine:1:10").await;
+    assert!(resurrected.is_none());
+}
+
+#[tokio::test]
+async fn test_verify_role_restore_failure_keeps_active_record_for_retry() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 11).await;
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 11,
+        token: "token".into(),
+        roles: vec![10, 11],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set(&ctx.redis, "spam:quarantine:1:11", &"token").await;
+    ctx.http
+        .fail_next_add_guild_member_role();
+
+    let ok = verify(&ctx, Id::new(1), Id::new(11), "token").await;
+    assert!(!ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 1i64, "user_id": 11i64})
+        .await
+        .unwrap()
+        .expect("active quarantine record should remain after partial restore");
+    assert!(!remaining.released);
+    assert_eq!(remaining.roles, vec![10, 11]);
+
+    let cached_quarantine: Option<String> = redis_get(&ctx.redis, "spam:quarantine:1:11").await;
+    assert_eq!(cached_quarantine, Some("token".into()));
+}
+
+#[tokio::test]
 async fn test_claim_token_reuses_mongo_token_after_redis_loss() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 7).await;
@@ -262,6 +358,7 @@ async fn test_claim_token_reuses_mongo_token_after_redis_loss() {
         user_id: 7,
         token: "token-a".into(),
         roles: Vec::new(),
+        released: false,
     };
     ctx.mongo
         .quarantines
@@ -338,8 +435,14 @@ async fn test_quarantine_member_releases_claim_when_mongo_upsert_fails() {
 async fn test_verify_clears_campaign_records() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 6).await;
-    let record =
-        Quarantine { id: None, guild_id: 1, user_id: 6, token: "token".into(), roles: Vec::new() };
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 6,
+        token: "token".into(),
+        roles: Vec::new(),
+        released: false,
+    };
     ctx.mongo
         .quarantines
         .insert_one(record)

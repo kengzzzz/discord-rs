@@ -29,6 +29,7 @@ impl SpamService {
             .await
             .ok()
             .flatten()
+            .filter(|record| !record.released)
             .map(|record| record.token);
 
         if let Some(token) = &res {
