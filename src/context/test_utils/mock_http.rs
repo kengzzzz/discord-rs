@@ -21,7 +21,7 @@ use twilight_model::user::User;
 use twilight_model::util::Timestamp;
 
 use serde_json::json;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct MessageRecord {
@@ -241,10 +241,15 @@ impl<'a> IntoFuture for MockInteractionResponseFuture<'a> {
     }
 }
 
+type MemberKey = (Id<GuildMarker>, Id<UserMarker>);
+type MemberRoles = HashMap<MemberKey, Vec<Id<RoleMarker>>>;
+
 pub struct MockClient {
     pub messages: Mutex<Vec<MessageRecord>>,
     pub interactions: Mutex<Vec<InteractionRecord>>,
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
+    member_roles: Mutex<MemberRoles>,
+    fail_next_add_guild_member_role: AtomicBool,
     next_id: AtomicU64,
 }
 
@@ -260,6 +265,8 @@ impl MockClient {
             messages: Mutex::new(Vec::new()),
             interactions: Mutex::new(Vec::new()),
             channels: Mutex::new(HashMap::new()),
+            member_roles: Mutex::new(HashMap::new()),
+            fail_next_add_guild_member_role: AtomicBool::new(false),
             next_id: AtomicU64::new(1),
         }
     }
@@ -269,6 +276,36 @@ impl MockClient {
             .lock()
             .unwrap()
             .insert(channel, msgs);
+    }
+
+    pub fn set_member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        roles: Vec<Id<RoleMarker>>,
+    ) {
+        self.member_roles
+            .lock()
+            .unwrap()
+            .insert((guild_id, user_id), roles);
+    }
+
+    pub fn member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+    ) -> Vec<Id<RoleMarker>> {
+        self.member_roles
+            .lock()
+            .unwrap()
+            .get(&(guild_id, user_id))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn fail_next_add_guild_member_role(&self) {
+        self.fail_next_add_guild_member_role
+            .store(true, Ordering::SeqCst);
     }
 
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> MockCreateMessage<'_> {
@@ -332,19 +369,43 @@ impl MockClient {
 
     pub async fn add_guild_member_role(
         &self,
-        _guild_id: Id<GuildMarker>,
-        _user_id: Id<UserMarker>,
-        _role_id: Id<RoleMarker>,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        if self
+            .fail_next_add_guild_member_role
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow::anyhow!(
+                "mock add_guild_member_role failure"
+            ));
+        }
+
+        let mut member_roles = self.member_roles.lock().unwrap();
+        let roles = member_roles
+            .entry((guild_id, user_id))
+            .or_default();
+        if !roles.contains(&role_id) {
+            roles.push(role_id);
+        }
         Ok(())
     }
 
     pub async fn remove_guild_member_role(
         &self,
-        _guild_id: Id<GuildMarker>,
-        _user_id: Id<UserMarker>,
-        _role_id: Id<RoleMarker>,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        if let Some(roles) = self
+            .member_roles
+            .lock()
+            .unwrap()
+            .get_mut(&(guild_id, user_id))
+        {
+            roles.retain(|role| *role != role_id);
+        }
         Ok(())
     }
 
