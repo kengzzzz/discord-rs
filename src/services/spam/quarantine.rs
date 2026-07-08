@@ -15,7 +15,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-const CACHE_TTL: usize = 3600;
+use super::CACHE_TTL;
 
 pub async fn verify(
     ctx: &Arc<Context>,

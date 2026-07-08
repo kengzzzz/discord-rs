@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use crate::{
     context::Context,
-    dbs::redis::{redis_get, redis_set},
+    dbs::redis::{redis_get, redis_set_ex},
 };
 
 pub struct SpamService;
+
+pub(super) const CACHE_TTL: usize = 3600;
 
 pub mod embed;
 pub mod log;
@@ -33,7 +35,7 @@ impl SpamService {
             .map(|record| record.token);
 
         if let Some(token) = &res {
-            redis_set(&ctx.redis, &key, token).await;
+            redis_set_ex(&ctx.redis, &key, token, CACHE_TTL).await;
         }
 
         res.is_some()

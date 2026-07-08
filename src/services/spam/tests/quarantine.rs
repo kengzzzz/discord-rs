@@ -1,7 +1,7 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
 #[allow(unused_imports)]
-use crate::dbs::redis::redis_set;
+use crate::dbs::redis::{redis_set, redis_set_ex, redis_ttl};
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 use twilight_cache_inmemory::DefaultInMemoryCache;
@@ -143,7 +143,13 @@ async fn test_get_token_from_redis() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 1).await;
     let key = "spam:quarantine:1:1";
-    redis_set(&ctx.redis, key, &"redis_token").await;
+    redis_set_ex(
+        &ctx.redis,
+        key,
+        &"redis_token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     let record = Quarantine {
         id: None,
         guild_id: 1,
@@ -194,7 +200,13 @@ async fn test_purge_cache() {
     let log_key = "spam:log:1:3";
     let quarantine_key = "spam:quarantine:1:3";
     redis_set(&ctx.redis, log_key, &1).await;
-    redis_set(&ctx.redis, quarantine_key, &"tok").await;
+    redis_set_ex(
+        &ctx.redis,
+        quarantine_key,
+        &"tok",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     purge_cache(&ctx.redis, 1, 3).await;
     let log: Option<i32> = redis_get(&ctx.redis, log_key).await;
     let quarantine: Option<String> = redis_get(&ctx.redis, quarantine_key).await;
@@ -219,7 +231,13 @@ async fn test_verify_success_and_delete_record() {
         .insert_one(record)
         .await
         .unwrap();
-    redis_set(&ctx.redis, "spam:quarantine:1:4", &"token").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:4",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     redis_set(&ctx.redis, "spam:log:1:4", &123).await;
     let ok = verify(&ctx, Id::new(1), Id::new(4), "token").await;
     assert!(ok);
@@ -253,7 +271,13 @@ async fn test_verify_fails_on_mismatched_token() {
         .insert_one(record)
         .await
         .unwrap();
-    redis_set(&ctx.redis, "spam:quarantine:1:5", &"other").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:5",
+        &"other",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     let ok = verify(&ctx, Id::new(1), Id::new(5), "token").await;
     assert!(!ok);
     let remaining = ctx
@@ -282,7 +306,13 @@ async fn test_verify_delete_failure_marks_record_released() {
         .insert_one(record)
         .await
         .unwrap();
-    redis_set(&ctx.redis, "spam:quarantine:1:10", &"token").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:10",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     redis_set(&ctx.redis, "spam:log:1:10", &123).await;
     ctx.mongo
         .quarantines
@@ -326,7 +356,13 @@ async fn test_verify_role_restore_failure_keeps_active_record_for_retry() {
         .insert_one(record)
         .await
         .unwrap();
-    redis_set(&ctx.redis, "spam:quarantine:1:11", &"token").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:11",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
     ctx.http
         .fail_next_add_guild_member_role();
 
@@ -365,7 +401,13 @@ async fn test_claim_token_reuses_mongo_token_after_redis_loss() {
         .insert_one(record)
         .await
         .unwrap();
-    redis_set(&ctx.redis, "spam:quarantine:1:7", &"token-a").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:7",
+        &"token-a",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
 
     // Simulate Redis losing the key (restart/eviction/flush) while Mongo still
     // has the record with the token that was already DMed to the user.
@@ -381,6 +423,38 @@ async fn test_claim_token_reuses_mongo_token_after_redis_loss() {
     // The user's original verification link (token A) must still work.
     let ok = verify(&ctx, Id::new(1), Id::new(7), "token-a").await;
     assert!(ok);
+}
+
+#[tokio::test]
+async fn test_is_quarantined_mongo_fallback_repopulates_cache_with_ttl() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 12).await;
+
+    let record = Quarantine {
+        id: None,
+        guild_id: 1,
+        user_id: 12,
+        token: "token".into(),
+        roles: Vec::new(),
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+
+    let key = "spam:quarantine:1:12";
+    assert_eq!(redis_ttl(key).await, None);
+
+    assert!(crate::services::spam::SpamService::is_quarantined(&ctx, 1, 12).await);
+
+    let cached: Option<String> = redis_get(&ctx.redis, key).await;
+    assert_eq!(cached, Some("token".into()));
+    assert_eq!(
+        redis_ttl(key).await,
+        Some(crate::services::spam::CACHE_TTL)
+    );
 }
 
 #[tokio::test]
@@ -462,7 +536,13 @@ async fn test_verify_clears_campaign_records() {
         &vec![campaign_key.to_owned()],
     )
     .await;
-    redis_set(&ctx.redis, "spam:quarantine:1:6", &"token").await;
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:6",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
 
     let ok = verify(&ctx, Id::new(1), Id::new(6), "token").await;
     assert!(ok);
