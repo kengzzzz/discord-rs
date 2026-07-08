@@ -111,7 +111,7 @@ impl NotificationService {
         tokio::spawn(async move {
             let token = shutdown::get_token();
             let map = Self::init_all(ctx, token.clone()).await;
-            *HANDLES.write().await = map;
+            Self::merge_initial_handles(map).await;
 
             token.cancelled().await;
 
@@ -122,6 +122,23 @@ impl NotificationService {
                 }
             }
         })
+    }
+
+    async fn merge_initial_handles(map: HashMap<u64, Vec<JoinHandle<()>>>) {
+        let mut guard = HANDLES.write().await;
+        for (guild_id, handles) in map {
+            if let std::collections::hash_map::Entry::Vacant(entry) = guard.entry(guild_id) {
+                entry.insert(handles);
+            } else {
+                tracing::warn!(
+                    guild_id = guild_id,
+                    "Notification tasks were reloaded during startup init. Aborting startup tasks."
+                );
+                for h in handles {
+                    h.abort();
+                }
+            }
+        }
     }
 
     pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {

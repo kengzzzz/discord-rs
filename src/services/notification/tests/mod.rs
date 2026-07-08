@@ -136,3 +136,44 @@ async fn test_reload_guild_sequential_replaces_tasks() {
 
     clear_handles(guild_id).await;
 }
+
+#[tokio::test]
+async fn test_startup_merge_does_not_clobber_concurrent_reload() {
+    shutdown::set_token(CancellationToken::new());
+    let ctx = build_context().await;
+    let guild_id = 9_100_003u64;
+    seed_guild(&ctx, guild_id, 5, 6).await;
+    clear_handles(guild_id).await;
+
+    let before = tokio::runtime::Handle::current()
+        .metrics()
+        .num_alive_tasks();
+
+    let startup_map = NotificationService::init_all(ctx.clone(), shutdown::get_token()).await;
+    NotificationService::reload_guild(&ctx, guild_id).await;
+    NotificationService::merge_initial_handles(startup_map).await;
+    settle().await;
+
+    let tracked_len = {
+        let guard = HANDLES.read().await;
+        guard
+            .get(&guild_id)
+            .map(|v| v.len())
+            .unwrap_or(0)
+    };
+    assert_eq!(
+        tracked_len, 1,
+        "a reload racing startup should remain the only tracked task set"
+    );
+
+    let after = tokio::runtime::Handle::current()
+        .metrics()
+        .num_alive_tasks();
+    assert_eq!(
+        after.saturating_sub(before),
+        1,
+        "startup-spawned duplicates must be aborted instead of leaking untracked"
+    );
+
+    clear_handles(guild_id).await;
+}
