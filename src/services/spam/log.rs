@@ -26,8 +26,11 @@ const CAMPAIGN_LIMIT: usize = 4;
 const CAMPAIGN_TTL: usize = 600;
 const LOCK_SHARDS: usize = 256;
 
-static USER_LOCKS: Lazy<Vec<AsyncMutex<()>>> =
-    Lazy::new(|| (0..LOCK_SHARDS).map(|_| AsyncMutex::new(())).collect());
+static USER_LOCKS: Lazy<Vec<AsyncMutex<()>>> = Lazy::new(|| {
+    (0..LOCK_SHARDS)
+        .map(|_| AsyncMutex::new(()))
+        .collect()
+});
 
 fn lock_shard(guild_id: u64, user_id: u64) -> &'static AsyncMutex<()> {
     let mut hasher = DefaultHasher::new();
@@ -56,6 +59,13 @@ pub enum LogOutcome {
 }
 
 pub async fn clear_log(pool: &Pool, guild_id: u64, user_id: u64) {
+    let _guard = lock_shard(guild_id, user_id)
+        .lock()
+        .await;
+    clear_log_locked(pool, guild_id, user_id).await;
+}
+
+async fn clear_log_locked(pool: &Pool, guild_id: u64, user_id: u64) {
     let key = exact_log_key(guild_id, user_id);
     redis_delete(pool, &key).await;
 
@@ -156,7 +166,7 @@ async fn quarantine_detected(
     user_id: u64,
     to_delete: Vec<(u64, u64)>,
 ) -> LogOutcome {
-    clear_log(&ctx.redis, guild_id, user_id).await;
+    clear_log_locked(&ctx.redis, guild_id, user_id).await;
     BroadcastService::delete_replicas(ctx, &to_delete).await;
     let delete_ctx = ctx.clone();
     tokio::spawn(async move {

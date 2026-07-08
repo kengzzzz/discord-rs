@@ -9,7 +9,7 @@ use crate::{
     context::Context,
     dbs::{
         mongo::models::{quarantine::Quarantine, role::RoleEnum},
-        redis::{redis_delete, redis_get, redis_set_ex, redis_set_nx},
+        redis::{redis_delete, redis_get, redis_set_ex, redis_set_nx_ex},
     },
     services::{role::RoleService, spam::log},
 };
@@ -121,8 +121,8 @@ pub async fn claim_token(
         return Err(Some(existing));
     }
 
-    let key = format!("spam:quarantine:{guild_id}:{user_id}");
-    if redis_set_nx(&ctx.redis, &key, &token).await {
+    let key = quarantine_key(guild_id, user_id);
+    if redis_set_nx_ex(&ctx.redis, &key, &token, CACHE_TTL).await {
         return Ok(token.to_owned());
     }
 
@@ -135,64 +135,80 @@ pub async fn quarantine_member(
     user_id: Id<UserMarker>,
     token: &str,
 ) {
-    if let Some(member_ref) = ctx.cache.member(guild_id, user_id) {
-        let roles = member_ref.roles();
-        for r in roles {
-            if let Err(e) = ctx
-                .http
-                .remove_guild_member_role(guild_id, user_id, *r)
-                .await
-            {
-                tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = r.get(), error = %e, "failed to remove member role for quarantine");
-            }
-        }
-        if let Some(role) =
-            RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
-            && let Err(e) = ctx
-                .http
-                .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
-                .await
-        {
-            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
-        }
-        let record = Quarantine {
-            id: None,
-            guild_id: guild_id.get(),
-            user_id: user_id.get(),
-            token: token.to_string(),
-            roles: roles.iter().map(|r| r.get()).collect(),
-        };
-        if let Ok(bson) = to_bson(&record)
-            && let Err(e) = ctx
-                .mongo
-                .quarantines
-                .update_one(
-                    doc! {"guild_id": record.guild_id as i64, "user_id": record.user_id as i64},
-                    doc! {"$set": bson},
-                )
-                .upsert(true)
-                .await
-        {
-            tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
-        }
-        redis_set_ex(
-            &ctx.redis,
-            &format!(
-                "spam:quarantine:{}:{}",
-                guild_id.get(),
-                user_id.get()
-            ),
-            &token,
-            CACHE_TTL,
+    let key = quarantine_key(guild_id.get(), user_id.get());
+    let Some(member_ref) = ctx.cache.member(guild_id, user_id) else {
+        tracing::warn!(
+            guild_id = guild_id.get(),
+            user_id = user_id.get(),
+            "member missing from cache while materializing quarantine"
+        );
+        redis_delete(&ctx.redis, &key).await;
+        return;
+    };
+
+    let roles = member_ref.roles().to_vec();
+    let record = Quarantine {
+        id: None,
+        guild_id: guild_id.get(),
+        user_id: user_id.get(),
+        token: token.to_string(),
+        roles: roles.iter().map(|r| r.get()).collect(),
+    };
+
+    let Ok(bson) = to_bson(&record) else {
+        tracing::warn!(
+            guild_id = record.guild_id,
+            user_id = record.user_id,
+            "failed to serialize quarantine record"
+        );
+        redis_delete(&ctx.redis, &key).await;
+        return;
+    };
+
+    if let Err(e) = ctx
+        .mongo
+        .quarantines
+        .update_one(
+            doc! {"guild_id": record.guild_id as i64, "user_id": record.user_id as i64},
+            doc! {"$set": bson},
         )
-        .await;
+        .upsert(true)
+        .await
+    {
+        tracing::warn!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to upsert quarantine record");
+        redis_delete(&ctx.redis, &key).await;
+        return;
     }
+
+    for r in &roles {
+        if let Err(e) = ctx
+            .http
+            .remove_guild_member_role(guild_id, user_id, *r)
+            .await
+        {
+            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = r.get(), error = %e, "failed to remove member role for quarantine");
+        }
+    }
+    if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
+        && let Err(e) = ctx
+            .http
+            .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
+            .await
+    {
+        tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
+    }
+
+    redis_set_ex(&ctx.redis, &key, &token, CACHE_TTL).await;
 }
 
 pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
-    let quarantine_key = format!("spam:quarantine:{guild_id}:{user_id}");
+    let quarantine_key = quarantine_key(guild_id, user_id);
     log::clear_log(pool, guild_id, user_id).await;
     redis_delete(pool, &quarantine_key).await;
+}
+
+fn quarantine_key(guild_id: u64, user_id: u64) -> String {
+    format!("spam:quarantine:{guild_id}:{user_id}")
 }
 
 #[cfg(any(test, feature = "test-utils"))]

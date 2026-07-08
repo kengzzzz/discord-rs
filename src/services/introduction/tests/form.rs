@@ -100,6 +100,22 @@ fn test_parse_modal_truncates_overlong_fields() {
 
     let result = parse_modal(&data).unwrap();
     assert_eq!(result.name.chars().count(), NAME_MAX_CHARS);
-    assert_eq!(result.ign.as_deref().unwrap().chars().count(), IGN_MAX_CHARS);
-    assert_eq!(result.clan.as_deref().unwrap().chars().count(), CLAN_MAX_CHARS);
+    assert_eq!(
+        result
+            .ign
+            .as_deref()
+            .unwrap()
+            .chars()
+            .count(),
+        IGN_MAX_CHARS
+    );
+    assert_eq!(
+        result
+            .clan
+            .as_deref()
+            .unwrap()
+            .chars()
+            .count(),
+        CLAN_MAX_CHARS
+    );
 }

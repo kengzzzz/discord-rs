@@ -28,7 +28,10 @@ pub async fn handle_valid_intro(
     // Build + validate the embed before mutating any roles, so a validation failure
     // (e.g. text too long) can never leave a user with swapped roles and no posted intro.
     let intro_embed = {
-        let guild_ref = ctx.cache.guild(guild_id).context("no guild")?;
+        let guild_ref = ctx
+            .cache
+            .guild(guild_id)
+            .context("no guild")?;
         embed::intro_details_embed(&guild_ref, member_tag, details)?
     };
 

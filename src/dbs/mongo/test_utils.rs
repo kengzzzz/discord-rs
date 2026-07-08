@@ -1,10 +1,11 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use deadpool_redis::Pool;
 use futures::Stream;
 use mongodb::bson::{Document, to_document};
 use serde::{Serialize, de::DeserializeOwned};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use tokio::sync::RwLock;
 
@@ -16,11 +17,12 @@ use super::models::{
 #[derive(Clone)]
 pub struct MockCollection<T> {
     data: Arc<RwLock<Vec<T>>>,
+    fail_next_update_one: Arc<AtomicBool>,
 }
 
 impl<T> Default for MockCollection<T> {
     fn default() -> Self {
-        Self { data: Arc::new(RwLock::new(Vec::new())) }
+        Self { data: Arc::new(RwLock::new(Vec::new())), fail_next_update_one: Arc::default() }
     }
 }
 
@@ -29,7 +31,12 @@ where
     T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
 {
     pub fn new() -> Self {
-        Self { data: Arc::new(RwLock::new(Vec::new())) }
+        Self { data: Arc::new(RwLock::new(Vec::new())), fail_next_update_one: Arc::default() }
+    }
+
+    pub fn fail_next_update_one(&self) {
+        self.fail_next_update_one
+            .store(true, Ordering::SeqCst);
     }
 
     pub async fn insert_one(&self, doc: T) -> Result<()> {
@@ -83,6 +90,13 @@ where
         update: Document,
         upsert: bool,
     ) -> Result<()> {
+        if self
+            .fail_next_update_one
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow!("mock update_one failure"));
+        }
+
         let mut data = self.data.write().await;
         for item in data.iter_mut() {
             let mut doc = to_document(item)?;

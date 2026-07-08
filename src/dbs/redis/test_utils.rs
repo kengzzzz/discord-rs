@@ -52,6 +52,13 @@ where
     true
 }
 
+pub async fn redis_set_nx_ex<T>(pool: &Pool, key: &str, value: &T, _ttl: usize) -> bool
+where
+    T: Serialize + Sync,
+{
+    redis_set_nx(pool, key, value).await
+}
+
 pub async fn redis_delete(_pool: &Pool, key: &str) {
     let mut store = REDIS_STORE.lock().await;
     store.remove(key);

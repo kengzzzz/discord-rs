@@ -420,6 +420,56 @@ async fn test_log_message_concurrent_calls_do_not_lose_updates() {
 }
 
 #[tokio::test]
+async fn test_clear_log_waits_for_user_lock_before_deleting() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 21).await;
+
+    let msg = make_message(903, 1, 1, 21, "same content", Vec::new());
+    assert!(matches!(
+        log_message(&ctx, 1, &msg).await,
+        LogOutcome::None
+    ));
+
+    let key = "spam:log:1:21";
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(record.is_some());
+
+    let guard = lock_shard(1, 21).lock().await;
+    let pool = ctx.redis.clone();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let mut clear_task = tokio::spawn(async move {
+        let _ = started_tx.send(());
+        clear_log(&pool, 1, 21).await;
+    });
+
+    started_rx
+        .await
+        .expect("clear_log task should start");
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            &mut clear_task
+        )
+        .await
+        .is_err(),
+        "clear_log should wait while the per-user log lock is held"
+    );
+
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(
+        record.is_some(),
+        "clear_log should not delete the spam record until it owns the lock"
+    );
+
+    drop(guard);
+    clear_task
+        .await
+        .expect("clear_log task should finish after lock release");
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(record.is_none());
+}
+
+#[tokio::test]
 async fn test_log_message_is_idempotent_after_quarantine_claim() {
     let ctx = build_context().await;
     reset_spam_state(&ctx, 1, 2).await;

@@ -91,6 +91,16 @@ pub async fn handle_member_add(ctx: Arc<Context>, event: MemberAdd) {
                 });
             }
         }
+        JoinPlan::QuarantineConfigIncomplete { token, missing_role, missing_channel } => {
+            tracing::warn!(
+                guild_id = guild_id.get(),
+                user_id = user.id.get(),
+                token_present = !token.is_empty(),
+                missing_role,
+                missing_channel,
+                "active quarantine cannot be restored because quarantine config is incomplete"
+            );
+        }
         JoinPlan::AssignGuest { role_id, channel_id } => {
             if let Err(error) = ctx
                 .http

@@ -1,5 +1,7 @@
 use super::*;
-use crate::services::introduction::form::{CLAN_MAX_CHARS, IGN_MAX_CHARS, IntroDetails, NAME_MAX_CHARS};
+use crate::services::introduction::form::{
+    CLAN_MAX_CHARS, IGN_MAX_CHARS, IntroDetails, NAME_MAX_CHARS,
+};
 use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_model::gateway::payload::incoming::GuildCreate;
 use twilight_model::guild::{
