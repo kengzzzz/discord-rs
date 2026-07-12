@@ -1,5 +1,6 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
+use crate::dbs::mongo::models::role::Role as DbRole;
 #[allow(unused_imports)]
 use crate::dbs::redis::{redis_set, redis_set_ex, redis_ttl};
 use mongodb::bson::doc;
@@ -9,9 +10,9 @@ use twilight_model::{
     gateway::payload::incoming::GuildCreate,
     guild::{
         AfkTimeout, DefaultMessageNotificationLevel, ExplicitContentFilter, Guild, Member,
-        MemberFlags, MfaLevel, NSFWLevel, PremiumTier, SystemChannelFlags, VerificationLevel,
+        MemberFlags, MfaLevel, NSFWLevel, Permissions, PremiumTier, Role as GuildRole, RoleColors,
+        RoleFlags, SystemChannelFlags, VerificationLevel,
     },
-    id::marker::RoleMarker,
     user::User,
 };
 
@@ -41,7 +42,51 @@ async fn reset_quarantine_state(ctx: &Arc<Context>, guild_id: u64, user_id: u64)
         .expect("failed to clear quarantine records");
 }
 
+#[allow(deprecated)]
+fn guild_role(id: u64, managed: bool) -> GuildRole {
+    GuildRole {
+        color: 0,
+        colors: RoleColors { primary_color: 0, secondary_color: None, tertiary_color: None },
+        hoist: false,
+        icon: None,
+        id: Id::new(id),
+        managed,
+        mentionable: false,
+        name: format!("role-{id}"),
+        permissions: Permissions::empty(),
+        position: 1,
+        flags: RoleFlags::empty(),
+        tags: None,
+        unicode_emoji: None,
+    }
+}
+
+async fn seed_quarantine_role(ctx: &Arc<Context>, guild_id: u64, role_id: u64) {
+    RoleService::purge_cache_by_type(&ctx.redis, guild_id, &RoleEnum::Quarantine).await;
+    ctx.mongo
+        .roles
+        .insert_one(DbRole {
+            id: None,
+            role_type: RoleEnum::Quarantine,
+            role_id,
+            guild_id,
+            self_assignable: false,
+        })
+        .await
+        .expect("failed to seed quarantine role");
+}
+
 fn cache_member(cache: &DefaultInMemoryCache, guild_id: u64, user_id: u64, roles: Vec<u64>) {
+    cache_member_with_guild_roles(cache, guild_id, user_id, roles, Vec::new());
+}
+
+fn cache_member_with_guild_roles(
+    cache: &DefaultInMemoryCache,
+    guild_id: u64,
+    user_id: u64,
+    roles: Vec<u64>,
+    guild_roles: Vec<GuildRole>,
+) {
     let member = Member {
         avatar: None,
         avatar_decoration_data: None,
@@ -118,7 +163,7 @@ fn cache_member(cache: &DefaultInMemoryCache, guild_id: u64, user_id: u64, roles
         premium_tier: PremiumTier::None,
         presences: Vec::new(),
         public_updates_channel_id: None,
-        roles: Vec::new(),
+        roles: guild_roles,
         rules_channel_id: None,
         safety_alerts_channel_id: None,
         splash: None,
@@ -551,4 +596,317 @@ async fn test_verify_clears_campaign_records() {
     let campaign_index: Option<Vec<String>> = redis_get(&ctx.redis, "spam:campaign:1:6").await;
     assert!(campaign.is_none());
     assert!(campaign_index.is_none());
+}
+
+#[tokio::test]
+async fn test_quarantine_snapshot_excludes_managed_roles() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 101, 31).await;
+    seed_quarantine_role(&ctx, 101, 900).await;
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        101,
+        31,
+        vec![10, 11, 12],
+        vec![guild_role(10, false), guild_role(11, true), guild_role(12, false)],
+    );
+    ctx.http.set_member_roles(
+        Id::new(101),
+        Id::new(31),
+        vec![Id::new(10), Id::new(11), Id::new(12)],
+    );
+
+    let claimed = claim_token(&ctx, 101, 31, "token").await;
+    assert_eq!(claimed, Ok("token".into()));
+    quarantine_member(&ctx, Id::new(101), Id::new(31), "token").await;
+
+    let record = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 101i64, "user_id": 31i64})
+        .await
+        .unwrap()
+        .expect("quarantine record should exist");
+    assert_eq!(record.roles, vec![10, 12]);
+
+    // Managed role 11 was never stripped; quarantine role 900 was granted.
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(101), Id::new(31)),
+        vec![Id::new(11), Id::new(900)]
+    );
+}
+
+#[tokio::test]
+async fn test_requarantine_snapshot_excludes_quarantine_role() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 102, 32).await;
+    seed_quarantine_role(&ctx, 102, 900).await;
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        102,
+        32,
+        vec![10, 900],
+        vec![guild_role(10, false), guild_role(900, false)],
+    );
+    ctx.http.set_member_roles(
+        Id::new(102),
+        Id::new(32),
+        vec![Id::new(10), Id::new(900)],
+    );
+
+    let claimed = claim_token(&ctx, 102, 32, "token").await;
+    assert_eq!(claimed, Ok("token".into()));
+    quarantine_member(&ctx, Id::new(102), Id::new(32), "token").await;
+
+    let record = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 102i64, "user_id": 32i64})
+        .await
+        .unwrap()
+        .expect("quarantine record should exist");
+    assert_eq!(record.roles, vec![10]);
+
+    // The quarantine role was neither snapshotted nor stripped-then-re-added.
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(102), Id::new(32)),
+        vec![Id::new(900)]
+    );
+}
+
+#[tokio::test]
+async fn test_verify_skips_role_deleted_from_guild() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 103, 33).await;
+    // Guild role set is cached and contains role 10 but not 99.
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        103,
+        33,
+        Vec::new(),
+        vec![guild_role(10, false)],
+    );
+    let record = Quarantine {
+        id: None,
+        guild_id: 103,
+        user_id: 33,
+        token: "token".into(),
+        roles: vec![10, 99],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:103:33",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+
+    let ok = verify(&ctx, Id::new(103), Id::new(33), "token").await;
+    assert!(ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 103i64, "user_id": 33i64})
+        .await
+        .unwrap();
+    assert!(remaining.is_none());
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(103), Id::new(33)),
+        vec![Id::new(10)]
+    );
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:103:33").await;
+    assert!(cached.is_none());
+}
+
+#[tokio::test]
+async fn test_verify_skips_managed_role_in_legacy_snapshot() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 104, 34).await;
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        104,
+        34,
+        Vec::new(),
+        vec![guild_role(10, false), guild_role(11, true)],
+    );
+    let record = Quarantine {
+        id: None,
+        guild_id: 104,
+        user_id: 34,
+        token: "token".into(),
+        roles: vec![10, 11],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:104:34",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+
+    let ok = verify(&ctx, Id::new(104), Id::new(34), "token").await;
+    assert!(ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 104i64, "user_id": 34i64})
+        .await
+        .unwrap();
+    assert!(remaining.is_none());
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(104), Id::new(34)),
+        vec![Id::new(10)]
+    );
+}
+
+#[tokio::test]
+async fn test_verify_skips_unknown_role_http_error() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 105, 35).await;
+    // Cold cache for guild 105: pre-checks are bypassed, HTTP classification
+    // must handle the 404 Unknown Role response.
+    let record = Quarantine {
+        id: None,
+        guild_id: 105,
+        user_id: 35,
+        token: "token".into(),
+        roles: vec![10, 99],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:105:35",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+    ctx.http
+        .fail_add_guild_member_role_with(Id::new(99), 404, Some(10011));
+
+    let ok = verify(&ctx, Id::new(105), Id::new(35), "token").await;
+    assert!(ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 105i64, "user_id": 35i64})
+        .await
+        .unwrap();
+    assert!(remaining.is_none());
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(105), Id::new(35)),
+        vec![Id::new(10)]
+    );
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:105:35").await;
+    assert!(cached.is_none());
+}
+
+#[tokio::test]
+async fn test_verify_transient_500_keeps_record() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 106, 36).await;
+    let record = Quarantine {
+        id: None,
+        guild_id: 106,
+        user_id: 36,
+        token: "token".into(),
+        roles: vec![10],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:106:36",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+    ctx.http
+        .fail_add_guild_member_role_with(Id::new(10), 500, None);
+
+    let ok = verify(&ctx, Id::new(106), Id::new(36), "token").await;
+    assert!(!ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 106i64, "user_id": 36i64})
+        .await
+        .unwrap()
+        .expect("active quarantine record should remain after transient failure");
+    assert!(!remaining.released);
+    assert_eq!(remaining.roles, vec![10]);
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:106:36").await;
+    assert_eq!(cached, Some("token".into()));
+}
+
+#[tokio::test]
+async fn test_verify_permission_403_keeps_record() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 107, 37).await;
+    let record = Quarantine {
+        id: None,
+        guild_id: 107,
+        user_id: 37,
+        token: "token".into(),
+        roles: vec![10],
+        released: false,
+    };
+    ctx.mongo
+        .quarantines
+        .insert_one(record)
+        .await
+        .unwrap();
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:107:37",
+        &"token",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+    ctx.http
+        .fail_add_guild_member_role_with(Id::new(10), 403, Some(50013));
+
+    let ok = verify(&ctx, Id::new(107), Id::new(37), "token").await;
+    assert!(!ok);
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 107i64, "user_id": 37i64})
+        .await
+        .unwrap()
+        .expect("active quarantine record should remain after permission failure");
+    assert!(!remaining.released);
+    assert_eq!(remaining.roles, vec![10]);
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:107:37").await;
+    assert_eq!(cached, Some("token".into()));
 }

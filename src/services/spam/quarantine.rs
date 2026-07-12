@@ -1,8 +1,9 @@
 use deadpool_redis::Pool;
 use mongodb::bson::{doc, to_bson};
+use twilight_http::{Error as HttpError, api_error::ApiError, error::ErrorType};
 use twilight_model::id::{
     Id,
-    marker::{GuildMarker, UserMarker},
+    marker::{GuildMarker, RoleMarker, UserMarker},
 };
 
 use crate::{
@@ -47,8 +48,9 @@ pub async fn verify(
         .map(|record| record.filter(|record| !record.released))
     {
         let mut unrestored_roles = Vec::new();
-        if let Some(role) =
-            RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
+        let quarantine_role =
+            RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await;
+        if let Some(role) = &quarantine_role
             && let Err(e) = ctx
                 .http
                 .remove_guild_member_role(guild_id, user_id, Id::new(role.role_id))
@@ -56,13 +58,61 @@ pub async fn verify(
         {
             tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), error = %e, "failed to remove quarantine role");
         }
+        let quarantine_role_id = quarantine_role.map(|role| role.role_id);
+        // Owned copy: the cache reference is a DashMap shard guard and must not
+        // be held across the awaits below.
+        let cached_guild_roles: Option<std::collections::HashSet<u64>> = ctx
+            .cache
+            .guild_roles(guild_id)
+            .map(|ids| ids.iter().map(|id| id.get()).collect());
         for id in record.roles.iter() {
+            if Some(*id) == quarantine_role_id {
+                tracing::warn!(
+                    guild_id = guild_id.get(),
+                    user_id = user_id.get(),
+                    role_id = *id,
+                    "snapshot contained the quarantine role; skipping restore"
+                );
+                continue;
+            }
+            if let Some(guild_roles) = &cached_guild_roles
+                && !guild_roles.contains(id)
+            {
+                tracing::warn!(
+                    guild_id = guild_id.get(),
+                    user_id = user_id.get(),
+                    role_id = *id,
+                    "role no longer exists in guild; skipping restore"
+                );
+                continue;
+            }
+            let managed = ctx
+                .cache
+                .role(Id::new(*id))
+                .map(|role| role.managed);
+            if managed == Some(true) {
+                tracing::warn!(
+                    guild_id = guild_id.get(),
+                    user_id = user_id.get(),
+                    role_id = *id,
+                    "managed role cannot be manually restored; skipping"
+                );
+                continue;
+            }
             if let Err(e) = ctx
                 .http
                 .add_guild_member_role(guild_id, user_id, Id::new(*id))
                 .await
             {
-                tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "failed to restore member role");
+                if is_permanent_restore_error(&e) {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "role permanently unrestorable (unknown role); skipping");
+                    continue;
+                }
+                if is_permission_error(&e) {
+                    tracing::error!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "missing permissions to restore role; check the bot's role is above this role in the hierarchy; user remains quarantined until fixed");
+                } else {
+                    tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = *id, error = %e, "failed to restore member role");
+                }
                 unrestored_roles.push(*id);
             }
         }
@@ -169,6 +219,11 @@ pub async fn quarantine_member(
     token: &str,
 ) {
     let key = quarantine_key(guild_id.get(), user_id.get());
+    let quarantine_role =
+        RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await;
+    let quarantine_role_id = quarantine_role
+        .as_ref()
+        .map(|role| role.role_id);
     let Some(member_ref) = ctx.cache.member(guild_id, user_id) else {
         tracing::warn!(
             guild_id = guild_id.get(),
@@ -179,7 +234,40 @@ pub async fn quarantine_member(
         return;
     };
 
-    let roles = member_ref.roles().to_vec();
+    // Exclude roles that can never be restored by verify(): the quarantine
+    // role itself (re-quarantine) and managed roles, which Discord refuses to
+    // manually assign or remove. Roles absent from the cache are kept.
+    let roles: Vec<Id<RoleMarker>> = member_ref
+        .roles()
+        .iter()
+        .copied()
+        .filter(|r| {
+            if Some(r.get()) == quarantine_role_id {
+                tracing::warn!(
+                    guild_id = guild_id.get(),
+                    user_id = user_id.get(),
+                    role_id = r.get(),
+                    "member already holds quarantine role; excluding from snapshot"
+                );
+                return false;
+            }
+            if ctx
+                .cache
+                .role(*r)
+                .map(|role| role.managed)
+                == Some(true)
+            {
+                tracing::debug!(
+                    guild_id = guild_id.get(),
+                    user_id = user_id.get(),
+                    role_id = r.get(),
+                    "excluding managed role from quarantine snapshot"
+                );
+                return false;
+            }
+            true
+        })
+        .collect();
     let record = Quarantine {
         id: None,
         guild_id: guild_id.get(),
@@ -223,7 +311,7 @@ pub async fn quarantine_member(
             tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = r.get(), error = %e, "failed to remove member role for quarantine");
         }
     }
-    if let Some(role) = RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await
+    if let Some(role) = &quarantine_role
         && let Err(e) = ctx
             .http
             .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
@@ -243,6 +331,43 @@ pub async fn purge_cache(pool: &Pool, guild_id: u64, user_id: u64) {
 
 fn quarantine_key(guild_id: u64, user_id: u64) -> String {
     format!("spam:quarantine:{guild_id}:{user_id}")
+}
+
+const UNKNOWN_ROLE_CODE: u64 = 10011;
+
+/// Extract (HTTP status, Discord JSON error code) from an anyhow-wrapped
+/// Discord API error, if it is one.
+fn api_error_parts(error: &anyhow::Error) -> Option<(u16, Option<u64>)> {
+    if let Some(ErrorType::Response { error, status, .. }) = error
+        .downcast_ref::<HttpError>()
+        .map(HttpError::kind)
+    {
+        let code = match error {
+            ApiError::General(general) => Some(general.code),
+            _ => None,
+        };
+        return Some((status.get(), code));
+    }
+
+    // Real twilight errors cannot be constructed in tests, so the mock client
+    // injects its own typed error instead.
+    #[cfg(any(test, feature = "test-utils"))]
+    if let Some(mock) = error.downcast_ref::<crate::context::mock_http::MockHttpError>() {
+        return Some((mock.status, mock.code));
+    }
+
+    None
+}
+
+fn is_permanent_restore_error(error: &anyhow::Error) -> bool {
+    matches!(
+        api_error_parts(error),
+        Some((_, Some(UNKNOWN_ROLE_CODE)))
+    )
+}
+
+fn is_permission_error(error: &anyhow::Error) -> bool {
+    matches!(api_error_parts(error), Some((403, _)))
 }
 
 #[cfg(any(test, feature = "test-utils"))]

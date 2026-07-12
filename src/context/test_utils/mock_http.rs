@@ -47,6 +47,27 @@ pub struct InteractionRecord {
     pub response: InteractionResponse,
 }
 
+/// Downcastable stand-in for a Discord API error response. Real
+/// `twilight_http::Error` values cannot be constructed outside the crate, so
+/// error-classification code under test cfg also downcasts to this type.
+#[derive(Debug, Clone, Copy)]
+pub struct MockHttpError {
+    pub status: u16,
+    pub code: Option<u64>,
+}
+
+impl std::fmt::Display for MockHttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "mock http error: status {}", self.status)?;
+        if let Some(code) = self.code {
+            write!(f, ", discord code {code}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for MockHttpError {}
+
 pub struct MockResponse<T> {
     data: T,
 }
@@ -250,6 +271,7 @@ pub struct MockClient {
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
     member_roles: Mutex<MemberRoles>,
     fail_next_add_guild_member_role: AtomicBool,
+    add_role_failures: Mutex<HashMap<Id<RoleMarker>, MockHttpError>>,
     next_id: AtomicU64,
 }
 
@@ -267,6 +289,7 @@ impl MockClient {
             channels: Mutex::new(HashMap::new()),
             member_roles: Mutex::new(HashMap::new()),
             fail_next_add_guild_member_role: AtomicBool::new(false),
+            add_role_failures: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
         }
     }
@@ -306,6 +329,20 @@ impl MockClient {
     pub fn fail_next_add_guild_member_role(&self) {
         self.fail_next_add_guild_member_role
             .store(true, Ordering::SeqCst);
+    }
+
+    /// Make the next `add_guild_member_role` for `role_id` fail with a typed,
+    /// downcastable error carrying the given HTTP status and Discord error code.
+    pub fn fail_add_guild_member_role_with(
+        &self,
+        role_id: Id<RoleMarker>,
+        status: u16,
+        code: Option<u64>,
+    ) {
+        self.add_role_failures
+            .lock()
+            .unwrap()
+            .insert(role_id, MockHttpError { status, code });
     }
 
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> MockCreateMessage<'_> {
@@ -380,6 +417,15 @@ impl MockClient {
             return Err(anyhow::anyhow!(
                 "mock add_guild_member_role failure"
             ));
+        }
+
+        if let Some(err) = self
+            .add_role_failures
+            .lock()
+            .unwrap()
+            .remove(&role_id)
+        {
+            return Err(anyhow::Error::new(err));
         }
 
         let mut member_roles = self.member_roles.lock().unwrap();
