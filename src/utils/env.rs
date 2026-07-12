@@ -44,5 +44,50 @@ where
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Serializes tests that mutate process-global env vars. Removes `keys`
+    /// on acquisition and again on drop (including on panic).
+    pub(crate) struct EnvGuard {
+        keys: &'static [&'static str],
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl EnvGuard {
+        pub(crate) fn acquire(keys: &'static [&'static str]) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let guard = Self { keys, _lock: lock };
+            guard.clear();
+            guard
+        }
+
+        pub(crate) fn set(&self, key: &str, value: &str) {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        fn clear(&self) {
+            for key in self.keys {
+                unsafe {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            self.clear();
+        }
+    }
+}
+
+#[cfg(test)]
 #[path = "tests/env.rs"]
 mod tests;

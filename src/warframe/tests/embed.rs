@@ -9,6 +9,10 @@ use twilight_model::guild::{
     PremiumTier, SystemChannelFlags, VerificationLevel,
 };
 
+// The mock redis store is process-global and these tests share the
+// `wf:steel-path` cache key; serialize the tests that write it.
+static STEEL_PATH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn make_guild(id: Id<GuildMarker>, name: &str) -> Guild {
     Guild {
         afk_channel_id: None,
@@ -89,6 +93,7 @@ fn test_ttl_from_expiry_invalid() {
 
 #[tokio::test]
 async fn test_steel_path_field_detects_umbra() {
+    let _guard = STEEL_PATH_LOCK.lock().await;
     let ctx = build_context().await;
     let expiry = (Utc::now() + chrono::Duration::minutes(30)).to_rfc3339();
     let activation = Utc::now().to_rfc3339();
@@ -111,6 +116,7 @@ async fn test_steel_path_field_detects_umbra() {
 
 #[tokio::test]
 async fn test_status_embed_footer_and_fields() {
+    let _guard = STEEL_PATH_LOCK.lock().await;
     let ctx = build_context().await;
     let exp = (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
 
@@ -165,6 +171,7 @@ async fn test_ttl_from_expiry_future() {
 
 #[tokio::test]
 async fn test_steel_path_field_umbra() {
+    let _guard = STEEL_PATH_LOCK.lock().await;
     let ctx = Arc::new(
         ContextBuilder::new()
             .watchers(false)

@@ -84,6 +84,7 @@ fn env_string(name: &str, default: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::env::test_support::EnvGuard;
 
     const ENV_KEYS: &[&str] = &[
         "SCAM_DETECT_URL",
@@ -97,17 +98,9 @@ mod tests {
         "SCAM_DETECT_JOB_TTL_SECS",
     ];
 
-    fn clear_env() {
-        for key in ENV_KEYS {
-            unsafe {
-                std::env::remove_var(key);
-            }
-        }
-    }
-
     #[test]
     fn from_env_uses_scam_detect_defaults() {
-        clear_env();
+        let _env = EnvGuard::acquire(ENV_KEYS);
 
         let config = ScamDetectConfig::from_env();
 
@@ -128,11 +121,9 @@ mod tests {
 
     #[test]
     fn from_env_allows_url_and_token_overrides() {
-        clear_env();
-        unsafe {
-            std::env::set_var("SCAM_DETECT_URL", " http://detector.local:9000 ");
-            std::env::set_var("SCAM_DETECT_TOKEN", " secret ");
-        }
+        let env = EnvGuard::acquire(ENV_KEYS);
+        env.set("SCAM_DETECT_URL", " http://detector.local:9000 ");
+        env.set("SCAM_DETECT_TOKEN", " secret ");
 
         let config = ScamDetectConfig::from_env();
 
@@ -141,7 +132,5 @@ mod tests {
             Some("http://detector.local:9000")
         );
         assert_eq!(config.token.as_deref(), Some("secret"));
-
-        clear_env();
     }
 }
