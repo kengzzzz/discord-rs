@@ -466,3 +466,40 @@ async fn admin_scam_detect_disable_sets_guild_setting() {
     let record = last_message(&ctx.http).expect("message record");
     assert!(matches!(record.kind, MessageOp::Update));
 }
+
+#[tokio::test]
+async fn admin_scam_detect_guild_cache_miss_reports_error() {
+    let ctx = build_context().await;
+    let (interaction, data) = command_interaction_with_options(
+        "admin",
+        Some(1),
+        admin_scam_detect_options("enable"),
+    );
+
+    AdminCommand::handle(ctx.clone(), interaction, data).await;
+
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
+    let expected = embed::guild_unavailable_embed().unwrap();
+    assert_eq!(record.embeds[0].title, expected.title);
+}
+
+#[tokio::test]
+async fn warframe_build_guild_cache_miss_reports_error() {
+    let ctx = build_context().await;
+    let options = vec![CommandDataOption {
+        name: "build".into(),
+        value: CommandOptionValue::SubCommand(vec![CommandDataOption {
+            name: "item".into(),
+            value: CommandOptionValue::String("test".into()),
+        }]),
+    }];
+    let (interaction, data) = command_interaction_with_options("warframe", Some(1), options);
+
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+
+    let record = last_message(&ctx.http).expect("message record");
+    assert!(matches!(record.kind, MessageOp::Update));
+    let expected = embed::guild_unavailable_embed().unwrap();
+    assert_eq!(record.embeds[0].title, expected.title);
+}

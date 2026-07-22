@@ -10,7 +10,10 @@ use crate::{
     context::Context,
     dbs::mongo::models::role::RoleEnum,
     services::{notification::NotificationService, role_message},
-    utils::embed,
+    utils::{
+        embed,
+        interaction::{require_guild_ref, respond_cache_unavailable},
+    },
 };
 use std::sync::Arc;
 
@@ -96,21 +99,29 @@ impl AdminRoleCommand {
             }
         };
 
-        if let (Some(guild_ref), Some(role_ref)) =
-            (ctx.cache.guild(guild_id), ctx.cache.role(role_id))
+        if let Some(guild_ref) = require_guild_ref(&ctx, &interaction, guild_id, "admin role").await
         {
-            let embed = embed::set_role_embed(
-                &guild_ref,
-                &role_ref.resource().name,
-                role_id.get(),
-                self.role_type.value(),
-                &author.name,
-            )?;
-            ctx.http
-                .interaction(interaction.application_id)
-                .update_response(&interaction.token)
-                .embeds(Some(&[embed]))
-                .await?;
+            if let Some(role_ref) = ctx.cache.role(role_id) {
+                let embed = embed::set_role_embed(
+                    &guild_ref,
+                    &role_ref.resource().name,
+                    role_id.get(),
+                    self.role_type.value(),
+                    &author.name,
+                )?;
+                ctx.http
+                    .interaction(interaction.application_id)
+                    .update_response(&interaction.token)
+                    .embeds(Some(&[embed]))
+                    .await?;
+            } else {
+                tracing::warn!(
+                    guild_id = guild_id.get(),
+                    role_id = role_id.get(),
+                    "role cache miss; responding with error"
+                );
+                respond_cache_unavailable(&ctx, &interaction).await;
+            }
         }
 
         role_message::handler::ensure_message(&ctx, guild_id).await;

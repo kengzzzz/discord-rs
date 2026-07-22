@@ -9,7 +9,7 @@ use crate::{
     context::Context,
     dbs::mongo::models::channel::ChannelEnum,
     services::{notification::NotificationService, role_message},
-    utils::embed,
+    utils::{embed, interaction::require_guild_ref},
 };
 use std::sync::Arc;
 
@@ -77,7 +77,9 @@ impl AdminChannelCommand {
             }
         };
 
-        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
+        if let Some(guild_ref) =
+            require_guild_ref(&ctx, &interaction, guild_id, "admin channel").await
+        {
             let embed = embed::set_channel_embed(
                 &guild_ref,
                 &channel_name,

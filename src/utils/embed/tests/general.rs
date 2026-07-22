@@ -100,6 +100,16 @@ fn test_guild_only_embed() {
 }
 
 #[test]
+fn test_guild_unavailable_embed() {
+    let embed = guild_unavailable_embed().unwrap();
+    assert_eq!(
+        embed.title.as_deref(),
+        Some("Server data is not ready yet")
+    );
+    assert_eq!(embed.color, Some(COLOR_INVALID));
+}
+
+#[test]
 fn test_pong_embed_latency_na() {
     let embed = pong_embed(None).unwrap();
     assert_eq!(embed.title.as_deref(), Some("Pong!"));

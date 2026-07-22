@@ -2,7 +2,9 @@ use anyhow::Context as _;
 use twilight_interactions::command::{CommandModel, CreateCommand, DescLocalizations};
 use twilight_model::application::interaction::Interaction;
 
-use crate::{context::Context, services::build::BuildService};
+use crate::{
+    context::Context, services::build::BuildService, utils::interaction::require_guild_ref,
+};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -28,7 +30,9 @@ impl WarframeBuildCommand {
         let guild_id = interaction
             .guild_id
             .context("parse guild_id failed")?;
-        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
+        if let Some(guild_ref) =
+            require_guild_ref(&ctx, &interaction, guild_id, "warframe build").await
+        {
             let embeds = BuildService::build_embeds(&ctx.reqwest, &guild_ref, &self.item).await?;
             ctx.http
                 .interaction(interaction.application_id)

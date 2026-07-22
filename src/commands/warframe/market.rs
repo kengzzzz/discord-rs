@@ -7,6 +7,7 @@ use twilight_model::application::interaction::Interaction;
 use crate::{
     context::Context,
     services::market::{MarketKind, MarketService},
+    utils::interaction::require_guild_ref,
 };
 use std::sync::Arc;
 
@@ -57,7 +58,9 @@ impl WarframeMarketCommand {
         let guild_id = interaction
             .guild_id
             .context("parse guild_id failed")?;
-        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
+        if let Some(guild_ref) =
+            require_guild_ref(&ctx, &interaction, guild_id, "warframe market").await
+        {
             if let Some(session) =
                 MarketService::create_session(&ctx, &self.item, self.kind.into()).await?
             {
