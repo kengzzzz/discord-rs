@@ -300,6 +300,59 @@ async fn test_verify_success_and_delete_record() {
 }
 
 #[tokio::test]
+async fn test_verify_delete_spares_record_from_concurrent_requarantine() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 1, 21).await;
+    // "new" first: an unscoped delete removes the first match, so this ordering
+    // is what makes the test fail without the token filter.
+    for (token, roles) in [("new", vec![77u64]), ("old", Vec::new())] {
+        ctx.mongo
+            .quarantines
+            .insert_one(Quarantine {
+                id: None,
+                guild_id: 1,
+                user_id: 21,
+                token: token.into(),
+                roles,
+                released: false,
+            })
+            .await
+            .unwrap();
+    }
+    redis_set_ex(
+        &ctx.redis,
+        "spam:quarantine:1:21",
+        &"old",
+        crate::services::spam::CACHE_TTL,
+    )
+    .await;
+
+    let ok = verify(&ctx, Id::new(1), Id::new(21), "old").await;
+    assert!(ok);
+
+    let released = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 1i64, "user_id": 21i64, "token": "old"})
+        .await
+        .unwrap();
+    assert!(
+        released.is_none(),
+        "verified record should be deleted"
+    );
+
+    let survivor = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 1i64, "user_id": 21i64, "token": "new"})
+        .await
+        .unwrap()
+        .expect("re-quarantine record must survive the released record's delete");
+    assert!(!survivor.released);
+    assert_eq!(survivor.roles, vec![77]);
+}
+
+#[tokio::test]
 async fn test_verify_fails_on_mismatched_token() {
     let ctx = build_context().await;
     reset_quarantine_state(&ctx, 1, 5).await;

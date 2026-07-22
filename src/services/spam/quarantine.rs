@@ -152,6 +152,7 @@ pub async fn verify(
             .delete_one(doc! {
                 "guild_id": guild_id.get() as i64,
                 "user_id": user_id.get() as i64,
+                "token": token,
             })
             .await
         {
