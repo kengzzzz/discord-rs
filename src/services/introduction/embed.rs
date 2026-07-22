@@ -117,3 +117,7 @@ pub fn intro_error_embed() -> anyhow::Result<Embed> {
         .build();
     Ok(embed)
 }
+
+#[cfg(test)]
+#[path = "tests/embed.rs"]
+mod tests;

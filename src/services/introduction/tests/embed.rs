@@ -1,4 +1,7 @@
 use super::*;
+use crate::services::introduction::form::{
+    CLAN_MAX_CHARS, IGN_MAX_CHARS, IntroDetails, NAME_MAX_CHARS,
+};
 use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_model::gateway::payload::incoming::GuildCreate;
 use twilight_model::guild::{
@@ -6,11 +9,7 @@ use twilight_model::guild::{
     PremiumTier, SystemChannelFlags, VerificationLevel,
 };
 
-fn make_guild(
-    id: Id<GuildMarker>,
-    name: &str,
-    icon: Option<twilight_model::util::ImageHash>,
-) -> Guild {
+fn make_guild(id: Id<GuildMarker>, name: &str) -> Guild {
     Guild {
         afk_channel_id: None,
         afk_timeout: AfkTimeout::FIVE_MINUTES,
@@ -26,7 +25,7 @@ fn make_guild(
         explicit_content_filter: ExplicitContentFilter::None,
         features: Vec::new(),
         guild_scheduled_events: Vec::new(),
-        icon,
+        icon: None,
         id,
         joined_at: None,
         large: false,
@@ -67,52 +66,26 @@ fn make_guild(
 }
 
 #[test]
-fn test_footer_with_icon() {
-    let icon_bytes = b"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4";
-    let icon = twilight_model::util::ImageHash::parse(icon_bytes).unwrap();
-    let guild = make_guild(Id::new(1), "guild", Some(icon));
+fn test_intro_details_embed_worst_case_length_stays_under_discord_limit() {
+    let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
     cache.update(&GuildCreate::Available(guild.clone()));
     let guild_ref = cache
         .guild(guild.id)
         .expect("guild ref");
 
-    let footer = footer_with_icon(&guild_ref).unwrap();
-    let expected_url = format!(
-        "https://cdn.discordapp.com/icons/{}/{}.png",
-        guild.id, icon
-    );
-    assert_eq!(footer.text, guild.name);
-    assert_eq!(
-        footer.icon_url.as_deref(),
-        Some(expected_url.as_str())
-    );
-}
+    let details = IntroDetails {
+        name: "A".repeat(NAME_MAX_CHARS),
+        age: Some(255),
+        ign: Some("I".repeat(IGN_MAX_CHARS)),
+        clan: Some("C".repeat(CLAN_MAX_CHARS)),
+    };
 
-#[test]
-fn test_guild_only_embed() {
-    let embed = guild_only_embed().unwrap();
-    assert_eq!(
-        embed.title.as_deref(),
-        Some("This command can only be used in a server")
+    let embed = intro_details_embed(&guild_ref, "member_tag", &details).unwrap();
+    let description = embed.description.expect("description");
+    assert!(
+        description.chars().count() < 4096,
+        "description of {} chars must stay under Discord's 4096 limit",
+        description.chars().count()
     );
-    assert_eq!(embed.color, Some(COLOR_INVALID));
-}
-
-#[test]
-fn test_guild_unavailable_embed() {
-    let embed = guild_unavailable_embed().unwrap();
-    assert_eq!(
-        embed.title.as_deref(),
-        Some("Server data is not ready yet")
-    );
-    assert_eq!(embed.color, Some(COLOR_INVALID));
-}
-
-#[test]
-fn test_pong_embed_latency_na() {
-    let embed = pong_embed(None).unwrap();
-    assert_eq!(embed.title.as_deref(), Some("Pong!"));
-    assert_eq!(embed.description.as_deref(), Some("Latency: N/A"));
-    assert_eq!(embed.color, Some(COLOR));
 }

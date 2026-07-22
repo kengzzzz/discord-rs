@@ -1,6 +1,9 @@
 use super::*;
 use crate::context::{Context, ContextBuilder, mock_http::MockClient as Client};
 
+// ITEMS and LAST_UPDATE are process-global; serialize the tests that mutate them.
+static MARKET_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 async fn build_context() -> Arc<Context> {
     let ctx = ContextBuilder::new()
         .http(Client::new())
@@ -13,6 +16,7 @@ async fn build_context() -> Arc<Context> {
 
 #[tokio::test]
 async fn test_set_items_and_search() {
+    let _guard = MARKET_LOCK.lock().await;
     let mut data: Vec<MarketEntry> = (0..30)
         .map(|i| MarketEntry {
             name: format!("Item{:02}", 29 - i),
@@ -31,6 +35,7 @@ async fn test_set_items_and_search() {
 
 #[tokio::test]
 async fn test_maybe_refresh_updates() {
+    let _guard = MARKET_LOCK.lock().await;
     let ctx = build_context().await;
     ctx.reqwest.add_json_response(
         "https://api.warframe.market/v2/items",
@@ -44,6 +49,7 @@ async fn test_maybe_refresh_updates() {
 
 #[tokio::test]
 async fn test_find_item() {
+    let _guard = MARKET_LOCK.lock().await;
     let entries = vec![
         MarketEntry { name: "Apple".into(), item_id: "apple-id".into(), slug: "apple".into() },
         MarketEntry { name: "Banana".into(), item_id: "banana-id".into(), slug: "banana".into() },

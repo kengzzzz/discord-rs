@@ -111,7 +111,7 @@ impl NotificationService {
         tokio::spawn(async move {
             let token = shutdown::get_token();
             let map = Self::init_all(ctx, token.clone()).await;
-            *HANDLES.write().await = map;
+            Self::merge_initial_handles(map).await;
 
             token.cancelled().await;
 
@@ -124,20 +124,43 @@ impl NotificationService {
         })
     }
 
-    pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {
-        let token = shutdown::get_token();
-        {
-            let mut guard = HANDLES.write().await;
-            if let Some(old) = guard.remove(&guild_id) {
-                for h in old {
+    async fn merge_initial_handles(map: HashMap<u64, Vec<JoinHandle<()>>>) {
+        let mut guard = HANDLES.write().await;
+        for (guild_id, handles) in map {
+            if let std::collections::hash_map::Entry::Vacant(entry) = guard.entry(guild_id) {
+                entry.insert(handles);
+            } else {
+                tracing::warn!(
+                    guild_id = guild_id,
+                    "Notification tasks were reloaded during startup init. Aborting startup tasks."
+                );
+                for h in handles {
                     h.abort();
                 }
             }
         }
+    }
+
+    pub async fn reload_guild(ctx: &Arc<Context>, guild_id: u64) {
+        let token = shutdown::get_token();
+        // Hold the lock across remove+spawn+insert so concurrent reload_guild calls
+        // for the same guild are serialized: the second call's remove step always
+        // sees (and aborts) whatever the first call inserted, instead of both
+        // spawning independently and one insert silently dropping the other's
+        // still-running handles.
+        let mut guard = HANDLES.write().await;
+        if let Some(old) = guard.remove(&guild_id) {
+            for h in old {
+                h.abort();
+            }
+        }
         let new_handles = Self::init_guild(ctx, guild_id, token.clone()).await;
         if !new_handles.is_empty() {
-            let mut guard = HANDLES.write().await;
             guard.insert(guild_id, new_handles);
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod.rs"]
+mod tests;

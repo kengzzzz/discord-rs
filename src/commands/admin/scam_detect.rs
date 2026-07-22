@@ -4,7 +4,11 @@ use twilight_interactions::command::{
 };
 use twilight_model::application::interaction::Interaction;
 
-use crate::{context::Context, services::guild_settings::GuildSettingsService, utils::embed};
+use crate::{
+    context::Context,
+    services::guild_settings::GuildSettingsService,
+    utils::{embed, interaction::require_guild_ref},
+};
 use std::sync::Arc;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -54,7 +58,9 @@ impl AdminScamDetectCommand {
 
         GuildSettingsService::set_scam_detect_enabled(&ctx, guild_id.get(), enabled).await?;
 
-        if let Some(guild_ref) = ctx.cache.guild(guild_id) {
+        if let Some(guild_ref) =
+            require_guild_ref(&ctx, &interaction, guild_id, "admin scam-detect").await
+        {
             let embed = embed::set_scam_detect_embed(
                 &guild_ref,
                 enabled,

@@ -38,12 +38,17 @@ impl MarketService {
             .build())
     }
 
+    fn sanitize_code_block(text: &str) -> String {
+        text.replace('`', "")
+    }
+
     fn build_fields(
         orders: &[session::OrderInfo],
         item: &str,
         kind: &MarketKind,
         rank: Option<u8>,
     ) -> Vec<EmbedField> {
+        let item = Self::sanitize_code_block(item);
         orders
             .iter()
             .take(5)
@@ -56,7 +61,7 @@ impl MarketService {
                     ),
                     format!(
                         "```/w {} Hi! I want to {}: \"{}\" for {} platinum. (warframe.market)```",
-                        o.ign,
+                        Self::sanitize_code_block(&o.ign),
                         kind.action(),
                         item,
                         o.platinum

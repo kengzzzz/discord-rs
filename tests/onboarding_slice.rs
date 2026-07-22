@@ -46,3 +46,31 @@ async fn onboarding_slice_assigns_guest_when_no_quarantine_exists() {
         JoinPlan::AssignGuest { role_id: 5, channel_id: 6 }
     );
 }
+
+#[tokio::test]
+async fn onboarding_slice_fails_closed_when_quarantine_config_is_incomplete() {
+    let mut ports = InMemoryOnboardingPorts::default();
+    ports
+        .tokens
+        .insert((1, 42), "token-1".into());
+    ports
+        .roles
+        .insert((1, RoleKind::Guest), 5);
+    ports
+        .channels
+        .insert((1, ChannelKind::Introduction), 6);
+    ports
+        .channels
+        .insert((1, ChannelKind::Quarantine), 9);
+
+    let plan = plan_member_join(&ports, 1, 42, false, false).await;
+
+    assert_eq!(
+        plan,
+        JoinPlan::QuarantineConfigIncomplete {
+            token: "token-1".into(),
+            missing_role: true,
+            missing_channel: false
+        }
+    );
+}

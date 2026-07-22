@@ -12,7 +12,8 @@ use discord_bot::{
         message::{Message, MessageEnum},
         role::{Role, RoleEnum},
     },
-    events::{interaction_create, message_create, message_delete, ready},
+    events::{message_create, message_delete, ready},
+    features::registry,
     services::health::HealthService,
     services::{
         guild_settings::GuildSettingsService,
@@ -26,8 +27,12 @@ use twilight_model::application::interaction::application_command::{
     CommandDataOption, CommandOptionValue,
 };
 use twilight_model::channel::Attachment;
+use twilight_model::guild::{Member, MemberFlags};
 use twilight_model::http::interaction::InteractionResponseType;
-use twilight_model::id::{Id, marker::GuildMarker};
+use twilight_model::id::{
+    Id,
+    marker::{GuildMarker, RoleMarker},
+};
 use utils::{
     event::{
         make_message, message_delete as make_message_delete, message_delete_bulk, ready_event,
@@ -248,7 +253,9 @@ async fn interaction_routing_dispatches_ping() {
     ready::handle(ctx.clone(), ready).await;
     let (interaction, _data) = command_interaction("ping", Some(1));
 
-    interaction_create::handle(ctx.clone(), interaction).await;
+    registry()
+        .handle_interaction(ctx.clone(), interaction)
+        .await;
 
     let record = last_message(&ctx.http).expect("message record");
     assert!(matches!(record.kind, MessageOp::Update));
@@ -281,7 +288,9 @@ async fn interaction_routing_dispatches_warframe_market_autocomplete() {
     }];
     let (interaction, _data) = autocomplete_interaction_with_options("warframe", Some(1), options);
 
-    interaction_create::handle(ctx.clone(), interaction).await;
+    registry()
+        .handle_interaction(ctx.clone(), interaction)
+        .await;
 
     let response = last_interaction(&ctx.http).expect("interaction record");
     assert_eq!(
@@ -588,7 +597,23 @@ async fn message_create_campaign_quarantine_clears_broadcast_replicas() {
 async fn message_create_scam_image_quarantines_in_background() {
     let ctx = build_context_with_detector(Ok(scan_response("block", true))).await;
     let guild_id = Id::<GuildMarker>::new(1);
-    let guild = make_guild(guild_id, "guild");
+    let mut guild = make_guild(guild_id, "guild");
+    let mut msg = make_message(5001, 10, Some(guild_id.get()), 240, "");
+    guild.members.push(Member {
+        avatar: None,
+        avatar_decoration_data: None,
+        banner: None,
+        communication_disabled_until: None,
+        deaf: false,
+        flags: MemberFlags::empty(),
+        joined_at: None,
+        mute: false,
+        nick: None,
+        pending: false,
+        premium_since: None,
+        roles: vec![Id::<RoleMarker>::new(77)],
+        user: msg.author.clone(),
+    });
     cache_guild(&ctx.cache, guild);
 
     ctx.mongo
@@ -616,7 +641,6 @@ async fn message_create_scam_image_quarantines_in_background() {
         .await
         .unwrap();
 
-    let mut msg = make_message(5001, 10, Some(guild_id.get()), 240, "");
     let mut attachment = image_attachment(1, "scam.png", 1024, 640, 360);
     attachment.url = "https://cdn.example/scam.png".to_owned();
     msg.attachments = vec![attachment];

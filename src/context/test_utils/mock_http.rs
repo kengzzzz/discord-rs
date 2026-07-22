@@ -21,7 +21,7 @@ use twilight_model::user::User;
 use twilight_model::util::Timestamp;
 
 use serde_json::json;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct MessageRecord {
@@ -46,6 +46,27 @@ pub struct InteractionRecord {
     pub token: String,
     pub response: InteractionResponse,
 }
+
+/// Downcastable stand-in for a Discord API error response. Real
+/// `twilight_http::Error` values cannot be constructed outside the crate, so
+/// error-classification code under test cfg also downcasts to this type.
+#[derive(Debug, Clone, Copy)]
+pub struct MockHttpError {
+    pub status: u16,
+    pub code: Option<u64>,
+}
+
+impl std::fmt::Display for MockHttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "mock http error: status {}", self.status)?;
+        if let Some(code) = self.code {
+            write!(f, ", discord code {code}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for MockHttpError {}
 
 pub struct MockResponse<T> {
     data: T,
@@ -241,10 +262,27 @@ impl<'a> IntoFuture for MockInteractionResponseFuture<'a> {
     }
 }
 
+type MemberKey = (Id<GuildMarker>, Id<UserMarker>);
+type MemberRoles = HashMap<MemberKey, Vec<Id<RoleMarker>>>;
+
+/// One role-mutation request, recorded so tests can assert how many calls a
+/// code path costs and what it submitted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoleCall {
+    Add { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, role_id: Id<RoleMarker> },
+    Remove { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, role_id: Id<RoleMarker> },
+    Replace { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, roles: Vec<Id<RoleMarker>> },
+}
+
 pub struct MockClient {
     pub messages: Mutex<Vec<MessageRecord>>,
     pub interactions: Mutex<Vec<InteractionRecord>>,
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
+    member_roles: Mutex<MemberRoles>,
+    role_calls: Mutex<Vec<RoleCall>>,
+    fail_next_add_guild_member_role: AtomicBool,
+    fail_next_update_guild_member_roles: AtomicBool,
+    add_role_failures: Mutex<HashMap<Id<RoleMarker>, MockHttpError>>,
     next_id: AtomicU64,
 }
 
@@ -260,6 +298,11 @@ impl MockClient {
             messages: Mutex::new(Vec::new()),
             interactions: Mutex::new(Vec::new()),
             channels: Mutex::new(HashMap::new()),
+            member_roles: Mutex::new(HashMap::new()),
+            role_calls: Mutex::new(Vec::new()),
+            fail_next_add_guild_member_role: AtomicBool::new(false),
+            fail_next_update_guild_member_roles: AtomicBool::new(false),
+            add_role_failures: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
         }
     }
@@ -269,6 +312,59 @@ impl MockClient {
             .lock()
             .unwrap()
             .insert(channel, msgs);
+    }
+
+    pub fn set_member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        roles: Vec<Id<RoleMarker>>,
+    ) {
+        self.member_roles
+            .lock()
+            .unwrap()
+            .insert((guild_id, user_id), roles);
+    }
+
+    pub fn member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+    ) -> Vec<Id<RoleMarker>> {
+        self.member_roles
+            .lock()
+            .unwrap()
+            .get(&(guild_id, user_id))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn role_calls(&self) -> Vec<RoleCall> {
+        self.role_calls.lock().unwrap().clone()
+    }
+
+    pub fn fail_next_add_guild_member_role(&self) {
+        self.fail_next_add_guild_member_role
+            .store(true, Ordering::SeqCst);
+    }
+
+    pub fn fail_next_update_guild_member_roles(&self) {
+        self.fail_next_update_guild_member_roles
+            .store(true, Ordering::SeqCst);
+    }
+
+    /// Make the next `add_guild_member_role` for `role_id` fail with a typed,
+    /// downcastable error carrying the given HTTP status and Discord error code.
+    pub fn fail_add_guild_member_role_with(
+        &self,
+        role_id: Id<RoleMarker>,
+        status: u16,
+        code: Option<u64>,
+    ) {
+        self.add_role_failures
+            .lock()
+            .unwrap()
+            .insert(role_id, MockHttpError { status, code });
     }
 
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> MockCreateMessage<'_> {
@@ -332,20 +428,88 @@ impl MockClient {
 
     pub async fn add_guild_member_role(
         &self,
-        _guild_id: Id<GuildMarker>,
-        _user_id: Id<UserMarker>,
-        _role_id: Id<RoleMarker>,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Add { guild_id, user_id, role_id });
+
+        if self
+            .fail_next_add_guild_member_role
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow::anyhow!(
+                "mock add_guild_member_role failure"
+            ));
+        }
+
+        if let Some(err) = self
+            .add_role_failures
+            .lock()
+            .unwrap()
+            .remove(&role_id)
+        {
+            return Err(anyhow::Error::new(err));
+        }
+
+        let mut member_roles = self.member_roles.lock().unwrap();
+        let roles = member_roles
+            .entry((guild_id, user_id))
+            .or_default();
+        if !roles.contains(&role_id) {
+            roles.push(role_id);
+        }
         Ok(())
     }
 
     pub async fn remove_guild_member_role(
         &self,
-        _guild_id: Id<GuildMarker>,
-        _user_id: Id<UserMarker>,
-        _role_id: Id<RoleMarker>,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Remove { guild_id, user_id, role_id });
+
+        if let Some(roles) = self
+            .member_roles
+            .lock()
+            .unwrap()
+            .get_mut(&(guild_id, user_id))
+        {
+            roles.retain(|role| *role != role_id);
+        }
         Ok(())
+    }
+
+    pub async fn update_guild_member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        roles: &[Id<RoleMarker>],
+    ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Replace { guild_id, user_id, roles: roles.to_vec() });
+
+        if self
+            .fail_next_update_guild_member_roles
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow::anyhow!(
+                "mock update_guild_member_roles failure"
+            ));
+        }
+
+        self.member_roles
+            .lock()
+            .unwrap()
+            .insert((guild_id, user_id), roles.to_vec());
+        Ok(())
+    }
+
+    fn record_role_call(&self, call: RoleCall) {
+        self.role_calls
+            .lock()
+            .unwrap()
+            .push(call);
     }
 
     pub async fn message(

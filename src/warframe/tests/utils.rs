@@ -26,3 +26,9 @@ fn test_title_case_mixed() {
         "**Hello World** ends"
     );
 }
+
+#[test]
+fn test_title_case_non_ascii() {
+    assert_eq!(title_case("éCLAIR ÉTÉ"), "**Éclair Été** ends");
+    assert_eq!(title_case("ПРИВЕТ мир"), "**Привет Мир** ends");
+}

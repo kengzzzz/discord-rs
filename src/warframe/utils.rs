@@ -19,11 +19,11 @@ pub fn title_case(s: &str) -> String {
             first_word = false;
         }
 
-        let mut bytes = part.bytes();
-        if let Some(first) = bytes.next() {
-            out.push(first.to_ascii_uppercase() as char);
-            for b in bytes {
-                out.push(b.to_ascii_lowercase() as char);
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            out.extend(first.to_uppercase());
+            for c in chars {
+                out.extend(c.to_lowercase());
             }
         }
     }

@@ -85,3 +85,37 @@ fn test_parse_modal_requires_name() {
     let empty = build_data(Some("   "), Some("10"), None, None);
     assert!(parse_modal(&empty).is_none());
 }
+
+#[test]
+fn test_parse_modal_truncates_overlong_fields() {
+    let long_name = "A".repeat(500);
+    let long_ign = "I".repeat(500);
+    let long_clan = "C".repeat(500);
+    let data = build_data(
+        Some(&long_name),
+        Some("21"),
+        Some(&long_ign),
+        Some(&long_clan),
+    );
+
+    let result = parse_modal(&data).unwrap();
+    assert_eq!(result.name.chars().count(), NAME_MAX_CHARS);
+    assert_eq!(
+        result
+            .ign
+            .as_deref()
+            .unwrap()
+            .chars()
+            .count(),
+        IGN_MAX_CHARS
+    );
+    assert_eq!(
+        result
+            .clan
+            .as_deref()
+            .unwrap()
+            .chars()
+            .count(),
+        CLAN_MAX_CHARS
+    );
+}

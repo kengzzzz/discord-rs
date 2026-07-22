@@ -13,7 +13,7 @@ pub(super) const COLOR_INVALID: u32 = 0xE74C3C;
 
 pub mod general;
 
-pub use general::{footer_with_icon, guild_only_embed, pong_embed};
+pub use general::{footer_with_icon, guild_only_embed, guild_unavailable_embed, pong_embed};
 
 pub fn welcome_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,

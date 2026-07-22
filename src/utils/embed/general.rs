@@ -29,6 +29,16 @@ pub fn guild_only_embed() -> anyhow::Result<Embed> {
     Ok(embed)
 }
 
+pub fn guild_unavailable_embed() -> anyhow::Result<Embed> {
+    let embed = EmbedBuilder::new()
+        .color(COLOR_INVALID)
+        .title("Server data is not ready yet")
+        .description("The bot is still syncing with this server. Please try again in a moment.")
+        .validate()?
+        .build();
+    Ok(embed)
+}
+
 pub fn pong_embed(latency_ms: Option<u64>) -> anyhow::Result<Embed> {
     let desc = match latency_ms {
         Some(ms) => format!("Latency: {ms}ms"),

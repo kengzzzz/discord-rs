@@ -11,11 +11,23 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    dbs::redis::{redis_get, redis_set},
+    dbs::redis::{redis_delete, redis_get, redis_set},
     utils::ascii::ascii_contains_icase,
 };
 
 use deadpool_redis::Pool;
+
+async fn load_resume_token(pool: &Pool, redis_key: &str, coll_name: &str) -> Option<ResumeToken> {
+    let token_str = redis_get::<String>(pool, redis_key).await?;
+    match serde_json::from_str::<ResumeToken>(&token_str) {
+        Ok(token) => Some(token),
+        Err(e) => {
+            tracing::warn!(collection = coll_name, error = %e, "invalid resume token, starting from now");
+            redis_delete(pool, redis_key).await;
+            None
+        }
+    }
+}
 
 pub async fn spawn_watcher<T, F, Fut>(
     coll: Collection<T>,
@@ -36,13 +48,8 @@ where
             let mut builder = coll
                 .watch()
                 .with_options(options.clone());
-            if let Some(token_str) = redis_get::<String>(&pool, &redis_key).await {
-                match serde_json::from_str::<ResumeToken>(&token_str) {
-                    Ok(token) => builder = builder.resume_after(token),
-                    Err(e) => {
-                        tracing::warn!(collection = coll.name(), error = %e, "invalid resume token, starting from now")
-                    }
-                }
+            if let Some(resume_token) = load_resume_token(&pool, &redis_key, coll.name()).await {
+                builder = builder.resume_after(resume_token);
             }
 
             let mut stream = match builder.await {
@@ -53,6 +60,7 @@ where
                 Err(e) => {
                     if ascii_contains_icase(&e.to_string(), "resume") {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
+                        redis_delete(&pool, &redis_key).await;
                         match coll
                             .watch()
                             .with_options(options.clone())
@@ -120,3 +128,7 @@ where
     });
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/watcher.rs"]
+mod tests;

@@ -171,14 +171,14 @@ async fn test_hash_message_ignores_attachment_filenames_and_order() {
 #[tokio::test]
 async fn test_log_message_quarantines_multi_attachment_spam_with_renamed_files() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 9).await;
+    reset_spam_state(&ctx, 1, 109).await;
 
     for index in 1..SPAM_LIMIT as u64 {
         let message = make_message(
             500 + index,
             index,
             1,
-            9,
+            109,
             "",
             vec![
                 make_image_attachment(
@@ -215,7 +215,7 @@ async fn test_log_message_quarantines_multi_attachment_spam_with_renamed_files()
         599,
         SPAM_LIMIT as u64,
         1,
-        9,
+        109,
         "",
         vec![
             make_image_attachment(91, "final-a.png", 10, 100, 200),
@@ -233,14 +233,14 @@ async fn test_log_message_quarantines_multi_attachment_spam_with_renamed_files()
 #[tokio::test]
 async fn test_log_message_quarantines_campaign_with_different_image_sizes() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 10).await;
+    reset_spam_state(&ctx, 1, 110).await;
 
     for index in 1..CAMPAIGN_LIMIT as u64 {
         let message = make_message(
             600 + index,
             index,
             1,
-            10,
+            110,
             "check this out https://discord.com/invite/abc123",
             vec![
                 make_image_attachment(
@@ -277,7 +277,7 @@ async fn test_log_message_quarantines_campaign_with_different_image_sizes() {
         699,
         CAMPAIGN_LIMIT as u64,
         1,
-        10,
+        110,
         "check this out https://discord.com/invite/zzz999",
         vec![
             make_image_attachment(201, "final-1.png", 44, 144, 244),
@@ -295,14 +295,14 @@ async fn test_log_message_quarantines_campaign_with_different_image_sizes() {
 #[tokio::test]
 async fn test_log_message_campaign_does_not_double_count_same_channel() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 11).await;
+    reset_spam_state(&ctx, 1, 111).await;
 
     for message_id in 1..=CAMPAIGN_LIMIT as u64 {
         let message = make_message(
             700 + message_id,
             55,
             1,
-            11,
+            111,
             "visit https://example.com/deal/123456",
             vec![make_image_attachment(message_id, "image.png", 20 + message_id, 100, 200)],
         );
@@ -317,14 +317,14 @@ async fn test_log_message_campaign_does_not_double_count_same_channel() {
 #[tokio::test]
 async fn test_log_message_campaign_separates_different_domains() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 12).await;
+    reset_spam_state(&ctx, 1, 112).await;
 
     for channel_id in 1..=2_u64 {
         let message = make_message(
             800 + channel_id,
             channel_id,
             1,
-            12,
+            112,
             "check https://discord.com/invite/abc123",
             vec![make_image_attachment(channel_id, "first.png", 20, 100, 200)],
         );
@@ -339,7 +339,7 @@ async fn test_log_message_campaign_separates_different_domains() {
             800 + channel_id,
             channel_id,
             1,
-            12,
+            112,
             "check https://bad.example/malware/123456",
             vec![make_image_attachment(channel_id, "second.png", 20, 100, 200)],
         );
@@ -353,50 +353,129 @@ async fn test_log_message_campaign_separates_different_domains() {
 #[tokio::test]
 async fn test_log_message_and_clear() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 1).await;
+    reset_spam_state(&ctx, 1, 101).await;
 
     for i in 1..SPAM_LIMIT as u64 {
-        let msg = make_message(i, i, 1, 1, "spam", Vec::new());
+        let msg = make_message(i, i, 1, 101, "spam", Vec::new());
         assert!(matches!(
             log_message(&ctx, 1, &msg).await,
             LogOutcome::None
         ));
     }
-    let msg = make_message(99, SPAM_LIMIT as u64, 1, 1, "spam", Vec::new());
+    let msg = make_message(99, SPAM_LIMIT as u64, 1, 101, "spam", Vec::new());
     let token = match log_message(&ctx, 1, &msg).await {
         LogOutcome::NewlyQuarantined(token) => token,
         _ => panic!("expected quarantine trigger"),
     };
 
-    let quarantine_key = "spam:quarantine:1:1";
+    let quarantine_key = "spam:quarantine:1:101";
     let stored: String = redis_get(&ctx.redis, quarantine_key)
         .await
         .unwrap();
     assert_eq!(stored, token);
 
-    let key = "spam:log:1:1";
+    let key = "spam:log:1:101";
     let cleared: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
     assert!(cleared.is_none());
 
-    let new_msg = make_message(100, 1, 1, 1, "different", Vec::new());
+    let new_msg = make_message(100, 1, 1, 101, "different", Vec::new());
     log_message(&ctx, 1, &new_msg).await;
     let record: SpamRecord = redis_get(&ctx.redis, key)
         .await
         .unwrap();
     assert_eq!(record.histories.len(), 1);
 
-    clear_log(&ctx.redis, 1, 1).await;
+    clear_log(&ctx.redis, 1, 101).await;
     let none: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
     assert!(none.is_none());
 }
 
 #[tokio::test]
+async fn test_log_message_concurrent_calls_do_not_lose_updates() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 20).await;
+
+    let msg_a = make_message(901, 1, 1, 20, "same content", Vec::new());
+    let msg_b = make_message(902, 2, 1, 20, "same content", Vec::new());
+
+    let ctx_a = ctx.clone();
+    let ctx_b = ctx.clone();
+    let (result_a, result_b) = tokio::join!(
+        log_message(&ctx_a, 1, &msg_a),
+        log_message(&ctx_b, 1, &msg_b),
+    );
+
+    assert!(matches!(result_a, LogOutcome::None));
+    assert!(matches!(result_b, LogOutcome::None));
+
+    let key = "spam:log:1:20";
+    let record: SpamRecord = redis_get(&ctx.redis, key)
+        .await
+        .expect("expected spam record after concurrent calls");
+    assert_eq!(
+        record.histories.len(),
+        2,
+        "both concurrent history entries should be recorded, not just the last writer's"
+    );
+}
+
+#[tokio::test]
+async fn test_clear_log_waits_for_user_lock_before_deleting() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 21).await;
+
+    let msg = make_message(903, 1, 1, 21, "same content", Vec::new());
+    assert!(matches!(
+        log_message(&ctx, 1, &msg).await,
+        LogOutcome::None
+    ));
+
+    let key = "spam:log:1:21";
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(record.is_some());
+
+    let guard = lock_shard(1, 21).lock().await;
+    let pool = ctx.redis.clone();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let mut clear_task = tokio::spawn(async move {
+        let _ = started_tx.send(());
+        clear_log(&pool, 1, 21).await;
+    });
+
+    started_rx
+        .await
+        .expect("clear_log task should start");
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            &mut clear_task
+        )
+        .await
+        .is_err(),
+        "clear_log should wait while the per-user log lock is held"
+    );
+
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(
+        record.is_some(),
+        "clear_log should not delete the spam record until it owns the lock"
+    );
+
+    drop(guard);
+    clear_task
+        .await
+        .expect("clear_log task should finish after lock release");
+    let record: Option<SpamRecord> = redis_get(&ctx.redis, key).await;
+    assert!(record.is_none());
+}
+
+#[tokio::test]
 async fn test_log_message_is_idempotent_after_quarantine_claim() {
     let ctx = build_context().await;
-    reset_spam_state(&ctx, 1, 2).await;
+    reset_spam_state(&ctx, 1, 102).await;
 
     for i in 1..SPAM_LIMIT as u64 {
-        let msg = make_message(i + 100, i + 100, 1, 2, "spam", Vec::new());
+        let msg = make_message(i + 100, i + 100, 1, 102, "spam", Vec::new());
         assert!(matches!(
             log_message(&ctx, 1, &msg).await,
             LogOutcome::None
@@ -407,7 +486,7 @@ async fn test_log_message_is_idempotent_after_quarantine_claim() {
         199,
         SPAM_LIMIT as u64 + 100,
         1,
-        2,
+        102,
         "spam",
         Vec::new(),
     );
@@ -417,7 +496,7 @@ async fn test_log_message_is_idempotent_after_quarantine_claim() {
     };
 
     for i in 1..SPAM_LIMIT as u64 {
-        let msg = make_message(i + 200, i + 200, 1, 2, "spam", Vec::new());
+        let msg = make_message(i + 200, i + 200, 1, 102, "spam", Vec::new());
         assert!(matches!(
             log_message(&ctx, 1, &msg).await,
             LogOutcome::None
@@ -428,7 +507,7 @@ async fn test_log_message_is_idempotent_after_quarantine_claim() {
         299,
         SPAM_LIMIT as u64 + 200,
         1,
-        2,
+        102,
         "spam",
         Vec::new(),
     );
@@ -437,8 +516,82 @@ async fn test_log_message_is_idempotent_after_quarantine_claim() {
         LogOutcome::AlreadyQuarantined
     ));
 
-    let stored: String = redis_get(&ctx.redis, "spam:quarantine:1:2")
+    let stored: String = redis_get(&ctx.redis, "spam:quarantine:1:102")
         .await
         .unwrap();
     assert_eq!(stored, first_token);
+}
+
+#[tokio::test]
+async fn test_campaign_index_prunes_expired_entries() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 113).await;
+    let index_key = campaign_index_key(1, 113);
+
+    for shape in 1..=6_u64 {
+        let message = make_message(
+            900 + shape,
+            shape,
+            1,
+            113,
+            &"x".repeat(shape as usize),
+            Vec::new(),
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let stored: Vec<String> = redis_get(&ctx.redis, &index_key)
+        .await
+        .expect("campaign index missing");
+    assert_eq!(stored.len(), 6);
+
+    let expired = &stored[..4];
+    for key in expired {
+        redis_delete(&ctx.redis, key).await;
+    }
+
+    let message = make_message(999, 9, 1, 113, &"x".repeat(7), Vec::new());
+    assert!(matches!(
+        log_message(&ctx, 1, &message).await,
+        LogOutcome::None
+    ));
+
+    let pruned: Vec<String> = redis_get(&ctx.redis, &index_key)
+        .await
+        .expect("campaign index missing");
+    assert_eq!(pruned.len(), 3);
+    assert!(
+        pruned
+            .iter()
+            .all(|key| !expired.contains(key))
+    );
+}
+
+#[tokio::test]
+async fn test_campaign_index_caps_live_entries() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 114).await;
+
+    for shape in 1..=(CAMPAIGN_INDEX_LIMIT as u64 + 5) {
+        let message = make_message(
+            2000 + shape,
+            shape,
+            1,
+            114,
+            &"y".repeat(shape as usize),
+            Vec::new(),
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let stored: Vec<String> = redis_get(&ctx.redis, &campaign_index_key(1, 114))
+        .await
+        .expect("campaign index missing");
+    assert_eq!(stored.len(), CAMPAIGN_INDEX_LIMIT);
 }

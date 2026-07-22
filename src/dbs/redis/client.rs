@@ -103,6 +103,55 @@ where
     })
 }
 
+pub async fn redis_set_nx_ex<T>(pool: &Pool, key: &str, value: &T, ttl: usize) -> bool
+where
+    T: Serialize + Sync,
+{
+    async {
+        let json = serde_json::to_string(value).context("serialize value for redis_set_nx_ex")?;
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
+        let was_set = cmd("SET")
+            .arg(key)
+            .arg(json)
+            .arg("NX")
+            .arg("EX")
+            .arg(ttl)
+            .query_async::<bool>(&mut conn)
+            .await
+            .context("execute SET NX EX in redis")?;
+        Ok::<bool, anyhow::Error>(was_set)
+    }
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!(key, error = %e, "Redis SET NX EX failed");
+        false
+    })
+}
+
+pub async fn redis_exists(pool: &Pool, key: &str) -> bool {
+    async {
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
+        let exists = cmd("EXISTS")
+            .arg(key)
+            .query_async::<bool>(&mut conn)
+            .await
+            .context("execute EXISTS in redis")?;
+        Ok::<bool, anyhow::Error>(exists)
+    }
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!(key, error = %e, "Redis EXISTS failed");
+        // assume present so callers pruning by existence never drop a live key
+        true
+    })
+}
+
 pub async fn redis_delete(pool: &Pool, key: &str) {
     if let Err(e) = async {
         let mut conn = pool.get().await?;

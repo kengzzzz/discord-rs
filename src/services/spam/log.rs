@@ -1,6 +1,7 @@
 use anyhow::Error as AnyError;
 use chrono::Utc;
 use deadpool_redis::Pool;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use twilight_http::{Error as HttpError, api_error::ApiError, error::ErrorType};
@@ -11,15 +12,32 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::redis::{redis_delete, redis_get, redis_set_ex},
+    dbs::redis::{redis_delete, redis_exists, redis_get, redis_set_ex},
     services::{broadcast::BroadcastService, spam::quarantine},
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 
 const SPAM_LIMIT: usize = 4;
 const LOG_TTL: usize = 600;
 const CAMPAIGN_LIMIT: usize = 4;
 const CAMPAIGN_TTL: usize = 600;
+const CAMPAIGN_INDEX_LIMIT: usize = 64;
+const LOCK_SHARDS: usize = 256;
+
+static USER_LOCKS: Lazy<Vec<AsyncMutex<()>>> = Lazy::new(|| {
+    (0..LOCK_SHARDS)
+        .map(|_| AsyncMutex::new(()))
+        .collect()
+});
+
+fn lock_shard(guild_id: u64, user_id: u64) -> &'static AsyncMutex<()> {
+    let mut hasher = DefaultHasher::new();
+    (guild_id, user_id).hash(&mut hasher);
+    &USER_LOCKS[(hasher.finish() as usize) % LOCK_SHARDS]
+}
 
 #[derive(Serialize, Deserialize)]
 struct SpamRecord {
@@ -42,6 +60,13 @@ pub enum LogOutcome {
 }
 
 pub async fn clear_log(pool: &Pool, guild_id: u64, user_id: u64) {
+    let _guard = lock_shard(guild_id, user_id)
+        .lock()
+        .await;
+    clear_log_locked(pool, guild_id, user_id).await;
+}
+
+async fn clear_log_locked(pool: &Pool, guild_id: u64, user_id: u64) {
     let key = exact_log_key(guild_id, user_id);
     redis_delete(pool, &key).await;
 
@@ -59,6 +84,9 @@ pub async fn log_message(ctx: &Arc<Context>, guild_id: u64, message: &Message) -
     let campaign_hash = campaign_hash_message(message);
     let key = exact_log_key(guild_id, message.author.id.get());
     let now = Utc::now().timestamp();
+    let _guard = lock_shard(guild_id, message.author.id.get())
+        .lock()
+        .await;
     let mut record = redis_get(&ctx.redis, &key)
         .await
         .unwrap_or(SpamRecord {
@@ -139,7 +167,7 @@ async fn quarantine_detected(
     user_id: u64,
     to_delete: Vec<(u64, u64)>,
 ) -> LogOutcome {
-    clear_log(&ctx.redis, guild_id, user_id).await;
+    clear_log_locked(&ctx.redis, guild_id, user_id).await;
     BroadcastService::delete_replicas(ctx, &to_delete).await;
     let delete_ctx = ctx.clone();
     tokio::spawn(async move {
@@ -424,12 +452,21 @@ async fn persist_campaign_record(
     redis_set_ex(pool, &key, record, CAMPAIGN_TTL).await;
 
     let index_key = campaign_index_key(guild_id, user_id);
-    let mut index = redis_get::<Vec<String>>(pool, &index_key)
+    let stored = redis_get::<Vec<String>>(pool, &index_key)
         .await
         .unwrap_or_default();
-    if !index.iter().any(|entry| entry == &key) {
-        index.push(key);
+
+    let mut index = Vec::with_capacity(stored.len() + 1);
+    for entry in stored {
+        if entry != key && redis_exists(pool, &entry).await {
+            index.push(entry);
+        }
     }
+    index.push(key);
+    if index.len() > CAMPAIGN_INDEX_LIMIT {
+        index.drain(..index.len() - CAMPAIGN_INDEX_LIMIT);
+    }
+
     redis_set_ex(pool, &index_key, &index, CAMPAIGN_TTL).await;
 }
 
