@@ -1,21 +1,25 @@
 use std::time::Duration;
 
-use futures::StreamExt;
 use mongodb::{
     Collection,
     change_stream::event::{ChangeStreamEvent, ResumeToken},
+    error::ErrorKind,
     options::ChangeStreamOptions,
 };
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    dbs::redis::{redis_delete, redis_get, redis_set},
-    utils::ascii::ascii_contains_icase,
-};
+use crate::dbs::redis::{redis_delete, redis_get, redis_set};
 
 use deadpool_redis::Pool;
+
+fn is_unusable_resume_token(error: &mongodb::error::Error) -> bool {
+    matches!(
+        error.kind.as_ref(),
+        ErrorKind::Command(command) if matches!(command.code, 260 | 280 | 286)
+    )
+}
 
 async fn load_resume_token(pool: &Pool, redis_key: &str, coll_name: &str) -> Option<ResumeToken> {
     let token_str = redis_get::<String>(pool, redis_key).await?;
@@ -29,17 +33,37 @@ async fn load_resume_token(pool: &Pool, redis_key: &str, coll_name: &str) -> Opt
     }
 }
 
-pub async fn spawn_watcher<T, F, Fut>(
+async fn persist_resume_token(
+    pool: &Pool,
+    redis_key: &str,
+    coll_name: &str,
+    resume_token: Option<ResumeToken>,
+) {
+    let Some(resume_token) = resume_token else {
+        return;
+    };
+    match serde_json::to_string(&resume_token) {
+        Ok(token_str) => redis_set(pool, redis_key, &token_str).await,
+        Err(e) => {
+            tracing::warn!(collection = coll_name, error = %e, "failed to serialize resume token")
+        }
+    }
+}
+
+pub async fn spawn_watcher<T, F, Fut, R, RFut>(
     coll: Collection<T>,
     options: ChangeStreamOptions,
     pool: Pool,
     mut handler: F,
+    mut recover_continuity: R,
     token: CancellationToken,
 ) -> anyhow::Result<()>
 where
     T: DeserializeOwned + Unpin + Send + Sync + 'static,
     F: FnMut(ChangeStreamEvent<T>) -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,
+    R: FnMut() -> RFut + Send + 'static,
+    RFut: Future<Output = anyhow::Result<usize>> + Send + 'static,
 {
     let redis_key = format!("changestream:resume:{}", coll.name());
     tokio::spawn(async move {
@@ -48,17 +72,16 @@ where
             let mut builder = coll
                 .watch()
                 .with_options(options.clone());
-            if let Some(resume_token) = load_resume_token(&pool, &redis_key, coll.name()).await {
+            let resume_token = load_resume_token(&pool, &redis_key, coll.name()).await;
+            let resume_requested = resume_token.is_some();
+            if let Some(resume_token) = resume_token {
                 builder = builder.resume_after(resume_token);
             }
 
-            let mut stream = match builder.await {
-                Ok(stream) => {
-                    backoff = Duration::from_secs(1);
-                    stream
-                }
+            let (mut stream, continuity_lost) = match builder.await {
+                Ok(stream) => (stream, !resume_requested),
                 Err(e) => {
-                    if ascii_contains_icase(&e.to_string(), "resume") {
+                    if resume_requested && is_unusable_resume_token(&e) {
                         tracing::warn!(collection = coll.name(), error = %e, "resume token invalid, starting from now");
                         redis_delete(&pool, &redis_key).await;
                         match coll
@@ -66,10 +89,7 @@ where
                             .with_options(options.clone())
                             .await
                         {
-                            Ok(stream) => {
-                                backoff = Duration::from_secs(1);
-                                stream
-                            }
+                            Ok(stream) => (stream, true),
                             Err(e) => {
                                 tracing::error!(collection = coll.name(), error = %e, "failed to start change stream, retrying");
                                 tokio::select! {
@@ -92,24 +112,50 @@ where
                 }
             };
 
-            while !token.is_cancelled() {
+            if continuity_lost {
+                match recover_continuity().await {
+                    Ok(deleted) => {
+                        tracing::warn!(
+                            collection = coll.name(),
+                            deleted,
+                            "change stream continuity unavailable; purged collection caches"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(collection = coll.name(), error = %e, "failed to purge caches after change stream continuity loss, retrying");
+                        tokio::select! {
+                            _ = token.cancelled() => break,
+                            _ = sleep(backoff) => {}
+                        }
+                        backoff = (backoff * 2).min(Duration::from_secs(60));
+                        continue;
+                    }
+                }
+            }
+            backoff = Duration::from_secs(1);
+
+            while !token.is_cancelled() && stream.is_alive() {
                 let evt_res = tokio::select! {
-                    _ = token.cancelled() => None,
-                    evt = stream.next() => evt,
+                    _ = token.cancelled() => break,
+                    evt = stream.next_if_any() => evt,
                 };
-                let Some(evt_res) = evt_res else { break };
                 match evt_res {
                     Ok(evt) => {
-                        let resume_token = evt.id.clone();
-                        handler(evt).await;
-                        if let Ok(token_str) = serde_json::to_string(&resume_token) {
-                            redis_set(&pool, &redis_key, &token_str).await;
-                        } else {
-                            tracing::warn!(
-                                collection = coll.name(),
-                                "failed to serialize resume token"
-                            );
+                        if let Some(evt) = evt {
+                            handler(evt).await;
                         }
+                        persist_resume_token(
+                            &pool,
+                            &redis_key,
+                            coll.name(),
+                            stream.resume_token(),
+                        )
+                        .await;
+                    }
+                    Err(e) if is_unusable_resume_token(&e) => {
+                        tracing::warn!(collection = coll.name(), error = %e, "change stream continuity lost, restarting from now");
+                        redis_delete(&pool, &redis_key).await;
+                        break;
                     }
                     Err(e) => {
                         tracing::warn!(collection = coll.name(), error = %e, "change stream error, restarting");
