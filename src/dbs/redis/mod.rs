@@ -2,8 +2,8 @@
 pub mod client;
 #[cfg(not(any(test, feature = "test-utils")))]
 pub use client::{
-    new_pool, redis_delete, redis_exists, redis_get, redis_set, redis_set_ex, redis_set_nx,
-    redis_set_nx_ex,
+    new_pool, redis_delete, redis_delete_prefixes, redis_exists, redis_get, redis_set,
+    redis_set_ex, redis_set_nx, redis_set_nx_ex,
 };
 
 #[cfg(any(test, feature = "test-utils"))]

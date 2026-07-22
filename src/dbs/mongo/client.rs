@@ -86,9 +86,8 @@ impl MongoDB {
         if !pre_post_images_failed.is_empty() {
             tracing::warn!(
                 collections = pre_post_images_failed.join(", "),
-                "failed to enable changeStreamPreAndPostImages; delete-event cache invalidation \
-                 will not work for these collections and stale entries persist until the cache TTL \
-                 expires"
+                "failed to enable changeStreamPreAndPostImages; change events without required \
+                 document images will use collection-scoped cache invalidation"
             );
         }
 

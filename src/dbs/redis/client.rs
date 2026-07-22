@@ -166,3 +166,59 @@ pub async fn redis_delete(pool: &Pool, key: &str) {
         tracing::error!(key, error = %e, "Redis DEL failed")
     }
 }
+
+pub async fn redis_delete_prefixes(pool: &Pool, prefixes: &[String]) -> usize {
+    if prefixes.is_empty() {
+        return 0;
+    }
+
+    match async {
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
+        let mut cursor = 0_u64;
+        let mut deleted = 0_usize;
+
+        loop {
+            let (next_cursor, keys): (u64, Vec<String>) = cmd("SCAN")
+                .arg(cursor)
+                .arg("COUNT")
+                .arg(256)
+                .query_async(&mut conn)
+                .await
+                .context("scan Redis keys for prefix deletion")?;
+            let matches: Vec<String> = keys
+                .into_iter()
+                .filter(|key| {
+                    prefixes
+                        .iter()
+                        .any(|prefix| key.starts_with(prefix))
+                })
+                .collect();
+
+            if !matches.is_empty() {
+                deleted += cmd("DEL")
+                    .arg(matches)
+                    .query_async::<usize>(&mut conn)
+                    .await
+                    .context("delete Redis keys matching prefixes")?;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        Ok::<usize, anyhow::Error>(deleted)
+    }
+    .await
+    {
+        Ok(deleted) => deleted,
+        Err(e) => {
+            tracing::error!(?prefixes, error = %e, "Redis prefix deletion failed");
+            0
+        }
+    }
+}

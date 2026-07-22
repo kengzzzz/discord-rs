@@ -84,7 +84,59 @@ pub async fn redis_delete(_pool: &Pool, key: &str) {
     ttls.remove(key);
 }
 
+pub async fn redis_delete_prefixes(_pool: &Pool, prefixes: &[String]) -> usize {
+    let mut store = REDIS_STORE.lock().await;
+    let before = store.len();
+    store.retain(|key, _| {
+        !prefixes
+            .iter()
+            .any(|prefix| key.starts_with(prefix))
+    });
+    let deleted = before - store.len();
+
+    let mut ttls = REDIS_TTLS.lock().await;
+    ttls.retain(|key, _| {
+        !prefixes
+            .iter()
+            .any(|prefix| key.starts_with(prefix))
+    });
+    deleted
+}
+
 pub async fn redis_ttl(key: &str) -> Option<usize> {
     let ttls = REDIS_TTLS.lock().await;
     ttls.get(key).copied()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn delete_prefixes_removes_only_matching_keys_and_ttls() {
+        let pool = new_pool();
+        let prefix = "test:prefix-delete:matching:";
+        let other_key = "test:prefix-delete:other";
+        let resume_key = "changestream:resume:test-prefix-delete";
+        let matching_keys = [format!("{prefix}one"), format!("{prefix}two")];
+
+        for key in &matching_keys {
+            redis_set_ex(&pool, key, &"value", 60).await;
+        }
+        redis_set_ex(&pool, other_key, &"other", 60).await;
+        redis_set(&pool, resume_key, &"token").await;
+
+        let deleted = redis_delete_prefixes(&pool, &[prefix.to_owned()]).await;
+
+        assert_eq!(deleted, matching_keys.len());
+        for key in &matching_keys {
+            assert!(!redis_exists(&pool, key).await);
+            assert_eq!(redis_ttl(key).await, None);
+        }
+        assert!(redis_exists(&pool, other_key).await);
+        assert!(redis_exists(&pool, resume_key).await);
+
+        redis_delete(&pool, other_key).await;
+        redis_delete(&pool, resume_key).await;
+    }
 }
