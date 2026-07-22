@@ -12,7 +12,7 @@ use twilight_model::{
 
 use crate::{
     context::Context,
-    dbs::redis::{redis_delete, redis_get, redis_set_ex},
+    dbs::redis::{redis_delete, redis_exists, redis_get, redis_set_ex},
     services::{broadcast::BroadcastService, spam::quarantine},
 };
 use std::collections::hash_map::DefaultHasher;
@@ -24,6 +24,7 @@ const SPAM_LIMIT: usize = 4;
 const LOG_TTL: usize = 600;
 const CAMPAIGN_LIMIT: usize = 4;
 const CAMPAIGN_TTL: usize = 600;
+const CAMPAIGN_INDEX_LIMIT: usize = 64;
 const LOCK_SHARDS: usize = 256;
 
 static USER_LOCKS: Lazy<Vec<AsyncMutex<()>>> = Lazy::new(|| {
@@ -451,12 +452,21 @@ async fn persist_campaign_record(
     redis_set_ex(pool, &key, record, CAMPAIGN_TTL).await;
 
     let index_key = campaign_index_key(guild_id, user_id);
-    let mut index = redis_get::<Vec<String>>(pool, &index_key)
+    let stored = redis_get::<Vec<String>>(pool, &index_key)
         .await
         .unwrap_or_default();
-    if !index.iter().any(|entry| entry == &key) {
-        index.push(key);
+
+    let mut index = Vec::with_capacity(stored.len() + 1);
+    for entry in stored {
+        if entry != key && redis_exists(pool, &entry).await {
+            index.push(entry);
+        }
     }
+    index.push(key);
+    if index.len() > CAMPAIGN_INDEX_LIMIT {
+        index.drain(..index.len() - CAMPAIGN_INDEX_LIMIT);
+    }
+
     redis_set_ex(pool, &index_key, &index, CAMPAIGN_TTL).await;
 }
 

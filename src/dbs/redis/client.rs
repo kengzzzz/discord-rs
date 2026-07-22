@@ -131,6 +131,27 @@ where
     })
 }
 
+pub async fn redis_exists(pool: &Pool, key: &str) -> bool {
+    async {
+        let mut conn = pool
+            .get()
+            .await
+            .context("get redis connection")?;
+        let exists = cmd("EXISTS")
+            .arg(key)
+            .query_async::<bool>(&mut conn)
+            .await
+            .context("execute EXISTS in redis")?;
+        Ok::<bool, anyhow::Error>(exists)
+    }
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!(key, error = %e, "Redis EXISTS failed");
+        // assume present so callers pruning by existence never drop a live key
+        true
+    })
+}
+
 pub async fn redis_delete(pool: &Pool, key: &str) {
     if let Err(e) = async {
         let mut conn = pool.get().await?;

@@ -521,3 +521,77 @@ async fn test_log_message_is_idempotent_after_quarantine_claim() {
         .unwrap();
     assert_eq!(stored, first_token);
 }
+
+#[tokio::test]
+async fn test_campaign_index_prunes_expired_entries() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 113).await;
+    let index_key = campaign_index_key(1, 113);
+
+    for shape in 1..=6_u64 {
+        let message = make_message(
+            900 + shape,
+            shape,
+            1,
+            113,
+            &"x".repeat(shape as usize),
+            Vec::new(),
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let stored: Vec<String> = redis_get(&ctx.redis, &index_key)
+        .await
+        .expect("campaign index missing");
+    assert_eq!(stored.len(), 6);
+
+    let expired = &stored[..4];
+    for key in expired {
+        redis_delete(&ctx.redis, key).await;
+    }
+
+    let message = make_message(999, 9, 1, 113, &"x".repeat(7), Vec::new());
+    assert!(matches!(
+        log_message(&ctx, 1, &message).await,
+        LogOutcome::None
+    ));
+
+    let pruned: Vec<String> = redis_get(&ctx.redis, &index_key)
+        .await
+        .expect("campaign index missing");
+    assert_eq!(pruned.len(), 3);
+    assert!(
+        pruned
+            .iter()
+            .all(|key| !expired.contains(key))
+    );
+}
+
+#[tokio::test]
+async fn test_campaign_index_caps_live_entries() {
+    let ctx = build_context().await;
+    reset_spam_state(&ctx, 1, 114).await;
+
+    for shape in 1..=(CAMPAIGN_INDEX_LIMIT as u64 + 5) {
+        let message = make_message(
+            2000 + shape,
+            shape,
+            1,
+            114,
+            &"y".repeat(shape as usize),
+            Vec::new(),
+        );
+        assert!(matches!(
+            log_message(&ctx, 1, &message).await,
+            LogOutcome::None
+        ));
+    }
+
+    let stored: Vec<String> = redis_get(&ctx.redis, &campaign_index_key(1, 114))
+        .await
+        .expect("campaign index missing");
+    assert_eq!(stored.len(), CAMPAIGN_INDEX_LIMIT);
+}

@@ -71,6 +71,12 @@ where
     was_set
 }
 
+pub async fn redis_exists(_pool: &Pool, key: &str) -> bool {
+    tokio::task::yield_now().await;
+    let store = REDIS_STORE.lock().await;
+    store.contains_key(key)
+}
+
 pub async fn redis_delete(_pool: &Pool, key: &str) {
     let mut store = REDIS_STORE.lock().await;
     store.remove(key);
