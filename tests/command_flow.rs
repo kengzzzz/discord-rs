@@ -208,7 +208,7 @@ async fn warframe_build_command_embed() {
     let guild = make_guild(Id::new(1), "guild");
     cache_guild(&ctx.cache, guild.clone());
     ctx.reqwest.add_json_response(
-        "https://overframe.gg/api/v1/builds?item_name=test&author_id=10027&limit=5&sort_by=Score",
+        "https://overframe.gg/api/v1/builds/?item_name=test&author_id=10027&limit=5&sort_by=Score",
         "{\"results\":[{\"title\":\"Build\",\"url\":\"/b\",\"formas\":0,\"updated\":\"2023-01-01T00:00:00Z\",\"author\":{\"username\":\"t\",\"url\":\"/u\"}}]}"
     );
     let options = vec![CommandDataOption {
@@ -225,6 +225,19 @@ async fn warframe_build_command_embed() {
     let record = last_message(&ctx.http).expect("message record");
     assert!(matches!(record.kind, MessageOp::Update));
     assert!(!record.embeds.is_empty());
+    let embed = &record.embeds[0];
+    assert_eq!(embed.title.as_deref(), Some("Build"));
+    assert_eq!(
+        embed.url.as_deref(),
+        Some("https://overframe.gg/b")
+    );
+    assert_eq!(
+        embed
+            .author
+            .as_ref()
+            .map(|author| author.name.as_str()),
+        Some("test by t")
+    );
 
     let response = last_interaction(&ctx.http).expect("interaction record");
     assert_eq!(
@@ -234,6 +247,39 @@ async fn warframe_build_command_embed() {
     assert_eq!(
         response.response.data.unwrap().flags,
         Some(MessageFlags::EPHEMERAL)
+    );
+}
+
+#[tokio::test]
+async fn warframe_build_command_falls_back_to_general_results() {
+    let ctx = build_context().await;
+    let guild = make_guild(Id::new(1), "guild");
+    cache_guild(&ctx.cache, guild.clone());
+    ctx.reqwest.add_json_response(
+        "https://overframe.gg/api/v1/builds/?item_name=test&author_id=10027&limit=5&sort_by=Score",
+        "{\"results\":[]}",
+    );
+    ctx.reqwest.add_json_response(
+        "https://overframe.gg/api/v1/builds/?item_name=test&limit=5&sort_by=Score",
+        "{\"results\":[{\"title\":\"Fallback Build\",\"url\":\"/fallback\",\"formas\":1,\"updated\":\"2023-01-01T00:00:00Z\",\"author\":{\"username\":\"fallback\",\"url\":\"/u\"}}]}",
+    );
+    let options = vec![CommandDataOption {
+        name: "build".into(),
+        value: CommandOptionValue::SubCommand(vec![CommandDataOption {
+            name: "item".into(),
+            value: CommandOptionValue::String("test".into()),
+        }]),
+    }];
+    let (interaction, data) = command_interaction_with_options("warframe", Some(1), options);
+
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+
+    let record = last_message(&ctx.http).expect("message record");
+    let embed = &record.embeds[0];
+    assert_eq!(embed.title.as_deref(), Some("Fallback Build"));
+    assert_eq!(
+        embed.url.as_deref(),
+        Some("https://overframe.gg/fallback")
     );
 }
 

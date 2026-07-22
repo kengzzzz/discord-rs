@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::utils::http::HttpProvider;
 
 pub(super) const MAX_BUILDS: usize = 5;
-const API_URL: &str = "https://overframe.gg/api/v1/builds";
+const API_URL: &str = "https://overframe.gg/api/v1/builds/";
 
 #[derive(Deserialize)]
 pub(super) struct BuildAuthor {
