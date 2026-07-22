@@ -2,7 +2,6 @@ pub mod admin;
 pub mod ai;
 pub mod help;
 pub mod intro;
-pub mod member_onboarding;
 pub mod message_pipeline;
 pub mod ping;
 pub mod reaction_roles;

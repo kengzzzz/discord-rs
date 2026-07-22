@@ -12,7 +12,8 @@ use discord_bot::{
         message::{Message, MessageEnum},
         role::{Role, RoleEnum},
     },
-    events::{interaction_create, message_create, message_delete, ready},
+    events::{message_create, message_delete, ready},
+    features::registry,
     services::health::HealthService,
     services::{
         guild_settings::GuildSettingsService,
@@ -252,7 +253,9 @@ async fn interaction_routing_dispatches_ping() {
     ready::handle(ctx.clone(), ready).await;
     let (interaction, _data) = command_interaction("ping", Some(1));
 
-    interaction_create::handle(ctx.clone(), interaction).await;
+    registry()
+        .handle_interaction(ctx.clone(), interaction)
+        .await;
 
     let record = last_message(&ctx.http).expect("message record");
     assert!(matches!(record.kind, MessageOp::Update));
@@ -285,7 +288,9 @@ async fn interaction_routing_dispatches_warframe_market_autocomplete() {
     }];
     let (interaction, _data) = autocomplete_interaction_with_options("warframe", Some(1), options);
 
-    interaction_create::handle(ctx.clone(), interaction).await;
+    registry()
+        .handle_interaction(ctx.clone(), interaction)
+        .await;
 
     let response = last_interaction(&ctx.http).expect("interaction record");
     assert_eq!(
