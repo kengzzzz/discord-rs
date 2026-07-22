@@ -265,12 +265,23 @@ impl<'a> IntoFuture for MockInteractionResponseFuture<'a> {
 type MemberKey = (Id<GuildMarker>, Id<UserMarker>);
 type MemberRoles = HashMap<MemberKey, Vec<Id<RoleMarker>>>;
 
+/// One role-mutation request, recorded so tests can assert how many calls a
+/// code path costs and what it submitted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoleCall {
+    Add { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, role_id: Id<RoleMarker> },
+    Remove { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, role_id: Id<RoleMarker> },
+    Replace { guild_id: Id<GuildMarker>, user_id: Id<UserMarker>, roles: Vec<Id<RoleMarker>> },
+}
+
 pub struct MockClient {
     pub messages: Mutex<Vec<MessageRecord>>,
     pub interactions: Mutex<Vec<InteractionRecord>>,
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
     member_roles: Mutex<MemberRoles>,
+    role_calls: Mutex<Vec<RoleCall>>,
     fail_next_add_guild_member_role: AtomicBool,
+    fail_next_update_guild_member_roles: AtomicBool,
     add_role_failures: Mutex<HashMap<Id<RoleMarker>, MockHttpError>>,
     next_id: AtomicU64,
 }
@@ -288,7 +299,9 @@ impl MockClient {
             interactions: Mutex::new(Vec::new()),
             channels: Mutex::new(HashMap::new()),
             member_roles: Mutex::new(HashMap::new()),
+            role_calls: Mutex::new(Vec::new()),
             fail_next_add_guild_member_role: AtomicBool::new(false),
+            fail_next_update_guild_member_roles: AtomicBool::new(false),
             add_role_failures: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
         }
@@ -326,8 +339,17 @@ impl MockClient {
             .unwrap_or_default()
     }
 
+    pub fn role_calls(&self) -> Vec<RoleCall> {
+        self.role_calls.lock().unwrap().clone()
+    }
+
     pub fn fail_next_add_guild_member_role(&self) {
         self.fail_next_add_guild_member_role
+            .store(true, Ordering::SeqCst);
+    }
+
+    pub fn fail_next_update_guild_member_roles(&self) {
+        self.fail_next_update_guild_member_roles
             .store(true, Ordering::SeqCst);
     }
 
@@ -410,6 +432,8 @@ impl MockClient {
         user_id: Id<UserMarker>,
         role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Add { guild_id, user_id, role_id });
+
         if self
             .fail_next_add_guild_member_role
             .swap(false, Ordering::SeqCst)
@@ -444,6 +468,8 @@ impl MockClient {
         user_id: Id<UserMarker>,
         role_id: Id<RoleMarker>,
     ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Remove { guild_id, user_id, role_id });
+
         if let Some(roles) = self
             .member_roles
             .lock()
@@ -453,6 +479,37 @@ impl MockClient {
             roles.retain(|role| *role != role_id);
         }
         Ok(())
+    }
+
+    pub async fn update_guild_member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        roles: &[Id<RoleMarker>],
+    ) -> anyhow::Result<()> {
+        self.record_role_call(RoleCall::Replace { guild_id, user_id, roles: roles.to_vec() });
+
+        if self
+            .fail_next_update_guild_member_roles
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(anyhow::anyhow!(
+                "mock update_guild_member_roles failure"
+            ));
+        }
+
+        self.member_roles
+            .lock()
+            .unwrap()
+            .insert((guild_id, user_id), roles.to_vec());
+        Ok(())
+    }
+
+    fn record_role_call(&self, call: RoleCall) {
+        self.role_calls
+            .lock()
+            .unwrap()
+            .push(call);
     }
 
     pub async fn message(

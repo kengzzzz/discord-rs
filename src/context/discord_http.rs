@@ -64,6 +64,7 @@ pub enum DiscordOpKind {
     CreateReaction,
     AddGuildMemberRole,
     RemoveGuildMemberRole,
+    UpdateGuildMemberRoles,
     InteractionCreateResponse,
     InteractionUpdateResponse,
     InteractionCreateFollowup,
@@ -85,6 +86,7 @@ impl DiscordOpKind {
             Self::CreateReaction => "create_reaction",
             Self::AddGuildMemberRole => "add_guild_member_role",
             Self::RemoveGuildMemberRole => "remove_guild_member_role",
+            Self::UpdateGuildMemberRoles => "update_guild_member_roles",
             Self::InteractionCreateResponse => "interaction_create_response",
             Self::InteractionUpdateResponse => "interaction_update_response",
             Self::InteractionCreateFollowup => "interaction_create_followup",
@@ -96,7 +98,8 @@ impl DiscordOpKind {
             Self::InteractionCreateResponse
             | Self::InteractionUpdateResponse
             | Self::AddGuildMemberRole
-            | Self::RemoveGuildMemberRole => DiscordPriority::Critical,
+            | Self::RemoveGuildMemberRole
+            | Self::UpdateGuildMemberRoles => DiscordPriority::Critical,
             Self::CurrentUserApplication
             | Self::SetGlobalCommands
             | Self::CreatePrivateChannel
@@ -581,6 +584,29 @@ impl Client {
             move |client| async move {
                 client
                     .remove_guild_member_role(guild_id, user_id, role_id)
+                    .await
+                    .map(|_| ())
+            },
+        )
+        .await
+    }
+
+    /// Replace the member's entire role list in one request, so the swap is
+    /// atomic on Discord's side instead of one call per role.
+    pub async fn update_guild_member_roles(
+        &self,
+        guild_id: Id<GuildMarker>,
+        user_id: Id<UserMarker>,
+        roles: &[Id<RoleMarker>],
+    ) -> anyhow::Result<()> {
+        let roles = roles.to_vec();
+        self.execute(
+            DiscordOpKind::UpdateGuildMemberRoles.default_priority(),
+            DiscordOpKind::UpdateGuildMemberRoles,
+            move |client| async move {
+                client
+                    .update_guild_member(guild_id, user_id)
+                    .roles(&roles)
                     .await
                     .map(|_| ())
             },

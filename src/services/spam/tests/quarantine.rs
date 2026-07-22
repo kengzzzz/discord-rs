@@ -1,4 +1,6 @@
 use super::*;
+#[allow(unused_imports)]
+use crate::context::mock_http::RoleCall;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
 use crate::dbs::mongo::models::role::Role as DbRole;
 #[allow(unused_imports)]
@@ -688,6 +690,16 @@ async fn test_quarantine_snapshot_excludes_managed_roles() {
             .member_roles(Id::new(101), Id::new(31)),
         vec![Id::new(11), Id::new(900)]
     );
+    // Discord is never asked to remove the managed role: it is submitted as
+    // part of the new role list.
+    assert_eq!(
+        ctx.http.role_calls(),
+        vec![RoleCall::Replace {
+            guild_id: Id::new(101),
+            user_id: Id::new(31),
+            roles: vec![Id::new(11), Id::new(900)],
+        }]
+    );
 }
 
 #[tokio::test]
@@ -726,6 +738,152 @@ async fn test_requarantine_snapshot_excludes_quarantine_role() {
         ctx.http
             .member_roles(Id::new(102), Id::new(32)),
         vec![Id::new(900)]
+    );
+}
+
+#[tokio::test]
+async fn test_quarantine_member_swaps_roles_in_one_call() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 110, 40).await;
+    seed_quarantine_role(&ctx, 110, 900).await;
+    let held = vec![10u64, 11, 12, 13, 14];
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        110,
+        40,
+        held.clone(),
+        held.iter()
+            .map(|id| guild_role(*id, false))
+            .collect(),
+    );
+    ctx.http.set_member_roles(
+        Id::new(110),
+        Id::new(40),
+        held.iter()
+            .map(|id| Id::new(*id))
+            .collect(),
+    );
+
+    let claimed = claim_token(&ctx, 110, 40, "token").await;
+    assert_eq!(claimed, Ok("token".into()));
+    quarantine_member(&ctx, Id::new(110), Id::new(40), "token").await;
+
+    assert_eq!(
+        ctx.http.role_calls(),
+        vec![RoleCall::Replace {
+            guild_id: Id::new(110),
+            user_id: Id::new(40),
+            roles: vec![Id::new(900)],
+        }],
+        "role mutation must cost one call regardless of how many roles the member holds"
+    );
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(110), Id::new(40)),
+        vec![Id::new(900)]
+    );
+
+    let record = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 110i64, "user_id": 40i64})
+        .await
+        .unwrap()
+        .expect("quarantine record should exist");
+    assert_eq!(record.roles, held);
+}
+
+#[tokio::test]
+async fn test_quarantine_member_releases_claim_when_role_swap_fails() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 111, 41).await;
+    seed_quarantine_role(&ctx, 111, 900).await;
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        111,
+        41,
+        vec![10, 11],
+        vec![guild_role(10, false), guild_role(11, false)],
+    );
+    ctx.http.set_member_roles(
+        Id::new(111),
+        Id::new(41),
+        vec![Id::new(10), Id::new(11)],
+    );
+
+    let claimed = claim_token(&ctx, 111, 41, "token").await;
+    assert_eq!(claimed, Ok("token".into()));
+    ctx.http
+        .fail_next_update_guild_member_roles();
+
+    quarantine_member(&ctx, Id::new(111), Id::new(41), "token").await;
+
+    let record = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 111i64, "user_id": 41i64})
+        .await
+        .unwrap();
+    assert!(
+        record.is_none(),
+        "a failed role swap must not leave a record is_quarantined() would honour"
+    );
+
+    let cached: Option<String> = redis_get(&ctx.redis, "spam:quarantine:111:41").await;
+    assert!(cached.is_none());
+
+    // The member kept every role, matching the released claim.
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(111), Id::new(41)),
+        vec![Id::new(10), Id::new(11)]
+    );
+}
+
+#[tokio::test]
+async fn test_quarantine_and_verify_round_trip_with_managed_role() {
+    let ctx = build_context().await;
+    reset_quarantine_state(&ctx, 112, 42).await;
+    seed_quarantine_role(&ctx, 112, 900).await;
+    cache_member_with_guild_roles(
+        &ctx.cache,
+        112,
+        42,
+        vec![10, 11],
+        vec![guild_role(10, false), guild_role(11, true), guild_role(900, false)],
+    );
+    ctx.http.set_member_roles(
+        Id::new(112),
+        Id::new(42),
+        vec![Id::new(10), Id::new(11)],
+    );
+
+    let claimed = claim_token(&ctx, 112, 42, "token").await;
+    assert_eq!(claimed, Ok("token".into()));
+    quarantine_member(&ctx, Id::new(112), Id::new(42), "token").await;
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(112), Id::new(42)),
+        vec![Id::new(11), Id::new(900)]
+    );
+
+    let ok = verify(&ctx, Id::new(112), Id::new(42), "token").await;
+    assert!(
+        ok,
+        "a member holding a managed role must be verifiable"
+    );
+
+    let remaining = ctx
+        .mongo
+        .quarantines
+        .find_one(doc! {"guild_id": 112i64, "user_id": 42i64})
+        .await
+        .unwrap();
+    assert!(remaining.is_none());
+    assert_eq!(
+        ctx.http
+            .member_roles(Id::new(112), Id::new(42)),
+        vec![Id::new(11), Id::new(10)]
     );
 }
 

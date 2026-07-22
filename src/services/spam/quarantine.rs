@@ -220,29 +220,29 @@ pub async fn quarantine_member(
     token: &str,
 ) {
     let key = quarantine_key(guild_id.get(), user_id.get());
-    let quarantine_role =
-        RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine).await;
-    let quarantine_role_id = quarantine_role
-        .as_ref()
+    let quarantine_role_id = RoleService::get_by_type(ctx, guild_id.get(), &RoleEnum::Quarantine)
+        .await
         .map(|role| role.role_id);
-    let Some(member_ref) = ctx.cache.member(guild_id, user_id) else {
-        tracing::warn!(
-            guild_id = guild_id.get(),
-            user_id = user_id.get(),
-            "member missing from cache while materializing quarantine"
-        );
-        redis_delete(&ctx.redis, &key).await;
-        return;
-    };
 
-    // Exclude roles that can never be restored by verify(): the quarantine
-    // role itself (re-quarantine) and managed roles, which Discord refuses to
-    // manually assign or remove. Roles absent from the cache are kept.
-    let roles: Vec<Id<RoleMarker>> = member_ref
-        .roles()
-        .iter()
-        .copied()
-        .filter(|r| {
+    // `roles` is the snapshot to strip and restore later; `target` is the role
+    // list submitted to Discord. Roles verify() could never restore stay out of
+    // the snapshot: the quarantine role itself (re-quarantine), and managed
+    // roles, which go in `target` instead so the swap never asks Discord to
+    // remove what it refuses to remove. Roles absent from the cache are kept.
+    let (roles, mut target): (Vec<Id<RoleMarker>>, Vec<Id<RoleMarker>>) = {
+        let Some(member_ref) = ctx.cache.member(guild_id, user_id) else {
+            tracing::warn!(
+                guild_id = guild_id.get(),
+                user_id = user_id.get(),
+                "member missing from cache while materializing quarantine"
+            );
+            redis_delete(&ctx.redis, &key).await;
+            return;
+        };
+
+        let mut roles = Vec::new();
+        let mut target = Vec::new();
+        for r in member_ref.roles().iter().copied() {
             if Some(r.get()) == quarantine_role_id {
                 tracing::warn!(
                     guild_id = guild_id.get(),
@@ -250,11 +250,11 @@ pub async fn quarantine_member(
                     role_id = r.get(),
                     "member already holds quarantine role; excluding from snapshot"
                 );
-                return false;
+                continue;
             }
             if ctx
                 .cache
-                .role(*r)
+                .role(r)
                 .map(|role| role.managed)
                 == Some(true)
             {
@@ -262,13 +262,19 @@ pub async fn quarantine_member(
                     guild_id = guild_id.get(),
                     user_id = user_id.get(),
                     role_id = r.get(),
-                    "excluding managed role from quarantine snapshot"
+                    "retaining managed role through quarantine; excluded from snapshot"
                 );
-                return false;
+                target.push(r);
+                continue;
             }
-            true
-        })
-        .collect();
+            roles.push(r);
+        }
+        (roles, target)
+    };
+    if let Some(id) = quarantine_role_id {
+        target.push(Id::new(id));
+    }
+
     let record = Quarantine {
         id: None,
         guild_id: guild_id.get(),
@@ -303,22 +309,29 @@ pub async fn quarantine_member(
         return;
     }
 
-    for r in &roles {
+    // All-or-nothing on Discord's side: on failure the member kept every role,
+    // so drop the record and release the claim rather than leave a quarantine
+    // that is_quarantined() would honour against a member who still has access.
+    if let Err(e) = ctx
+        .http
+        .update_guild_member_roles(guild_id, user_id, &target)
+        .await
+    {
+        tracing::error!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to swap member roles for quarantine; releasing claim");
         if let Err(e) = ctx
-            .http
-            .remove_guild_member_role(guild_id, user_id, *r)
+            .mongo
+            .quarantines
+            .delete_one(doc! {
+                "guild_id": record.guild_id as i64,
+                "user_id": record.user_id as i64,
+                "token": token,
+            })
             .await
         {
-            tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = r.get(), error = %e, "failed to remove member role for quarantine");
+            tracing::error!(guild_id = record.guild_id, user_id = record.user_id, error = %e, "failed to delete quarantine record after role swap failure");
         }
-    }
-    if let Some(role) = &quarantine_role
-        && let Err(e) = ctx
-            .http
-            .add_guild_member_role(guild_id, user_id, Id::new(role.role_id))
-            .await
-    {
-        tracing::warn!(guild_id = guild_id.get(), user_id = user_id.get(), role_id = role.role_id, error = %e, "failed to assign quarantine role");
+        redis_delete(&ctx.redis, &key).await;
+        return;
     }
 
     redis_set_ex(&ctx.redis, &key, &token, CACHE_TTL).await;
