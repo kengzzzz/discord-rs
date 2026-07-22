@@ -108,6 +108,18 @@ fn test_build_fields_limits_and_format() {
 }
 
 #[test]
+fn test_build_fields_strips_backticks() {
+    let orders = vec![session::OrderInfo { quantity: 1, platinum: 10, ign: "Us`er".into() }];
+    let fields = MarketService::build_fields(&orders, "``` bad `item`", &MarketKind::Buy, None);
+    assert_eq!(fields.len(), 1);
+    assert_eq!(
+        fields[0].value,
+        "```/w User Hi! I want to buy: \" bad item\" for 10 platinum. (warframe.market)```"
+    );
+    assert_eq!(fields[0].value.matches("```").count(), 2);
+}
+
+#[test]
 fn test_build_embed_footer_title_url_and_fields() {
     let guild = make_guild(Id::new(1), "guild");
     let cache = DefaultInMemoryCache::new();
