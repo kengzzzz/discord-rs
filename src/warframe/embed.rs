@@ -185,7 +185,7 @@ pub async fn status_embed(
     let mut footer = footer_with_icon(guild)?;
     footer.text = guild.name().to_string();
 
-    let embed = builder.footer(footer).build();
+    let embed = builder.footer(footer).validate()?.build();
     Ok((embed, is_umbra))
 }
 
