@@ -1,9 +1,8 @@
-use std::{sync::LazyLock, time::Duration};
+use std::{fmt, sync::LazyLock, time::Duration};
 
-use crate::utils::env::parse_env;
+use crate::utils::env::{Secret, parse_env, secret};
 
 const DEFAULT_SCAM_DETECT_URL: &str = "http://ocr-scam-detect:8000";
-const DEFAULT_SCAM_DETECT_TOKEN: &str = "";
 const DEFAULT_SCAM_DETECT_QUEUE_CAPACITY: &str = "128";
 const DEFAULT_SCAM_DETECT_WORKERS: &str = "2";
 const DEFAULT_SCAM_DETECT_MAX_IMAGES_PER_MESSAGE: &str = "3";
@@ -12,7 +11,7 @@ const DEFAULT_SCAM_DETECT_DOWNLOAD_TIMEOUT_SECS: &str = "10";
 const DEFAULT_SCAM_DETECT_SCAN_TIMEOUT_SECS: &str = "30";
 const DEFAULT_SCAM_DETECT_JOB_TTL_SECS: &str = "120";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ScamDetectConfig {
     pub url: Option<String>,
     pub token: Option<String>,
@@ -25,11 +24,38 @@ pub struct ScamDetectConfig {
     pub job_ttl: Duration,
 }
 
+/// Hand-written so the token cannot reach a log through a `{:?}` of this config
+/// or of any struct holding one.
+impl fmt::Debug for ScamDetectConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ScamDetectConfig")
+            .field("url", &self.url)
+            .field(
+                "token",
+                &self
+                    .token
+                    .as_ref()
+                    .map(|_| "<redacted>"),
+            )
+            .field("queue_capacity", &self.queue_capacity)
+            .field("workers", &self.workers)
+            .field(
+                "max_images_per_message",
+                &self.max_images_per_message,
+            )
+            .field("max_upload_mb", &self.max_upload_mb)
+            .field("download_timeout", &self.download_timeout)
+            .field("scan_timeout", &self.scan_timeout)
+            .field("job_ttl", &self.job_ttl)
+            .finish()
+    }
+}
+
 impl ScamDetectConfig {
     pub fn from_env() -> Self {
         Self {
             url: env_string("SCAM_DETECT_URL", DEFAULT_SCAM_DETECT_URL),
-            token: env_string("SCAM_DETECT_TOKEN", DEFAULT_SCAM_DETECT_TOKEN),
+            token: secret_string("SCAM_DETECT_TOKEN"),
             queue_capacity: parse_env::<usize>(
                 "SCAM_DETECT_QUEUE_CAPACITY",
                 DEFAULT_SCAM_DETECT_QUEUE_CAPACITY,
@@ -79,6 +105,21 @@ fn env_string(name: &str, default: &str) -> Option<String> {
     let value = value.trim().to_owned();
 
     (!value.is_empty()).then_some(value)
+}
+
+/// A legacy env value keeps [`env_string`]'s `trim()`-then-empty-is-absent
+/// behavior, so adding file support cannot change how an already-deployed
+/// `SCAM_DETECT_TOKEN` is interpreted. File values are used as-is.
+fn secret_string(name: &str) -> Option<String> {
+    match secret(name) {
+        Ok(Some(Secret::File(value))) => Some(value),
+        Ok(Some(Secret::Env(value))) => {
+            let value = value.trim().to_owned();
+            (!value.is_empty()).then_some(value)
+        }
+        Ok(None) => None,
+        Err(error) => panic!("{error}"),
+    }
 }
 
 #[cfg(test)]

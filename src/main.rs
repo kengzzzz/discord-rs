@@ -4,7 +4,7 @@ use twilight_gateway::{Intents, Shard, ShardId};
 
 use discord_bot::{
     bot::Bot,
-    configs::discord::DISCORD_CONFIGS,
+    configs::{discord::DISCORD_CONFIGS, init_secrets},
     context::ContextBuilder,
     observability::server::{ServerConfig, start_server},
     services::shutdown,
@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .install_default()
         .unwrap();
     tracing_subscriber::fmt::init();
+    init_secrets();
 
     let shutdown = CancellationToken::new();
     shutdown::set_token(shutdown.clone());

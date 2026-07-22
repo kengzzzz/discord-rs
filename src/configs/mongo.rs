@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use mongodb::options::ClientOptions;
 
-use crate::utils::env::{parse_env, parse_env_opt};
+use crate::utils::env::{parse_env, parse_env_opt, secret_or_default};
 
 pub struct MongoConfigs {
     pub auth_source: String,
@@ -30,7 +30,7 @@ pub static MONGO_CONFIGS: LazyLock<MongoConfigs> = LazyLock::new(|| MongoConfigs
     database: parse_env("MONGO_DATABASE", "develop"),
     max_pool_size: parse_env("MONGO_MAX_POOL_SIZE", "30"),
     min_pool_size: parse_env("MONGO_MIN_POOL_SIZE", "10"),
-    password: parse_env("MONGO_PASSWORD", "secret"),
+    password: secret_or_default("MONGO_PASSWORD", "secret"),
     ssl: parse_env("MONGO_SSL", "false"),
     uri: parse_env(
         "MONGO_URI",
