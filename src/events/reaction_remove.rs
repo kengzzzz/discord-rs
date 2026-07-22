@@ -12,15 +12,8 @@ pub async fn handle(ctx: Arc<Context>, event: ReactionRemove) {
     let Some(guild_id) = event.guild_id else {
         return;
     };
-    let is_bot = event
-        .member
-        .as_ref()
-        .map(|m| m.user.bot || m.user.system.unwrap_or_default())
-        .unwrap_or(false);
-    if is_bot {
-        return;
-    }
-
+    // No bot filter here (unlike reaction_add): MESSAGE_REACTION_REMOVE carries no member data,
+    // and removing a self-assignable role from a bot that un-reacts is harmless anyway.
     let channels = ChannelService::get(&ctx, event.channel_id.get()).await;
     if !channels
         .iter()
