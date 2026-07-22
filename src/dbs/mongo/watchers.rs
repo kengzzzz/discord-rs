@@ -24,7 +24,7 @@ use crate::{
             },
             watcher::spawn_watcher,
         },
-        redis::redis_delete_prefixes,
+        redis::redis_delete_prefixes_checked,
     },
 };
 
@@ -34,6 +34,34 @@ enum Invalidation<T> {
     Documents(Vec<T>),
     Sweep(OperationType),
     Ignore,
+}
+
+fn channel_cache_prefixes() -> Vec<String> {
+    vec![
+        format!("{CACHE_PREFIX}:channel:"),
+        format!("{CACHE_PREFIX}:channel-type:"),
+        format!("{CACHE_PREFIX}:channels-by-type:"),
+    ]
+}
+
+fn role_cache_prefixes() -> Vec<String> {
+    vec![format!("{CACHE_PREFIX}:role:"), format!("{CACHE_PREFIX}:role-type:")]
+}
+
+fn quarantine_cache_prefixes() -> Vec<String> {
+    vec!["spam:quarantine:".to_owned(), "spam:log:".to_owned(), "spam:campaign:".to_owned()]
+}
+
+fn message_cache_prefixes() -> Vec<String> {
+    vec![format!("{CACHE_PREFIX}:role-message:"), format!("{CACHE_PREFIX}:status-message:")]
+}
+
+fn ai_prompt_cache_prefixes() -> Vec<String> {
+    vec![format!("{CACHE_PREFIX}:ai:prompt:"), format!("{CACHE_PREFIX}:ai:history:")]
+}
+
+fn guild_settings_cache_prefixes() -> Vec<String> {
+    vec![format!("{CACHE_PREFIX}:guild-settings:")]
 }
 
 fn invalidation_for<T>(evt: ChangeStreamEvent<T>) -> Invalidation<T> {
@@ -59,13 +87,24 @@ fn invalidation_for<T>(evt: ChangeStreamEvent<T>) -> Invalidation<T> {
 }
 
 async fn sweep_cache(pool: &Pool, collection: &str, operation: OperationType, prefixes: &[String]) {
-    let deleted = redis_delete_prefixes(pool, prefixes).await;
-    tracing::warn!(
-        collection,
-        ?operation,
-        deleted,
-        "change event missing required document image; purged collection cache prefixes"
-    );
+    match redis_delete_prefixes_checked(pool, prefixes).await {
+        Ok(deleted) => {
+            tracing::warn!(
+                collection,
+                ?operation,
+                deleted,
+                "change event missing required document image; purged collection cache prefixes"
+            );
+        }
+        Err(e) => {
+            tracing::error!(
+                collection,
+                ?operation,
+                error = %e,
+                "failed to purge collection cache prefixes"
+            );
+        }
+    }
 }
 
 async fn handle_channel_event(pool: &Pool, evt: ChangeStreamEvent<Channel>) {
@@ -87,11 +126,7 @@ async fn handle_channel_event(pool: &Pool, evt: ChangeStreamEvent<Channel>) {
                 pool,
                 "channels",
                 operation,
-                &[
-                    format!("{CACHE_PREFIX}:channel:"),
-                    format!("{CACHE_PREFIX}:channel-type:"),
-                    format!("{CACHE_PREFIX}:channels-by-type:"),
-                ],
+                &channel_cache_prefixes(),
             )
             .await;
         }
@@ -109,13 +144,7 @@ async fn handle_role_event(pool: &Pool, evt: ChangeStreamEvent<Role>) {
             }
         }
         Invalidation::Sweep(operation) => {
-            sweep_cache(
-                pool,
-                "roles",
-                operation,
-                &[format!("{CACHE_PREFIX}:role:"), format!("{CACHE_PREFIX}:role-type:")],
-            )
-            .await;
+            sweep_cache(pool, "roles", operation, &role_cache_prefixes()).await;
         }
         Invalidation::Ignore => {}
     }
@@ -133,11 +162,7 @@ async fn handle_quarantine_event(pool: &Pool, evt: ChangeStreamEvent<Quarantine>
                 pool,
                 "quarantines",
                 operation,
-                &[
-                    "spam:quarantine:".to_owned(),
-                    "spam:log:".to_owned(),
-                    "spam:campaign:".to_owned(),
-                ],
+                &quarantine_cache_prefixes(),
             )
             .await;
         }
@@ -164,10 +189,7 @@ async fn handle_message_event(pool: &Pool, evt: ChangeStreamEvent<Message>) {
                 pool,
                 "messages",
                 operation,
-                &[
-                    format!("{CACHE_PREFIX}:role-message:"),
-                    format!("{CACHE_PREFIX}:status-message:"),
-                ],
+                &message_cache_prefixes(),
             )
             .await;
         }
@@ -188,7 +210,7 @@ async fn handle_ai_prompt_event(pool: &Pool, evt: ChangeStreamEvent<AiPrompt>) {
                 pool,
                 "ai_prompts",
                 operation,
-                &[format!("{CACHE_PREFIX}:ai:prompt:"), format!("{CACHE_PREFIX}:ai:history:")],
+                &ai_prompt_cache_prefixes(),
             )
             .await;
         }
@@ -208,7 +230,7 @@ async fn handle_guild_settings_event(pool: &Pool, evt: ChangeStreamEvent<GuildSe
                 pool,
                 "guild_settings",
                 operation,
-                &[format!("{CACHE_PREFIX}:guild-settings:")],
+                &guild_settings_cache_prefixes(),
             )
             .await;
         }
@@ -222,13 +244,19 @@ pub async fn spawn_channel_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_channel_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move { redis_delete_prefixes_checked(&pool, &channel_cache_prefixes()).await }
         },
         token,
     )
@@ -241,13 +269,19 @@ pub async fn spawn_role_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_role_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move { redis_delete_prefixes_checked(&pool, &role_cache_prefixes()).await }
         },
         token,
     )
@@ -260,13 +294,19 @@ pub async fn spawn_quarantine_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_quarantine_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move { redis_delete_prefixes_checked(&pool, &quarantine_cache_prefixes()).await }
         },
         token,
     )
@@ -279,13 +319,19 @@ pub async fn spawn_message_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_message_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move { redis_delete_prefixes_checked(&pool, &message_cache_prefixes()).await }
         },
         token,
     )
@@ -298,13 +344,19 @@ pub async fn spawn_ai_prompt_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_ai_prompt_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move { redis_delete_prefixes_checked(&pool, &ai_prompt_cache_prefixes()).await }
         },
         token,
     )
@@ -317,13 +369,21 @@ pub async fn spawn_guild_settings_watcher(
     pool: Pool,
     token: CancellationToken,
 ) -> anyhow::Result<()> {
+    let handler_pool = pool.clone();
+    let recovery_pool = pool.clone();
     spawn_watcher(
         coll,
         options,
-        pool.clone(),
+        pool,
         move |evt| {
-            let pool = pool.clone();
+            let pool = handler_pool.clone();
             async move { handle_guild_settings_event(&pool, evt).await }
+        },
+        move || {
+            let pool = recovery_pool.clone();
+            async move {
+                redis_delete_prefixes_checked(&pool, &guild_settings_cache_prefixes()).await
+            }
         },
         token,
     )

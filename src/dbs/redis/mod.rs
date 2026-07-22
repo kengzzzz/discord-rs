@@ -1,6 +1,8 @@
 #[cfg(not(any(test, feature = "test-utils")))]
 pub mod client;
 #[cfg(not(any(test, feature = "test-utils")))]
+pub(crate) use client::redis_delete_prefixes_checked;
+#[cfg(not(any(test, feature = "test-utils")))]
 pub use client::{
     new_pool, redis_delete, redis_delete_prefixes, redis_exists, redis_get, redis_set,
     redis_set_ex, redis_set_nx, redis_set_nx_ex,

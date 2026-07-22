@@ -129,6 +129,57 @@ async fn delete_without_preimage_sweeps_each_collections_cache_families() {
 }
 
 #[tokio::test]
+async fn continuity_recovery_sweeps_each_collections_cache_families() {
+    let pool = new_pool();
+    let watched_keys = [
+        "discord-bot:channel:91101",
+        "discord-bot:channel-type:911:status",
+        "discord-bot:channels-by-type:status",
+        "discord-bot:role:91201",
+        "discord-bot:role-type:912:member",
+        "spam:quarantine:913:91301",
+        "spam:log:913:91301",
+        "spam:campaign:913:91301:hash",
+        "discord-bot:role-message:914",
+        "discord-bot:status-message:914",
+        "discord-bot:ai:prompt:91501",
+        "discord-bot:ai:history:91501",
+        "discord-bot:guild-settings:916",
+    ];
+    let preserved_keys = [
+        "discord-bot:wf:news",
+        "discord-bot:ai:rate:91501",
+        "changestream:resume:test-continuity-recovery",
+    ];
+    seed(&pool, &watched_keys).await;
+    seed(&pool, &preserved_keys).await;
+
+    let mut deleted = 0;
+    for prefixes in [
+        channel_cache_prefixes(),
+        role_cache_prefixes(),
+        quarantine_cache_prefixes(),
+        message_cache_prefixes(),
+        ai_prompt_cache_prefixes(),
+        guild_settings_cache_prefixes(),
+    ] {
+        deleted += redis_delete_prefixes_checked(&pool, &prefixes)
+            .await
+            .expect("purge cache family");
+    }
+
+    assert_eq!(deleted, watched_keys.len());
+    assert_missing(&pool, &watched_keys).await;
+    for key in preserved_keys {
+        assert!(
+            redis_exists(&pool, key).await,
+            "{key} should be preserved"
+        );
+        redis_delete(&pool, key).await;
+    }
+}
+
+#[tokio::test]
 async fn delete_with_preimage_keeps_channel_invalidation_targeted() {
     let pool = new_pool();
     let target_keys = [

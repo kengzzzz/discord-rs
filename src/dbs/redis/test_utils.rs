@@ -84,7 +84,10 @@ pub async fn redis_delete(_pool: &Pool, key: &str) {
     ttls.remove(key);
 }
 
-pub async fn redis_delete_prefixes(_pool: &Pool, prefixes: &[String]) -> usize {
+pub(crate) async fn redis_delete_prefixes_checked(
+    _pool: &Pool,
+    prefixes: &[String],
+) -> anyhow::Result<usize> {
     let mut store = REDIS_STORE.lock().await;
     let before = store.len();
     store.retain(|key, _| {
@@ -100,7 +103,13 @@ pub async fn redis_delete_prefixes(_pool: &Pool, prefixes: &[String]) -> usize {
             .iter()
             .any(|prefix| key.starts_with(prefix))
     });
-    deleted
+    Ok(deleted)
+}
+
+pub async fn redis_delete_prefixes(pool: &Pool, prefixes: &[String]) -> usize {
+    redis_delete_prefixes_checked(pool, prefixes)
+        .await
+        .expect("in-memory Redis prefix deletion")
 }
 
 pub async fn redis_ttl(key: &str) -> Option<usize> {
