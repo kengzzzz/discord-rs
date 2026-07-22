@@ -1,11 +1,12 @@
 name: Build and Deploy
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'README.md'
-      - 'LICENSE'
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  #   paths-ignore:
+  #     - 'README.md'
+  #     - 'LICENSE'
 
 permissions:
   contents: read
