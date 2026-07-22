@@ -61,66 +61,35 @@ impl MongoDB {
         let client = Client::with_options(opts)?;
         let database = client.database(&MONGO_CONFIGS.database);
 
-        for coll in ["channels", "roles", "quarantines", "messages", "ai_prompts", "guild_settings"]
-        {
+        const COLLECTIONS: [&str; 6] =
+            ["channels", "roles", "quarantines", "messages", "ai_prompts", "guild_settings"];
+
+        for coll in COLLECTIONS {
             if let Err(e) = database.create_collection(coll).await {
                 tracing::debug!(collection = coll, error = %e, "failed to create collection (might already exist)");
             }
         }
 
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "channels",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "channels", error = %e, "failed to update collection options");
+        let mut pre_post_images_failed = Vec::new();
+        for coll in COLLECTIONS {
+            if let Err(e) = database
+                .run_command(doc! {
+                    "collMod": coll,
+                    "changeStreamPreAndPostImages": { "enabled": true }
+                })
+                .await
+            {
+                tracing::debug!(collection = coll, error = %e, "failed to update collection options");
+                pre_post_images_failed.push(coll);
+            }
         }
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "roles",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "roles", error = %e, "failed to update collection options");
-        }
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "quarantines",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "quarantines", error = %e, "failed to update collection options");
-        }
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "messages",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "messages", error = %e, "failed to update collection options");
-        }
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "ai_prompts",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "ai_prompts", error = %e, "failed to update collection options");
-        }
-        if let Err(e) = database
-            .run_command(doc! {
-                "collMod": "guild_settings",
-                "changeStreamPreAndPostImages": { "enabled": true }
-            })
-            .await
-        {
-            tracing::debug!(collection = "guild_settings", error = %e, "failed to update collection options");
+        if !pre_post_images_failed.is_empty() {
+            tracing::warn!(
+                collections = pre_post_images_failed.join(", "),
+                "failed to enable changeStreamPreAndPostImages; delete-event cache invalidation \
+                 will not work for these collections and stale entries persist until the cache TTL \
+                 expires"
+            );
         }
 
         let channels = database.collection::<Channel>("channels");
