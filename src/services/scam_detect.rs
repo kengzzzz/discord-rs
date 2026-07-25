@@ -1,10 +1,9 @@
 use std::{sync::Arc, time::Instant};
 
-use anyhow::{Context as AnyhowContext, anyhow};
+use anyhow::{Context as _, anyhow};
 use async_trait::async_trait;
 use futures::StreamExt as _;
-use reqwest::{Client as ReqwestClient, multipart};
-use serde::Deserialize;
+use reqwest::Client as ReqwestClient;
 use tokio::sync::{Semaphore, mpsc};
 use twilight_model::{
     channel::{Attachment, Message},
@@ -16,6 +15,9 @@ use crate::{
     context::Context,
     services::{broadcast::BroadcastService, spam},
 };
+
+mod ocr;
+mod scoring;
 
 #[derive(Clone)]
 pub struct ScamDetectQueue {
@@ -31,8 +33,8 @@ struct ScamScanJob {
     enqueued_at: Instant,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ScanResponse {
+#[derive(Debug, Clone)]
+pub struct ScanResult {
     pub is_spam: bool,
     pub risk: f32,
     pub action: String,
@@ -49,7 +51,7 @@ pub struct ScanResponse {
     pub image_size: ImageSize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ImageSize {
     pub width: u32,
     pub height: u32,
@@ -57,13 +59,13 @@ pub struct ImageSize {
 
 #[async_trait]
 pub trait ScamDetector: Send + Sync {
-    async fn scan(&self, attachment: &Attachment) -> anyhow::Result<ScanResponse>;
+    async fn scan(&self, attachment: &Attachment) -> anyhow::Result<ScanResult>;
 }
 
-struct HttpScamDetector {
+struct LocalScamDetector {
     client: ReqwestClient,
     config: Arc<ScamDetectConfig>,
-    scan_url: String,
+    ocr_permits: Arc<Semaphore>,
 }
 
 impl Default for ScamDetectQueue {
@@ -73,19 +75,22 @@ impl Default for ScamDetectQueue {
 }
 
 impl ScamDetectQueue {
-    pub fn from_env() -> Self {
+    pub async fn from_env(client: ReqwestClient) -> anyhow::Result<Self> {
         let config = Arc::new(SCAM_DETECT_CONFIG.clone());
-        let Some(url) = config.url.clone() else {
-            return Self::disabled_with_config(config);
-        };
+        if !config.enabled() {
+            return Ok(Self::disabled_with_config(config));
+        }
+        config
+            .validate()
+            .context("invalid built-in scam detector configuration")?;
 
-        let client = ReqwestClient::builder()
-            .connect_timeout(config.download_timeout)
-            .timeout(config.download_timeout + config.scan_timeout)
-            .build()
-            .expect("failed to build scam detect HTTP client");
-        let detector = Arc::new(HttpScamDetector::new(client, config.clone(), url));
-        Self::with_detector(config, detector)
+        let validation_config = config.clone();
+        tokio::task::spawn_blocking(move || ocr::validate(&validation_config))
+            .await
+            .context("join Tesseract startup validation")??;
+
+        let detector = Arc::new(LocalScamDetector::new(client, config.clone()));
+        Ok(Self::with_detector(config, detector))
     }
 
     pub fn disabled() -> Self {
@@ -245,10 +250,10 @@ async fn process_job(
     }
 }
 
-impl HttpScamDetector {
-    fn new(client: ReqwestClient, config: Arc<ScamDetectConfig>, base_url: String) -> Self {
-        let scan_url = format!("{}/scan", base_url.trim_end_matches('/'));
-        Self { client, config, scan_url }
+impl LocalScamDetector {
+    fn new(client: ReqwestClient, config: Arc<ScamDetectConfig>) -> Self {
+        let ocr_permits = Arc::new(Semaphore::new(config.ocr_max_concurrent));
+        Self { client, config, ocr_permits }
     }
 
     async fn download_image(&self, attachment: &Attachment) -> anyhow::Result<Vec<u8>> {
@@ -288,32 +293,40 @@ impl HttpScamDetector {
 }
 
 #[async_trait]
-impl ScamDetector for HttpScamDetector {
-    async fn scan(&self, attachment: &Attachment) -> anyhow::Result<ScanResponse> {
+impl ScamDetector for LocalScamDetector {
+    async fn scan(&self, attachment: &Attachment) -> anyhow::Result<ScanResult> {
         let bytes = self.download_image(attachment).await?;
-        let content_type = attachment
-            .content_type
-            .as_deref()
-            .unwrap_or("image/png");
-        let part = multipart::Part::bytes(bytes)
-            .file_name(attachment.filename.clone())
-            .mime_str(content_type)
-            .context("invalid attachment content type")?;
-        let form = multipart::Form::new().part("file", part);
-        let mut request = self
-            .client
-            .post(&self.scan_url)
-            .multipart(form);
+        let started_at = Instant::now();
+        let permit = self
+            .ocr_permits
+            .clone()
+            .acquire_owned()
+            .await
+            .context("OCR semaphore closed")?;
+        let config = self.config.clone();
+        let ocr = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            ocr::process_image_and_ocr(&bytes, &config)
+        })
+        .await
+        .context("join OCR blocking task")??;
+        let score = scoring::score_text(
+            &ocr.text,
+            self.config.block_threshold,
+            self.config.review_threshold,
+        );
 
-        if let Some(token) = &self.config.token {
-            request = request.header("X-Scan-Token", token);
-        }
-
-        let response = request
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(response.json().await?)
+        Ok(ScanResult {
+            is_spam: score.is_spam,
+            risk: score.risk,
+            action: score.action,
+            score_raw: score.score_raw,
+            reasons: score.reasons,
+            ocr_text_length: ocr.text.chars().count(),
+            ocr_text: ocr.text,
+            processing_ms: started_at.elapsed().as_millis(),
+            image_size: ImageSize { width: ocr.width, height: ocr.height },
+        })
     }
 }
 
@@ -340,14 +353,14 @@ fn is_eligible_image(attachment: &Attachment, config: &ScamDetectConfig) -> bool
     attachment.width.is_some() || attachment.height.is_some()
 }
 
-fn scan_blocks(scan: &ScanResponse) -> bool {
+fn scan_blocks(scan: &ScanResult) -> bool {
     scan.is_spam
         || scan
             .action
             .eq_ignore_ascii_case("block")
 }
 
-async fn quarantine_detected(ctx: &Arc<Context>, job: &ScamScanJob, scan: &ScanResponse) {
+async fn quarantine_detected(ctx: &Arc<Context>, job: &ScamScanJob, scan: &ScanResult) {
     let Some(guild_id) = job.message.guild_id else {
         return;
     };
@@ -420,10 +433,18 @@ async fn delete_detected_message(ctx: &Arc<Context>, message: &Message) {
 mod tests {
     use super::*;
 
+    struct UnusedDetector;
+
+    #[async_trait]
+    impl ScamDetector for UnusedDetector {
+        async fn scan(&self, _attachment: &Attachment) -> anyhow::Result<ScanResult> {
+            unreachable!("disabled queues must never invoke their detector")
+        }
+    }
+
     fn config() -> ScamDetectConfig {
         ScamDetectConfig {
-            url: Some("http://example.test".to_owned()),
-            token: None,
+            enabled: true,
             queue_capacity: 1,
             workers: 1,
             max_images_per_message: 2,
@@ -431,6 +452,15 @@ mod tests {
             download_timeout: std::time::Duration::from_secs(1),
             scan_timeout: std::time::Duration::from_secs(1),
             job_ttl: std::time::Duration::from_secs(1),
+            max_image_width: 1600,
+            max_decoded_pixels: 16_777_216,
+            ocr_text_limit: 3000,
+            ocr_min_chars_for_psm6: 20,
+            ocr_max_concurrent: 1,
+            block_threshold: 0.8,
+            review_threshold: 0.55,
+            tesseract_lang: "eng".to_owned(),
+            tessdata_dir: None,
         }
     }
 
@@ -455,7 +485,7 @@ mod tests {
 
     #[test]
     fn scan_blocks_only_block_results() {
-        let block = ScanResponse {
+        let block = ScanResult {
             is_spam: false,
             risk: 0.8,
             action: "block".to_owned(),
@@ -466,7 +496,7 @@ mod tests {
             processing_ms: 0,
             image_size: ImageSize { width: 1, height: 1 },
         };
-        let review = ScanResponse { action: "review".to_owned(), risk: 0.7, ..block.clone() };
+        let review = ScanResult { action: "review".to_owned(), risk: 0.7, ..block.clone() };
 
         assert!(scan_blocks(&block));
         assert!(!scan_blocks(&review));
@@ -503,5 +533,15 @@ mod tests {
             &attachment(Some("image/png"), 1024, ""),
             &cfg
         ));
+    }
+
+    #[test]
+    fn disabled_config_does_not_start_a_queue() {
+        let mut cfg = config();
+        cfg.enabled = false;
+
+        let queue = ScamDetectQueue::with_detector(Arc::new(cfg), Arc::new(UnusedDetector));
+
+        assert!(!queue.enabled());
     }
 }

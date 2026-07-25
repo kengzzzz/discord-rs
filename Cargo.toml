@@ -26,12 +26,21 @@ twilight-http = "0.17.1"
 twilight-interactions = "0.17.0"
 twilight-model = "0.17.1"
 twilight-util = { version = "0.17.0", features = ["builder"] }
-reqwest = { version = "0.13.3", features = ["json", "multipart", "stream"] }
+reqwest = { version = "0.13.3", features = ["json", "stream"] }
 fastrand = "2.4.1"
 futures = "0.3.32"
 chrono = { version = "0.4.44", features = ["std", "clock", "serde"] }
 sha2 = "0.11.0"
 hex = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+    "gif",
+    "bmp",
+    "tiff",
+] }
+tesseract = "0.15.2"
 axum = "0.8.9"
 tokio-util = "0.7.18"
 async-trait = "0.1.89"
