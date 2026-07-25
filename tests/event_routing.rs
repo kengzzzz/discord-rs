@@ -17,7 +17,7 @@ use discord_bot::{
     services::health::HealthService,
     services::{
         guild_settings::GuildSettingsService,
-        scam_detect::{ImageSize, ScamDetectQueue, ScamDetector, ScanResponse},
+        scam_detect::{ImageSize, ScamDetectQueue, ScamDetector, ScanResult},
         spam::log,
     },
 };
@@ -65,12 +65,12 @@ fn image_attachment(id: u64, name: &str, size: u64, width: u64, height: u64) -> 
 }
 
 struct FakeScamDetector {
-    result: anyhow::Result<ScanResponse>,
+    result: anyhow::Result<ScanResult>,
 }
 
 #[async_trait]
 impl ScamDetector for FakeScamDetector {
-    async fn scan(&self, _attachment: &Attachment) -> anyhow::Result<ScanResponse> {
+    async fn scan(&self, _attachment: &Attachment) -> anyhow::Result<ScanResult> {
         match &self.result {
             Ok(response) => Ok(response.clone()),
             Err(error) => Err(anyhow::anyhow!(error.to_string())),
@@ -80,8 +80,7 @@ impl ScamDetector for FakeScamDetector {
 
 fn scam_detect_config() -> Arc<ScamDetectConfig> {
     Arc::new(ScamDetectConfig {
-        url: Some("http://detector.test".to_owned()),
-        token: None,
+        enabled: true,
         queue_capacity: 8,
         workers: 2,
         max_images_per_message: 3,
@@ -89,11 +88,20 @@ fn scam_detect_config() -> Arc<ScamDetectConfig> {
         download_timeout: Duration::from_secs(1),
         scan_timeout: Duration::from_secs(1),
         job_ttl: Duration::from_secs(30),
+        max_image_width: 1600,
+        max_decoded_pixels: 16_777_216,
+        ocr_text_limit: 3000,
+        ocr_min_chars_for_psm6: 20,
+        ocr_max_concurrent: 1,
+        block_threshold: 0.8,
+        review_threshold: 0.55,
+        tesseract_lang: "eng".to_owned(),
+        tessdata_dir: None,
     })
 }
 
-fn scan_response(action: &str, is_spam: bool) -> ScanResponse {
-    ScanResponse {
+fn scan_response(action: &str, is_spam: bool) -> ScanResult {
+    ScanResult {
         is_spam,
         risk: if is_spam { 0.91 } else { 0.2 },
         action: action.to_owned(),
@@ -118,7 +126,7 @@ fn embed_field<'a>(
 }
 
 async fn build_context_with_detector(
-    result: anyhow::Result<ScanResponse>,
+    result: anyhow::Result<ScanResult>,
 ) -> Arc<discord_bot::context::Context> {
     let detector = Arc::new(FakeScamDetector { result });
     let queue = ScamDetectQueue::with_detector(scam_detect_config(), detector);

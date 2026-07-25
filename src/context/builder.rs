@@ -112,9 +112,10 @@ impl ContextBuilder {
                 .expect("Failed to build Client"),
         };
 
-        let scam_detect = self
-            .scam_detect
-            .unwrap_or_else(ScamDetectQueue::from_env);
+        let scam_detect = match self.scam_detect {
+            Some(scam_detect) => scam_detect,
+            None => ScamDetectQueue::from_env(reqwest.clone()).await?,
+        };
 
         Ok(Context {
             http,

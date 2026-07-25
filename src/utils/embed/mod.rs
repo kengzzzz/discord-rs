@@ -111,14 +111,14 @@ pub fn set_role_embed(
 pub fn set_scam_detect_embed(
     guild: &Reference<'_, Id<GuildMarker>, CachedGuild>,
     enabled: bool,
-    service_configured: bool,
+    scanner_available: bool,
     setter: &str,
 ) -> anyhow::Result<Embed> {
     let now = Utc::now().timestamp();
     let mut footer = footer_with_icon(guild)?;
     footer.text = guild.name().to_string();
     let state = if enabled { "enabled" } else { "disabled" };
-    let service_state = if service_configured { "configured" } else { "not configured" };
+    let scanner_state = if scanner_available { "available" } else { "disabled" };
 
     let embed = EmbedBuilder::new()
         .color(COLOR)
@@ -128,8 +128,8 @@ pub fn set_scam_detect_embed(
         ))
         .field(EmbedFieldBuilder::new("Guild setting", state))
         .field(EmbedFieldBuilder::new(
-            "Scanner service",
-            service_state,
+            "Built-in scanner",
+            scanner_state,
         ))
         .field(EmbedFieldBuilder::new("ผู้ตั้งค่า", setter).inline())
         .field(EmbedFieldBuilder::new("เวลา", format!("<t:{now}:R>")).inline())
