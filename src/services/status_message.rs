@@ -34,6 +34,13 @@ impl StatusMessageService {
     }
 
     pub async fn set(ctx: &Context, guild_id: u64, channel_id: u64, message_id: u64) {
+        let message = Message {
+            id: None,
+            guild_id,
+            channel_id,
+            message_id,
+            message_type: MessageEnum::Status,
+        };
         if let Err(e) = ctx.mongo
             .messages
             .update_one(
@@ -44,7 +51,11 @@ impl StatusMessageService {
             .await
         {
             tracing::warn!(guild_id, channel_id, message_id, error = %e, "failed to persist status message location");
+            return;
         }
+
+        let redis_key = format!("{CACHE_PREFIX}:status-message:{guild_id}");
+        redis_set_ex(&ctx.redis, &redis_key, &message, CACHE_TTL).await;
     }
 
     pub async fn purge_cache(pool: &Pool, guild_id: u64) {

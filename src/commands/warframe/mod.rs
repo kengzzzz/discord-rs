@@ -79,7 +79,7 @@ impl WarframeCommand {
             let mut choices = Vec::with_capacity(25);
             if name == "item" {
                 let results = if sub == "build" {
-                    BuildService::search_with_update(&ctx.reqwest, &ctx.redis, user_input).await
+                    BuildService::search_with_update(&ctx, user_input).await
                 } else {
                     MarketService::search_with_update(&ctx, user_input).await
                 };

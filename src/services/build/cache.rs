@@ -1,4 +1,5 @@
 use std::{
+    future::Future,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -6,7 +7,7 @@ use std::{
 use deadpool_redis::Pool;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     context::Context,
@@ -25,6 +26,7 @@ const UPDATE_SECS: u16 = 60 * 60;
 pub(crate) static ITEMS: Lazy<RwLock<Vec<String>>> = Lazy::new(|| RwLock::new(Vec::new()));
 pub(crate) static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 pub(crate) static ITEMS_ETAG: Lazy<RwLock<Option<String>>> = Lazy::new(|| RwLock::new(None));
+static REFRESH_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Deserialize)]
 struct Item {
@@ -160,31 +162,46 @@ impl BuildService {
         collect_prefix_icase(&items, prefix, |s| s)
     }
 
-    async fn maybe_refresh<H>(client: &H, pool: &Pool)
-    where
-        H: HttpProvider + Sync,
-    {
+    fn cache_is_stale() -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS as u64
-            && let Err(e) = update_items(client, pool).await
-        {
-            tracing::warn!(error = %e, "failed to update build items");
-        }
+        now.saturating_sub(last) > UPDATE_SECS as u64
     }
 
-    pub async fn search_with_update<H>(client: &H, pool: &Pool, prefix: &str) -> Vec<String>
+    async fn search_with_refresh<F, Fut>(prefix: &str, refresh: F) -> Vec<String>
     where
-        H: HttpProvider + Sync,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
     {
-        let mut results = Self::search(prefix).await;
-        if results.is_empty() {
-            Self::maybe_refresh(client, pool).await;
-            results = Self::search(prefix).await;
+        let results = Self::search(prefix).await;
+        if Self::cache_is_stale()
+            && let Ok(guard) = REFRESH_LOCK.try_lock()
+        {
+            tokio::spawn(async move {
+                let _guard = guard;
+                if Self::cache_is_stale()
+                    && let Err(e) = refresh().await
+                {
+                    tracing::warn!(error = %e, "failed to update build items");
+                }
+            });
         }
         results
     }
+
+    pub async fn search_with_update(ctx: &Arc<Context>, prefix: &str) -> Vec<String> {
+        let ctx = Arc::clone(ctx);
+        Self::search_with_refresh(prefix, move || async move {
+            update_items(&ctx.reqwest, &ctx.redis).await
+        })
+        .await
+    }
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code, unused_imports)]
+#[path = "tests/cache.rs"]
+mod tests;

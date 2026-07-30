@@ -6,7 +6,7 @@ use std::{
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     context::Context,
@@ -30,6 +30,7 @@ pub(super) struct MarketEntry {
 
 static ITEMS: Lazy<RwLock<Vec<MarketEntry>>> = Lazy::new(|| RwLock::new(Vec::new()));
 static LAST_UPDATE: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+static REFRESH_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 impl MarketService {
     async fn set_items(data: Vec<MarketEntry>) {
@@ -66,13 +67,17 @@ impl MarketService {
         collect_prefix_icase(&items, prefix, |e| &e.name)
     }
 
-    async fn maybe_refresh(ctx: &Arc<Context>) {
+    fn cache_is_stale() -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let last = LAST_UPDATE.load(Ordering::Relaxed);
-        if now.saturating_sub(last) > UPDATE_SECS as u64
+        now.saturating_sub(last) > UPDATE_SECS as u64
+    }
+
+    async fn maybe_refresh(ctx: &Arc<Context>) {
+        if Self::cache_is_stale()
             && let Err(e) = client::update_items(
                 &ctx.reqwest,
                 REDIS_KEY,
@@ -86,12 +91,24 @@ impl MarketService {
         }
     }
 
-    pub async fn search_with_update(ctx: &Arc<Context>, prefix: &str) -> Vec<String> {
-        let mut results = Self::search(prefix).await;
-        if results.is_empty() {
-            Self::maybe_refresh(ctx).await;
-            results = Self::search(prefix).await;
+    fn refresh_in_background(ctx: &Arc<Context>) {
+        if !Self::cache_is_stale() {
+            return;
         }
+        let Ok(guard) = REFRESH_LOCK.try_lock() else {
+            return;
+        };
+
+        let ctx = Arc::clone(ctx);
+        tokio::spawn(async move {
+            let _guard = guard;
+            Self::maybe_refresh(&ctx).await;
+        });
+    }
+
+    pub async fn search_with_update(ctx: &Arc<Context>, prefix: &str) -> Vec<String> {
+        let results = Self::search(prefix).await;
+        Self::refresh_in_background(ctx);
         results
     }
 
