@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::http::HeaderMap;
@@ -11,12 +12,19 @@ use crate::utils::http::HttpProvider;
 #[derive(Clone, Default)]
 pub struct MockReqwest {
     responses: Arc<Mutex<HashMap<String, String>>>,
+    delays: Arc<Mutex<HashMap<String, Duration>>>,
+    request_counts: Arc<Mutex<HashMap<String, usize>>>,
     client: Client,
 }
 
 impl MockReqwest {
     pub fn new() -> Self {
-        Self { responses: Arc::new(Mutex::new(HashMap::new())), client: Client::new() }
+        Self {
+            responses: Arc::new(Mutex::new(HashMap::new())),
+            delays: Arc::new(Mutex::new(HashMap::new())),
+            request_counts: Arc::new(Mutex::new(HashMap::new())),
+            client: Client::new(),
+        }
     }
 
     pub fn add_json_response(&self, url: &str, body: &str) {
@@ -24,6 +32,22 @@ impl MockReqwest {
             .lock()
             .unwrap()
             .insert(url.to_string(), body.to_string());
+    }
+
+    pub fn set_json_delay(&self, url: &str, delay: Duration) {
+        self.delays
+            .lock()
+            .unwrap()
+            .insert(url.to_string(), delay);
+    }
+
+    pub fn json_request_count(&self, url: &str) -> usize {
+        self.request_counts
+            .lock()
+            .unwrap()
+            .get(url)
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -33,11 +57,27 @@ impl HttpProvider for MockReqwest {
     where
         T: serde::de::DeserializeOwned + Send,
     {
-        let map = self.responses.lock().unwrap();
-        let body = map
+        *self
+            .request_counts
+            .lock()
+            .unwrap()
+            .entry(url.to_string())
+            .or_default() += 1;
+        let body = self
+            .responses
+            .lock()
+            .unwrap()
             .get(url)
             .cloned()
             .unwrap_or_else(|| "null".to_string());
+        let delay = self
+            .delays
+            .lock()
+            .unwrap()
+            .get(url)
+            .copied()
+            .unwrap_or_default();
+        tokio::time::sleep(delay).await;
         Ok(serde_json::from_str(&body)?)
     }
 

@@ -1,7 +1,9 @@
 use super::*;
 use crate::context::{ContextBuilder, mock_http::MockClient as Client};
+use crate::dbs::redis::{redis_delete, redis_ttl};
 use crate::warframe::api::{SteelPathData, SteelPathReward};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_model::gateway::payload::incoming::GuildCreate;
 use twilight_model::guild::{
@@ -189,4 +191,60 @@ async fn test_steel_path_field_umbra() {
 
     let (_field, is_umbra) = steel_path_field(&ctx).await.unwrap();
     assert!(is_umbra);
+}
+
+#[tokio::test]
+async fn test_failed_request_enters_backoff() {
+    let _guard = STEEL_PATH_LOCK.lock().await;
+    let ctx = build_context().await;
+    let key = "test:wf:failure-backoff";
+    redis_delete(&ctx.redis, key).await;
+    let attempts = Arc::new(AtomicUsize::new(0));
+
+    for _ in 0..2 {
+        let attempts = Arc::clone(&attempts);
+        let result: anyhow::Result<Vec<api::NewsItem>> = cached_or_request(
+            &ctx.redis,
+            key,
+            move || async move {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                anyhow::bail!("provider unavailable")
+            },
+            |_| MIN_CACHE_TTL,
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    assert_eq!(
+        attempts.load(Ordering::SeqCst),
+        1,
+        "backoff should suppress an immediate duplicate request"
+    );
+}
+
+#[tokio::test]
+async fn test_news_cache_outlives_status_interval() {
+    let _guard = STEEL_PATH_LOCK.lock().await;
+    let ctx = build_context().await;
+    let key = format!("{CACHE_PREFIX}:wf:news");
+    redis_delete(&ctx.redis, &key).await;
+    ctx.reqwest.add_json_response(
+        "https://api.warframestat.us/pc/news",
+        r#"[{"imageLink":"https://example.com/news.png"}]"#,
+    );
+
+    let image = image_link(&ctx).await.unwrap();
+
+    assert_eq!(
+        image.as_deref(),
+        Some("https://example.com/news.png")
+    );
+    assert!(
+        redis_ttl(&key)
+            .await
+            .unwrap_or_default()
+            > 60,
+        "news cache should outlive the one-minute status interval"
+    );
 }

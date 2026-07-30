@@ -160,6 +160,18 @@ impl<'a> MockUpdateMessage<'a> {
     }
 
     async fn exec(self) -> anyhow::Result<MockResponse<Message>> {
+        self.client
+            .update_message_calls
+            .fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self
+            .client
+            .update_message_failures
+            .lock()
+            .unwrap()
+            .remove(&self.message_id)
+        {
+            return Err(anyhow::Error::new(error));
+        }
         let content = self.content.unwrap_or(None);
         let embeds = self.embeds.unwrap_or_default();
         let message = fake_message(
@@ -278,6 +290,9 @@ pub struct MockClient {
     pub messages: Mutex<Vec<MessageRecord>>,
     pub interactions: Mutex<Vec<InteractionRecord>>,
     pub channels: Mutex<HashMap<Id<ChannelMarker>, Vec<Message>>>,
+    message_calls: AtomicU64,
+    update_message_calls: AtomicU64,
+    update_message_failures: Mutex<HashMap<Id<MessageMarker>, MockHttpError>>,
     member_roles: Mutex<MemberRoles>,
     role_calls: Mutex<Vec<RoleCall>>,
     fail_next_add_guild_member_role: AtomicBool,
@@ -298,6 +313,9 @@ impl MockClient {
             messages: Mutex::new(Vec::new()),
             interactions: Mutex::new(Vec::new()),
             channels: Mutex::new(HashMap::new()),
+            message_calls: AtomicU64::new(0),
+            update_message_calls: AtomicU64::new(0),
+            update_message_failures: Mutex::new(HashMap::new()),
             member_roles: Mutex::new(HashMap::new()),
             role_calls: Mutex::new(Vec::new()),
             fail_next_add_guild_member_role: AtomicBool::new(false),
@@ -377,6 +395,28 @@ impl MockClient {
         message_id: Id<MessageMarker>,
     ) -> MockUpdateMessage<'_> {
         MockUpdateMessage { client: self, channel_id, message_id, content: None, embeds: None }
+    }
+
+    pub fn message_call_count(&self) -> u64 {
+        self.message_calls
+            .load(Ordering::SeqCst)
+    }
+
+    pub fn update_message_call_count(&self) -> u64 {
+        self.update_message_calls
+            .load(Ordering::SeqCst)
+    }
+
+    pub fn fail_update_message_with(
+        &self,
+        message_id: Id<MessageMarker>,
+        status: u16,
+        code: Option<u64>,
+    ) {
+        self.update_message_failures
+            .lock()
+            .unwrap()
+            .insert(message_id, MockHttpError { status, code });
     }
 
     pub async fn channel_messages(
@@ -517,6 +557,8 @@ impl MockClient {
         channel_id: Id<ChannelMarker>,
         message_id: Id<MessageMarker>,
     ) -> anyhow::Result<MockResponse<Message>> {
+        self.message_calls
+            .fetch_add(1, Ordering::SeqCst);
         let map = self.channels.lock().unwrap();
         let message = map
             .get(&channel_id)

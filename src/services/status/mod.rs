@@ -10,16 +10,14 @@ use tokio::task::JoinHandle;
 use twilight_http::Error as HttpError;
 use twilight_http::api_error::ApiError;
 use twilight_http::error::ErrorType;
-use twilight_model::id::Id;
+use twilight_model::{channel::message::Embed, id::Id};
 
 use crate::services::shutdown;
 use crate::{
     context::Context,
-    dbs::mongo::models::channel::ChannelEnum,
+    dbs::mongo::models::channel::{Channel, ChannelEnum},
     services::{channel::ChannelService, status_message::StatusMessageService},
 };
-
-const RETRY_DELAYS_MS: &[u64] = &[500, 1000, 2000];
 
 pub mod embed;
 
@@ -28,13 +26,26 @@ static UMBRA_CHANNEL: Lazy<(watch::Sender<bool>, watch::Receiver<bool>)> =
     Lazy::new(|| watch::channel(true));
 
 fn is_message_not_found(error: &anyhow::Error) -> bool {
-    matches!(
+    if matches!(
         error.downcast_ref::<HttpError>().map(HttpError::kind),
         Some(ErrorType::Response {
             error: ApiError::General(api_error),
             ..
         }) if api_error.code == 10008
-    )
+    ) {
+        return true;
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    {
+        matches!(
+            error.downcast_ref::<crate::context::mock_http::MockHttpError>(),
+            Some(error) if error.code == Some(10008)
+        )
+    }
+
+    #[cfg(not(any(test, feature = "test-utils")))]
+    false
 }
 
 pub struct StatusService;
@@ -55,8 +66,97 @@ impl StatusService {
         UMBRA_FORMA.load(Ordering::Relaxed)
     }
 
+    async fn create_status_message(ctx: &Context, channel: &Channel, embed: &Embed) {
+        let channel_id = Id::new(channel.channel_id);
+        if let Ok(resp) = ctx
+            .http
+            .channel_messages(channel_id)
+            .await
+            && let Ok(msgs) = resp.model().await
+        {
+            let ids: Vec<_> = msgs
+                .into_iter()
+                .map(|message| message.id)
+                .collect();
+            for chunk in ids.chunks(100) {
+                if chunk.len() == 1 {
+                    if let Err(e) = ctx
+                        .http
+                        .delete_message(channel_id, chunk[0])
+                        .await
+                    {
+                        tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
+                    }
+                } else if let Err(e) = ctx
+                    .http
+                    .delete_messages(channel_id, chunk)
+                    .await
+                {
+                    tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
+                }
+            }
+        }
+
+        if let Ok(resp) = ctx
+            .http
+            .create_message(channel_id)
+            .embeds(from_ref(embed))
+            .await
+            && let Ok(message) = resp.model().await
+        {
+            StatusMessageService::set(
+                ctx,
+                channel.guild_id,
+                channel.channel_id,
+                message.id.get(),
+            )
+            .await;
+        }
+    }
+
+    async fn update_channel(ctx: &Context, channel: &Channel, embed: &Embed) {
+        let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await else {
+            Self::create_status_message(ctx, channel, embed).await;
+            return;
+        };
+        let channel_id = Id::new(channel.channel_id);
+        match ctx
+            .http
+            .update_message(channel_id, Id::new(record.message_id))
+            .embeds(Some(from_ref(embed)))
+            .await
+        {
+            Ok(_) => {
+                StatusMessageService::set(
+                    ctx,
+                    channel.guild_id,
+                    channel.channel_id,
+                    record.message_id,
+                )
+                .await;
+            }
+            Err(e) if is_message_not_found(&e) => {
+                Self::create_status_message(ctx, channel, embed).await;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    channel_id = channel_id.get(),
+                    error = %e,
+                    "failed to update status message"
+                );
+            }
+        }
+    }
+
     pub async fn update_all(ctx: &Arc<Context>) {
         let channels = ChannelService::list_by_type(ctx, &ChannelEnum::Status).await;
+        if channels.is_empty() {
+            return;
+        }
+        let Some(snapshot) = embed::fetch_snapshot(ctx).await else {
+            return;
+        };
+
         for channel in channels {
             let Some(guild_ref) = ctx
                 .cache
@@ -64,94 +164,10 @@ impl StatusService {
             else {
                 continue;
             };
-            let Some(embed) = embed::build_embed(ctx, &guild_ref).await else {
+            let Some(embed) = embed::build_embed(&snapshot, &guild_ref) else {
                 continue;
             };
-            let channel_id = Id::new(channel.channel_id);
-            let mut existing = None;
-            if let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await {
-                let mid = Id::new(record.message_id);
-                for (i, delay) in RETRY_DELAYS_MS.iter().enumerate() {
-                    match ctx.http.message(channel_id, mid).await {
-                        Ok(_) => {
-                            existing = Some(record.message_id);
-                            break;
-                        }
-                        Err(e) if is_message_not_found(&e) => break,
-                        Err(e) => {
-                            if i == RETRY_DELAYS_MS.len() - 1 {
-                                tracing::warn!(
-                                    attempt = i + 1,
-                                    error = %e,
-                                    "all retries exhausted, optimistically assuming message still exists",
-                                );
-                                existing = Some(record.message_id);
-                                break;
-                            }
-                            tracing::warn!(
-                                attempt = i + 1,
-                                error = %e,
-                                "transient error verifying status message, retrying",
-                            );
-                            tokio::time::sleep(Duration::from_millis(*delay)).await;
-                        }
-                    }
-                }
-            }
-
-            if let Some(msg_id) = existing {
-                if let Err(e) = ctx
-                    .http
-                    .update_message(channel_id, Id::new(msg_id))
-                    .embeds(Some(from_ref(&embed)))
-                    .await
-                {
-                    tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to update status message");
-                }
-                StatusMessageService::set(ctx, channel.guild_id, channel.channel_id, msg_id).await;
-            } else {
-                if let Ok(resp) = ctx
-                    .http
-                    .channel_messages(channel_id)
-                    .await
-                    && let Ok(msgs) = resp.model().await
-                {
-                    let ids: Vec<_> = msgs.into_iter().map(|m| m.id).collect();
-
-                    for chunk in ids.chunks(100) {
-                        if chunk.len() == 1 {
-                            if let Err(e) = ctx
-                                .http
-                                .delete_message(channel_id, chunk[0])
-                                .await
-                            {
-                                tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to delete old status message");
-                            }
-                        } else if let Err(e) = ctx
-                            .http
-                            .delete_messages(channel_id, chunk)
-                            .await
-                        {
-                            tracing::warn!(channel_id = channel_id.get(), error = %e, "failed to bulk delete old status messages");
-                        }
-                    }
-                }
-                if let Ok(resp) = ctx
-                    .http
-                    .create_message(channel_id)
-                    .embeds(from_ref(&embed))
-                    .await
-                    && let Ok(msg) = resp.model().await
-                {
-                    StatusMessageService::set(
-                        ctx,
-                        channel.guild_id,
-                        channel.channel_id,
-                        msg.id.get(),
-                    )
-                    .await;
-                }
-            }
+            Self::update_channel(ctx, &channel, &embed).await;
         }
     }
 
@@ -172,3 +188,8 @@ impl StatusService {
         })
     }
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(dead_code, unused_imports)]
+#[path = "tests/mod.rs"]
+mod tests;
