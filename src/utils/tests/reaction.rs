@@ -41,3 +41,31 @@ fn test_role_enum_to_emoji_known() {
 fn test_role_enum_to_emoji_unknown() {
     assert_eq!(role_enum_to_emoji(&RoleEnum::Guest), None);
 }
+
+#[test]
+fn test_warframe_role_reaction_mapping() {
+    let emoji = EmojiReactionType::Unicode { name: Reaction::Warframe.emoji().to_string() };
+
+    assert_eq!(
+        emoji_to_role_enum(&emoji),
+        Some(RoleEnum::Warframe)
+    );
+    assert_eq!(
+        role_enum_to_emoji(&RoleEnum::Warframe),
+        Some(Reaction::Warframe.emoji())
+    );
+}
+
+#[test]
+fn test_soulframe_role_reaction_mapping() {
+    let emoji = EmojiReactionType::Unicode { name: Reaction::Soulframe.emoji().to_string() };
+
+    assert_eq!(
+        emoji_to_role_enum(&emoji),
+        Some(RoleEnum::Soulframe)
+    );
+    assert_eq!(
+        role_enum_to_emoji(&RoleEnum::Soulframe),
+        Some(Reaction::Soulframe.emoji())
+    );
+}

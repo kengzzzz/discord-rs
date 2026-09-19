@@ -10,6 +10,8 @@ pub fn emoji_to_role_enum(emoji: &EmojiReactionType) -> Option<RoleEnum> {
             e if e == Reaction::UmbraForma.emoji() => Some(RoleEnum::UmbralForma),
             e if e == Reaction::Eidolon.emoji() => Some(RoleEnum::Eidolon),
             e if e == Reaction::Live.emoji() => Some(RoleEnum::Live),
+            e if e == Reaction::Warframe.emoji() => Some(RoleEnum::Warframe),
+            e if e == Reaction::Soulframe.emoji() => Some(RoleEnum::Soulframe),
             _ => None,
         },
         _ => None,
@@ -23,6 +25,8 @@ pub fn role_enum_to_emoji(role: &RoleEnum) -> Option<&'static str> {
         RoleEnum::UmbralForma => Some(Reaction::UmbraForma.emoji()),
         RoleEnum::Eidolon => Some(Reaction::Eidolon.emoji()),
         RoleEnum::Live => Some(Reaction::Live.emoji()),
+        RoleEnum::Warframe => Some(Reaction::Warframe.emoji()),
+        RoleEnum::Soulframe => Some(Reaction::Soulframe.emoji()),
         _ => None,
     }
 }

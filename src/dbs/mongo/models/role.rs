@@ -28,6 +28,12 @@ pub enum RoleEnum {
     #[option(name = "Live", value = "live")]
     Live,
 
+    #[option(name = "Warframe", value = "warframe")]
+    Warframe,
+
+    #[option(name = "Soulframe", value = "soulframe")]
+    Soulframe,
+
     #[option(name = "Quarantine", value = "quarantine")]
     Quarantine,
 
