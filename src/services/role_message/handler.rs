@@ -61,6 +61,8 @@ pub async fn ensure_message(ctx: &Arc<Context>, guild_id: Id<GuildMarker>) {
         RoleEnum::UmbralForma,
         RoleEnum::Eidolon,
         RoleEnum::Live,
+        RoleEnum::Warframe,
+        RoleEnum::Soulframe,
     ];
     let role_futures = roles
         .iter()

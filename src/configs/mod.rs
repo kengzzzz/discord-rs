@@ -33,6 +33,8 @@ pub enum Reaction {
     Helminth,
     UmbraForma,
     Eidolon,
+    Warframe,
+    Soulframe,
 }
 
 impl Reaction {
@@ -50,6 +52,8 @@ impl Reaction {
             Reaction::Helminth => "🐙",
             Reaction::UmbraForma => "🧩",
             Reaction::Eidolon => "⚔️",
+            Reaction::Warframe => "🪷",
+            Reaction::Soulframe => "🐺",
         }
     }
 }
