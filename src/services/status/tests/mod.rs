@@ -6,7 +6,7 @@ use crate::context::{
 use crate::dbs::mongo::models::channel::Channel;
 use crate::dbs::mongo::models::message::{Message, MessageEnum};
 use crate::dbs::redis::{redis_delete, redis_set_ex};
-use crate::warframe::api::{Cycle, NewsItem, SteelPathData, SteelPathReward};
+use crate::warframe::api::{CircuitData, Cycle, NewsItem, SteelPathData, SteelPathReward};
 use chrono::Utc;
 use mongodb::bson::{doc, to_bson};
 use twilight_cache_inmemory::UpdateCache;
@@ -94,7 +94,9 @@ async fn seed_status_data(ctx: &Context) {
         60,
     )
     .await;
-    for endpoint in ["cetusCycle", "vallisCycle", "cambionCycle", "zarimanCycle"] {
+    for endpoint in
+        ["earthCycle", "cetusCycle", "vallisCycle", "cambionCycle", "zarimanCycle", "duviriCycle"]
+    {
         redis_set_ex(
             &ctx.redis,
             &format!("discord-bot:wf:cycle:{endpoint}"),
@@ -103,6 +105,22 @@ async fn seed_status_data(ctx: &Context) {
         )
         .await;
     }
+    redis_set_ex(
+        &ctx.redis,
+        "discord-bot:wf:circuit",
+        &CircuitData {
+            activation: Utc::now() - chrono::Duration::days(1),
+            expiry: Utc::now() + chrono::Duration::days(6),
+            weapons: ["Zylok", "Sibear", "Dread", "Despair", "Hate"]
+                .map(String::from)
+                .to_vec(),
+            warframes: ["Nekros", "Valkyr", "Oberon"]
+                .map(String::from)
+                .to_vec(),
+        },
+        300,
+    )
+    .await;
 }
 
 async fn existing_status_context(guild_id: u64, channel_id: u64, message_id: u64) -> Arc<Context> {
@@ -162,6 +180,99 @@ async fn steady_state_updates_without_get_preflight() {
         ctx.http.message_call_count(),
         0,
         "steady-state status update should PATCH directly"
+    );
+    let messages = ctx.http.messages.lock().unwrap();
+    let status = messages.last().expect("status update");
+    assert_eq!(status.message_id, Id::new(703));
+    assert_eq!(status.embeds.len(), 2);
+    assert_eq!(
+        status.embeds[0].title.as_deref(),
+        Some("[PC] Warframe Cycle Timers")
+    );
+    assert_eq!(status.embeds[0].fields.len(), 7);
+    assert_eq!(
+        status.embeds[1].title.as_deref(),
+        Some("Circuit Rotation")
+    );
+    assert!(
+        status.embeds[1]
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("Dera, Sybaris")
+    );
+    let characters: usize = status
+        .embeds
+        .iter()
+        .map(|embed| {
+            embed
+                .title
+                .as_deref()
+                .unwrap_or_default()
+                .chars()
+                .count()
+                + embed
+                    .description
+                    .as_deref()
+                    .unwrap_or_default()
+                    .chars()
+                    .count()
+                + embed
+                    .footer
+                    .as_ref()
+                    .map_or(0, |footer| footer.text.chars().count())
+                + embed
+                    .fields
+                    .iter()
+                    .map(|field| field.name.chars().count() + field.value.chars().count())
+                    .sum::<usize>()
+        })
+        .sum();
+    assert!(
+        characters <= 6000,
+        "both cards must fit Discord's per-message embed limit"
+    );
+}
+
+#[tokio::test]
+async fn cycle_timers_keep_updating_when_circuit_is_unavailable() {
+    let _guard = STATUS_LOCK.lock().await;
+    let ctx = existing_status_context(741, 742, 743).await;
+    redis_delete(&ctx.redis, "discord-bot:wf:circuit").await;
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.com/cdn/worldState.php",
+        "null",
+    );
+
+    StatusService::update_all(&ctx).await;
+
+    {
+        let messages = ctx.http.messages.lock().unwrap();
+        let status = messages.last().expect("status update");
+        assert_eq!(status.message_id, Id::new(743));
+        assert_eq!(status.embeds.len(), 2);
+        assert_eq!(status.embeds[0].fields.len(), 7);
+        assert_eq!(
+            status.embeds[1].title.as_deref(),
+            Some("Circuit unavailable")
+        );
+    }
+    assert_eq!(ctx.http.update_message_call_count(), 1);
+    assert_eq!(
+        message_op_count(&ctx, |op| matches!(op, MessageOp::Create)),
+        0
+    );
+
+    seed_status_data(&ctx).await;
+    StatusService::update_all(&ctx).await;
+    let messages = ctx.http.messages.lock().unwrap();
+    let status = messages
+        .last()
+        .expect("recovered status update");
+    assert_eq!(status.message_id, Id::new(743));
+    assert_eq!(
+        status.embeds[1].title.as_deref(),
+        Some("Circuit Rotation")
     );
 }
 
@@ -256,10 +367,13 @@ async fn clear_status_data(ctx: &Context) {
     for key in [
         "discord-bot:wf:news",
         "discord-bot:wf:steel-path",
+        "discord-bot:wf:cycle:earthCycle",
         "discord-bot:wf:cycle:cetusCycle",
         "discord-bot:wf:cycle:vallisCycle",
         "discord-bot:wf:cycle:cambionCycle",
         "discord-bot:wf:cycle:zarimanCycle",
+        "discord-bot:wf:cycle:duviriCycle",
+        "discord-bot:wf:circuit",
         "discord-bot:channels-by-type:status",
     ] {
         redis_delete(&ctx.redis, key).await;
@@ -299,12 +413,30 @@ async fn two_channels_share_one_failed_upstream_attempt() {
         "https://api.warframestat.us/pc/cetusCycle",
         "null",
     );
-    for endpoint in ["vallisCycle", "cambionCycle", "zarimanCycle"] {
+    for endpoint in ["earthCycle", "vallisCycle", "cambionCycle", "zarimanCycle", "duviriCycle"] {
         ctx.reqwest.add_json_response(
             &format!("https://api.warframestat.us/pc/{endpoint}"),
             &serde_json::to_string(&Cycle { state: "day".into(), expiry: expiry.clone() }).unwrap(),
         );
     }
+    let mut circuit: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../warframe/tests/fixtures/circuit.json"
+    ))
+    .unwrap();
+    circuit["EndlessXpSchedule"][0]["Activation"]["$date"]["$numberLong"] = (Utc::now()
+        - chrono::Duration::days(1))
+    .timestamp_millis()
+    .to_string()
+    .into();
+    circuit["EndlessXpSchedule"][0]["Expiry"]["$date"]["$numberLong"] = (Utc::now()
+        + chrono::Duration::days(6))
+    .timestamp_millis()
+    .to_string()
+    .into();
+    ctx.reqwest.add_json_response(
+        "https://api.warframe.com/cdn/worldState.php",
+        &circuit.to_string(),
+    );
 
     StatusService::update_all(&ctx).await;
 
@@ -314,4 +446,30 @@ async fn two_channels_share_one_failed_upstream_attempt() {
         1,
         "one update pass should fetch one shared status snapshot"
     );
+    assert_eq!(
+        ctx.reqwest
+            .json_request_count("https://api.warframe.com/cdn/worldState.php"),
+        1
+    );
+    let messages = ctx.http.messages.lock().unwrap();
+    let created: Vec<_> = messages
+        .iter()
+        .filter(|record| matches!(record.kind, MessageOp::Create))
+        .collect();
+    assert_eq!(created.len(), 2);
+    for status in created {
+        assert_eq!(status.embeds.len(), 2);
+        assert!(status.embeds[0].fields.is_empty());
+        assert!(
+            status.embeds[0]
+                .description
+                .as_deref()
+                .unwrap()
+                .contains("temporarily unavailable")
+        );
+        assert_eq!(
+            status.embeds[1].title.as_deref(),
+            Some("Circuit Rotation")
+        );
+    }
 }

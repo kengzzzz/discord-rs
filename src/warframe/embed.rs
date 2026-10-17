@@ -175,7 +175,6 @@ pub async fn steel_path_field(ctx: &Arc<Context>) -> anyhow::Result<(EmbedField,
         ),
         value,
     )
-    .inline()
     .build();
     Ok((field, is_umbra))
 }
@@ -184,30 +183,36 @@ pub struct StatusSnapshot {
     image: Option<String>,
     steel: EmbedField,
     is_umbra: bool,
-    cetus: EmbedField,
-    vallis: EmbedField,
-    cambion: EmbedField,
-    zariman: EmbedField,
+    cycles: [EmbedField; 6],
 }
 
 pub async fn status_snapshot(ctx: &Arc<Context>) -> anyhow::Result<StatusSnapshot> {
     let image_fut = image_link(ctx);
     let steel_fut = steel_path_field(ctx);
-    let cetus_fut = cycle_field(ctx, "cetusCycle", "Cetus/Earth");
+    let earth_fut = cycle_field(ctx, "earthCycle", "Earth");
+    let cetus_fut = cycle_field(ctx, "cetusCycle", "Cetus");
     let vallis_fut = cycle_field(ctx, "vallisCycle", "Vallis");
     let cambion_fut = cycle_field(ctx, "cambionCycle", "Cambion");
     let zariman_fut = cycle_field(ctx, "zarimanCycle", "Zariman");
+    let duviri_fut = cycle_field(ctx, "duviriCycle", "Duviri");
 
-    let (image, (steel, is_umbra), cetus, vallis, cambion, zariman) = tokio::try_join!(
+    let (image, (steel, is_umbra), earth, cetus, vallis, cambion, zariman, duviri) = tokio::try_join!(
         image_fut,
         steel_fut,
+        earth_fut,
         cetus_fut,
         vallis_fut,
         cambion_fut,
-        zariman_fut
+        zariman_fut,
+        duviri_fut
     )?;
 
-    Ok(StatusSnapshot { image, steel, is_umbra, cetus, vallis, cambion, zariman })
+    Ok(StatusSnapshot {
+        image,
+        steel,
+        is_umbra,
+        cycles: [earth, cetus, vallis, cambion, zariman, duviri],
+    })
 }
 
 pub fn status_embed_from_snapshot(
@@ -219,18 +224,17 @@ pub fn status_embed_from_snapshot(
         .url(URL)
         .color(COLOR)
         .field(snapshot.steel.clone())
-        .field(snapshot.cetus.clone())
-        .field(snapshot.vallis.clone())
-        .field(snapshot.cambion.clone())
-        .field(snapshot.zariman.clone())
         .timestamp(twilight_model::util::Timestamp::from_micros(
             Utc::now().timestamp_micros(),
         )?);
 
+    for cycle in &snapshot.cycles {
+        builder = builder.field(cycle.clone());
+    }
     if let Some(img) = &snapshot.image
         && let Ok(img_src) = ImageSource::url(img.as_str())
     {
-        builder = builder.image(img_src);
+        builder = builder.thumbnail(img_src);
     }
 
     let mut footer = footer_with_icon(guild)?;

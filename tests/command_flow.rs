@@ -284,6 +284,143 @@ async fn warframe_build_command_falls_back_to_general_results() {
 }
 
 #[tokio::test]
+async fn warframe_circuit_command_uses_cache_refreshes_after_reset_and_reports_failure() {
+    use chrono::{Duration, Utc};
+    use discord_bot::{configs::CACHE_PREFIX, dbs::redis, warframe::api::CircuitData};
+
+    let ctx = build_context().await;
+    let cache_key = format!("{CACHE_PREFIX}:wf:circuit");
+    let url = "https://api.warframe.com/cdn/worldState.php";
+    redis::redis_delete(&ctx.redis, &cache_key).await;
+    let now = Utc::now();
+    let activation = now - Duration::days(1);
+    let expiry = activation + Duration::weeks(1);
+    let mut body: serde_json::Value = serde_json::from_str(include_str!(
+        "../src/warframe/tests/fixtures/circuit.json"
+    ))
+    .unwrap();
+    body["EndlessXpSchedule"][0]["Activation"]["$date"]["$numberLong"] = activation
+        .timestamp_millis()
+        .to_string()
+        .into();
+    body["EndlessXpSchedule"][0]["Expiry"]["$date"]["$numberLong"] = expiry
+        .timestamp_millis()
+        .to_string()
+        .into();
+    ctx.reqwest
+        .add_json_response(url, &body.to_string());
+
+    for _ in 0..2 {
+        let options = vec![CommandDataOption {
+            name: "circuit".into(),
+            value: CommandOptionValue::SubCommand(vec![]),
+        }];
+        let (interaction, _) = command_interaction_with_options("warframe", Some(1), options);
+        registry()
+            .handle_interaction(ctx.clone(), interaction)
+            .await;
+
+        let record = last_message(&ctx.http).expect("Circuit response");
+        assert!(matches!(record.kind, MessageOp::Update));
+        let embed = &record.embeds[0];
+        assert_eq!(embed.title.as_deref(), Some("Circuit Rotation"));
+        let description = embed.description.as_deref().unwrap();
+        assert!(description.contains("[Zylok](https://wiki.warframe.com/w/Zylok)"));
+        assert!(description.contains("[Nekros](https://wiki.warframe.com/w/Nekros)"));
+        assert!(description.contains(&format!(
+            "<t:{}:R> · Dera, Sybaris",
+            expiry.timestamp()
+        )));
+        assert_eq!(
+            description
+                .split("**Next Incarnons**\n")
+                .nth(1)
+                .unwrap()
+                .lines()
+                .count(),
+            8
+        );
+        let response = last_interaction(&ctx.http).expect("deferred interaction");
+        assert_eq!(
+            response.response.kind,
+            InteractionResponseType::DeferredChannelMessageWithSource
+        );
+        assert_eq!(
+            response.response.data.unwrap().flags,
+            Some(MessageFlags::EPHEMERAL)
+        );
+    }
+    assert_eq!(ctx.reqwest.json_request_count(url), 1);
+    let ttl = redis::redis_ttl(&cache_key)
+        .await
+        .unwrap();
+    assert!(ttl > 0 && ttl <= 300);
+
+    // Even a lingering Redis entry must not keep the old week active after reset.
+    let stale = CircuitData {
+        activation: now - Duration::weeks(2),
+        expiry: now - Duration::weeks(1),
+        weapons: vec!["Old Weapon".into()],
+        warframes: vec![],
+    };
+    redis::redis_set_ex(&ctx.redis, &cache_key, &stale, 300).await;
+    let options = vec![CommandDataOption {
+        name: "circuit".into(),
+        value: CommandOptionValue::SubCommand(vec![]),
+    }];
+    let (interaction, data) =
+        command_interaction_with_options("warframe", Some(1), options.clone());
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+    assert_eq!(ctx.reqwest.json_request_count(url), 2);
+    assert_eq!(
+        last_message(&ctx.http).unwrap().embeds[0]
+            .title
+            .as_deref(),
+        Some("Circuit Rotation")
+    );
+
+    redis::redis_delete(&ctx.redis, &cache_key).await;
+    ctx.reqwest
+        .add_json_response(url, r#"{"EndlessXpSchedule":[]}"#);
+    let (interaction, data) = command_interaction_with_options("warframe", Some(1), options);
+    WarframeCommand::handle(ctx.clone(), interaction, data).await;
+    assert_eq!(
+        last_message(&ctx.http).unwrap().embeds[0]
+            .title
+            .as_deref(),
+        Some("Circuit unavailable")
+    );
+    assert!(!redis::redis_exists(&ctx.redis, &cache_key).await);
+}
+
+#[test]
+fn warframe_circuit_command_is_registered_without_options() {
+    let commands = registry().collect_commands();
+    let circuit = commands
+        .iter()
+        .find(|command| command.name == "warframe")
+        .unwrap()
+        .options
+        .iter()
+        .find(|option| option.name == "circuit")
+        .expect("Circuit subcommand");
+    assert_eq!(circuit.kind, CommandOptionType::SubCommand);
+    assert!(
+        circuit
+            .options
+            .as_ref()
+            .is_none_or(Vec::is_empty)
+    );
+    assert!(
+        circuit
+            .description_localizations
+            .as_ref()
+            .unwrap()
+            .contains_key("th")
+    );
+}
+
+#[tokio::test]
 async fn warframe_market_command_embed() {
     let ctx = build_context().await;
     let guild = make_guild(Id::new(1), "guild");

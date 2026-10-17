@@ -1,0 +1,18 @@
+{
+  "EndlessXpSchedule": [
+    {
+      "Activation": { "$date": { "$numberLong": "1791763200000" } },
+      "Expiry": { "$date": { "$numberLong": "1792368000000" } },
+      "CategoryChoices": [
+        {
+          "Category": "EXC_NORMAL",
+          "Choices": ["Nekros", "Valkyr", "Oberon"]
+        },
+        {
+          "Category": "EXC_HARD",
+          "Choices": ["Zylok", "Sibear", "Dread", "Despair", "Hate"]
+        }
+      ]
+    }
+  ]
+}
