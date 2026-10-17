@@ -135,10 +135,12 @@ async fn test_status_embed_footer_and_fields() {
     redis_set_ex(&ctx.redis, &steel_key, &steel, 60).await;
 
     let cycle_endpoints = [
-        ("cetusCycle", "Cetus/Earth"),
+        ("earthCycle", "Earth"),
+        ("cetusCycle", "Cetus"),
         ("vallisCycle", "Vallis"),
         ("cambionCycle", "Cambion"),
         ("zarimanCycle", "Zariman"),
+        ("duviriCycle", "Duviri"),
     ];
     for (ep, _) in &cycle_endpoints {
         let key = format!("{CACHE_PREFIX}:wf:cycle:{ep}");
@@ -162,7 +164,29 @@ async fn test_status_embed_footer_and_fields() {
         Some("[PC] Warframe Cycle Timers")
     );
     assert_eq!(embed.footer.unwrap().text, "guild");
-    assert_eq!(embed.fields.len(), 5);
+    assert_eq!(embed.fields.len(), 7);
+    assert!(!embed.fields[0].inline);
+    assert!(
+        embed.fields[0]
+            .name
+            .contains("Steel Path")
+    );
+    for (field, (_, name)) in embed.fields[1..]
+        .iter()
+        .zip(&cycle_endpoints)
+    {
+        assert!(field.inline);
+        assert!(
+            field.name.contains(name),
+            "{} should contain {name}",
+            field.name
+        );
+    }
+    assert!(embed.image.is_none());
+    assert_eq!(
+        embed.thumbnail.unwrap().url,
+        "https://example.com/img.png"
+    );
 }
 
 #[tokio::test]

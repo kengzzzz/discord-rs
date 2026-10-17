@@ -1,4 +1,5 @@
 pub mod api;
+pub mod circuit;
 pub mod embed;
 pub mod utils;
 

@@ -1,4 +1,3 @@
-use std::slice::from_ref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -66,7 +65,7 @@ impl StatusService {
         UMBRA_FORMA.load(Ordering::Relaxed)
     }
 
-    async fn create_status_message(ctx: &Context, channel: &Channel, embed: &Embed) {
+    async fn create_status_message(ctx: &Context, channel: &Channel, embeds: &[Embed]) {
         let channel_id = Id::new(channel.channel_id);
         if let Ok(resp) = ctx
             .http
@@ -100,7 +99,7 @@ impl StatusService {
         if let Ok(resp) = ctx
             .http
             .create_message(channel_id)
-            .embeds(from_ref(embed))
+            .embeds(embeds)
             .await
             && let Ok(message) = resp.model().await
         {
@@ -114,16 +113,16 @@ impl StatusService {
         }
     }
 
-    async fn update_channel(ctx: &Context, channel: &Channel, embed: &Embed) {
+    async fn update_channel(ctx: &Context, channel: &Channel, embeds: &[Embed]) {
         let Some(record) = StatusMessageService::get(ctx, channel.guild_id).await else {
-            Self::create_status_message(ctx, channel, embed).await;
+            Self::create_status_message(ctx, channel, embeds).await;
             return;
         };
         let channel_id = Id::new(channel.channel_id);
         match ctx
             .http
             .update_message(channel_id, Id::new(record.message_id))
-            .embeds(Some(from_ref(embed)))
+            .embeds(Some(embeds))
             .await
         {
             Ok(_) => {
@@ -136,7 +135,7 @@ impl StatusService {
                 .await;
             }
             Err(e) if is_message_not_found(&e) => {
-                Self::create_status_message(ctx, channel, embed).await;
+                Self::create_status_message(ctx, channel, embeds).await;
             }
             Err(e) => {
                 tracing::warn!(
@@ -153,9 +152,7 @@ impl StatusService {
         if channels.is_empty() {
             return;
         }
-        let Some(snapshot) = embed::fetch_snapshot(ctx).await else {
-            return;
-        };
+        let snapshot = embed::fetch_snapshot(ctx).await;
 
         for channel in channels {
             let Some(guild_ref) = ctx
@@ -164,10 +161,8 @@ impl StatusService {
             else {
                 continue;
             };
-            let Some(embed) = embed::build_embed(&snapshot, &guild_ref) else {
-                continue;
-            };
-            Self::update_channel(ctx, &channel, &embed).await;
+            let embeds = embed::build_embeds(&snapshot, &guild_ref);
+            Self::update_channel(ctx, &channel, &embeds).await;
         }
     }
 

@@ -6,7 +6,7 @@ fn resume_token(data: &str) -> ResumeToken {
 }
 
 fn command_error(code: i32) -> mongodb::error::Error {
-    let command = mongodb::bson::from_document(mongodb::bson::doc! {
+    let command = mongodb::bson::deserialize_from_document(mongodb::bson::doc! {
         "code": code,
         "codeName": "TestError",
         "errmsg": "test command error",

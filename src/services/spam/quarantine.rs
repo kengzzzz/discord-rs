@@ -1,5 +1,5 @@
 use deadpool_redis::Pool;
-use mongodb::bson::{doc, to_bson};
+use mongodb::bson::{doc, serialize_to_bson};
 use twilight_http::{Error as HttpError, api_error::ApiError, error::ErrorType};
 use twilight_model::id::{
     Id,
@@ -284,7 +284,7 @@ pub async fn quarantine_member(
         released: false,
     };
 
-    let Ok(bson) = to_bson(&record) else {
+    let Ok(bson) = serialize_to_bson(&record) else {
         tracing::warn!(
             guild_id = record.guild_id,
             user_id = record.user_id,

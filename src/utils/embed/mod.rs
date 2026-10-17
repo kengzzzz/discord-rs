@@ -170,6 +170,7 @@ pub fn help_embed(guild: &Reference<'_, Id<GuildMarker>, CachedGuild>) -> anyhow
 **/intro** - แนะนำตัวคุณ\n\
 **/warframe market <item>** - ตรวจสอบราคาตลาด\n\
 **/warframe build <item>** - ค้นหา build\n\
+**/warframe circuit** - ดูอาวุธ Incarnon และรอบสัปดาห์ถัดไป\n\
 **/ai prompt <text>** - ตั้งค่า prompt ส่วนตัว\n\
 **/ai talk <message>** - สนทนากับ AI\n\
 **/ai clear** - ล้างประวัติการคุยกับ AI";

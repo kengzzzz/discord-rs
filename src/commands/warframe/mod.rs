@@ -20,8 +20,10 @@ use crate::{
 use std::sync::Arc;
 
 mod build;
+mod circuit;
 mod market;
 use build::WarframeBuildCommand;
+use circuit::WarframeCircuitCommand;
 use market::WarframeMarketCommand;
 
 #[derive(CommandModel, CreateCommand, Debug)]
@@ -29,6 +31,8 @@ use market::WarframeMarketCommand;
 pub enum WarframeCommand {
     #[command(name = "build")]
     Build(WarframeBuildCommand),
+    #[command(name = "circuit")]
+    Circuit(WarframeCircuitCommand),
     #[command(name = "market")]
     Market(WarframeMarketCommand),
 }
@@ -61,6 +65,7 @@ impl WarframeCommand {
                 .context("failed to parse command data")?;
             match command {
                 WarframeCommand::Build(cmd) => cmd.run(ctx, interaction).await?,
+                WarframeCommand::Circuit(cmd) => cmd.run(ctx, interaction).await?,
                 WarframeCommand::Market(cmd) => cmd.run(ctx, interaction).await?,
             }
         });
