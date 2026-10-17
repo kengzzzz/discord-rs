@@ -8,7 +8,7 @@ use crate::dbs::mongo::models::message::{Message, MessageEnum};
 use crate::dbs::redis::{redis_delete, redis_set_ex};
 use crate::warframe::api::{CircuitData, Cycle, NewsItem, SteelPathData, SteelPathReward};
 use chrono::Utc;
-use mongodb::bson::{doc, to_bson};
+use mongodb::bson::{doc, serialize_to_bson};
 use twilight_cache_inmemory::UpdateCache;
 use twilight_model::gateway::payload::incoming::GuildCreate;
 use twilight_model::guild::{
@@ -342,7 +342,7 @@ async fn transient_patch_error_keeps_existing_message_record() {
         .messages
         .find_one(doc! {
             "guild_id": 721_i64,
-            "message_type": to_bson(&MessageEnum::Status).unwrap(),
+            "message_type": serialize_to_bson(&MessageEnum::Status).unwrap(),
         })
         .await
         .unwrap()

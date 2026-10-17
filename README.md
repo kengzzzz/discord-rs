@@ -55,7 +55,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all-features -- --test-threads 1
 ```
 
-The repository targets Rust 2024.
+The repository targets Rust 1.99.1 (edition 2024), pinned in `rust-toolchain.toml`.
 
 ## Code layout
 

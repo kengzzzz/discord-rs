@@ -5,7 +5,7 @@ ARG LEPTONICA_SHA256=c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829b
 ARG TESSDATA_COMMIT=87416418657359cb625c412a48b6e1d6d41c29bd
 ARG TESSDATA_ENG_SHA256=7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
 
-FROM rust@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f AS toolchain
+FROM rust:1.99.1-alpine@sha256:557a94c82b485a14b569120e00867267108c734efe33f10cc31ca0cd5dd1eca9 AS toolchain
 
 ARG TESSERACT_VERSION
 ARG TESSERACT_SHA256
@@ -105,7 +105,7 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --bins && \
+    cargo build --locked --release --bins && \
     mkdir -p /rootfs/etc/ssl/certs \
              /rootfs/lib \
              /rootfs/usr/lib \

@@ -1,6 +1,6 @@
 use chrono::Utc;
 use deadpool_redis::Pool;
-use mongodb::bson::{doc, to_bson};
+use mongodb::bson::{doc, serialize_to_bson};
 use twilight_model::id::{Id, marker::UserMarker};
 
 use super::models::ChatEntry;
@@ -58,7 +58,9 @@ pub(crate) async fn clear_history(_pool: &Pool, user: Id<UserMarker>) {
 }
 
 pub(crate) async fn set_prompt(ctx: &Arc<Context>, user: Id<UserMarker>, prompt: String) {
-    if let Ok(bson) = to_bson(&AiPrompt { id: None, user_id: user.get(), prompt: prompt.clone() }) {
+    if let Ok(bson) =
+        serialize_to_bson(&AiPrompt { id: None, user_id: user.get(), prompt: prompt.clone() })
+    {
         let _ = ctx
             .mongo
             .ai_prompts

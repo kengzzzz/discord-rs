@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use deadpool_redis::Pool;
-use mongodb::bson::{doc, to_bson};
+use mongodb::bson::{doc, serialize_to_bson};
 
 const CACHE_TTL: usize = 3600;
 
@@ -23,7 +23,7 @@ impl StatusMessageService {
 
         if let Ok(Some(msg)) = ctx.mongo
             .messages
-            .find_one(doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()})
+            .find_one(doc! {"guild_id": guild_id as i64, "message_type": serialize_to_bson(&MessageEnum::Status).ok()})
             .await
         {
             redis_set_ex(&ctx.redis, &redis_key, &msg, CACHE_TTL).await;
@@ -44,8 +44,8 @@ impl StatusMessageService {
         if let Err(e) = ctx.mongo
             .messages
             .update_one(
-                doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()},
-                doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": to_bson(&MessageEnum::Status).ok()}},
+                doc! {"guild_id": guild_id as i64, "message_type": serialize_to_bson(&MessageEnum::Status).ok()},
+                doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": serialize_to_bson(&MessageEnum::Status).ok()}},
             )
             .upsert(true)
             .await

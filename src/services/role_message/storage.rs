@@ -1,5 +1,5 @@
 use deadpool_redis::Pool;
-use mongodb::bson::{doc, to_bson};
+use mongodb::bson::{doc, serialize_to_bson};
 use std::sync::Arc;
 
 use crate::{
@@ -24,7 +24,7 @@ pub async fn get(ctx: &Arc<Context>, guild_id: u64) -> Option<Message> {
         .mongo
         .messages
         .find_one(
-            doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
+            doc! {"guild_id": guild_id as i64, "message_type": serialize_to_bson(&MessageEnum::Role).ok()},
         )
         .await
     {
@@ -40,8 +40,8 @@ pub async fn set(ctx: &Arc<Context>, guild_id: u64, channel_id: u64, message_id:
         .mongo
         .messages
         .update_one(
-            doc! {"guild_id": guild_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()},
-            doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": to_bson(&MessageEnum::Role).ok()}},
+            doc! {"guild_id": guild_id as i64, "message_type": serialize_to_bson(&MessageEnum::Role).ok()},
+            doc! {"$set": {"guild_id": guild_id as i64, "channel_id": channel_id as i64, "message_id": message_id as i64, "message_type": serialize_to_bson(&MessageEnum::Role).ok()}},
         )
         .upsert(true)
         .await

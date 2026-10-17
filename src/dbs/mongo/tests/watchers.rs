@@ -1,5 +1,5 @@
 use mongodb::{
-    bson::{Bson, doc, from_document, oid::ObjectId, to_bson},
+    bson::{Bson, deserialize_from_document, doc, oid::ObjectId, serialize_to_bson},
     change_stream::event::ChangeStreamEvent,
 };
 use serde::{Serialize, de::DeserializeOwned};
@@ -22,16 +22,16 @@ where
     if let Some(current) = current {
         event.insert(
             "fullDocument",
-            to_bson(&current).expect("serialize current document"),
+            serialize_to_bson(&current).expect("serialize current document"),
         );
     }
     if let Some(previous) = previous {
         event.insert(
             "fullDocumentBeforeChange",
-            to_bson(&previous).expect("serialize previous document"),
+            serialize_to_bson(&previous).expect("serialize previous document"),
         );
     }
-    from_document(event).expect("deserialize change event")
+    deserialize_from_document(event).expect("deserialize change event")
 }
 
 async fn seed(pool: &Pool, keys: &[&str]) {

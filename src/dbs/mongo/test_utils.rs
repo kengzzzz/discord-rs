@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use deadpool_redis::Pool;
 use futures::Stream;
-use mongodb::bson::{Document, to_document};
+use mongodb::bson::{Document, serialize_to_document};
 use serde::{Serialize, de::DeserializeOwned};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ where
     pub async fn find_one(&self, filter: Document) -> Result<Option<T>> {
         let data = self.data.read().await;
         for item in data.iter() {
-            let doc = to_document(item)?;
+            let doc = serialize_to_document(item)?;
             if matches(&doc, &filter) {
                 return Ok(Some(item.clone()));
             }
@@ -73,7 +73,7 @@ where
         let data = self.data.read().await;
         let mut vec = Vec::new();
         for item in data.iter() {
-            let doc = to_document(item)?;
+            let doc = serialize_to_document(item)?;
             if matches(&doc, &filter) {
                 vec.push(item.clone());
             }
@@ -92,7 +92,7 @@ where
         let mut data = self.data.write().await;
         if let Some(pos) = data
             .iter()
-            .position(|item| matches(&to_document(item).unwrap(), &filter))
+            .position(|item| matches(&serialize_to_document(item).unwrap(), &filter))
         {
             data.remove(pos);
         }
@@ -101,7 +101,7 @@ where
 
     pub async fn delete_many(&self, filter: Document) -> Result<()> {
         let mut data = self.data.write().await;
-        data.retain(|item| !matches(&to_document(item).unwrap(), &filter));
+        data.retain(|item| !matches(&serialize_to_document(item).unwrap(), &filter));
         Ok(())
     }
 
@@ -120,13 +120,13 @@ where
 
         let mut data = self.data.write().await;
         for item in data.iter_mut() {
-            let mut doc = to_document(item)?;
+            let mut doc = serialize_to_document(item)?;
             if matches(&doc, &filter) {
                 if let Ok(set) = update.get_document("$set") {
                     for (k, v) in set.iter() {
                         doc.insert(k, v.clone());
                     }
-                    *item = mongodb::bson::from_document(doc)?;
+                    *item = mongodb::bson::deserialize_from_document(doc)?;
                 }
                 return Ok(());
             }
@@ -136,7 +136,7 @@ where
             for (k, v) in set.iter() {
                 doc.insert(k, v.clone());
             }
-            let item: T = mongodb::bson::from_document(doc)?;
+            let item: T = mongodb::bson::deserialize_from_document(doc)?;
             data.push(item);
         }
         Ok(())
