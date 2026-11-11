@@ -14,24 +14,23 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Install OCR build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            clang libclang-dev libleptonica-dev libtesseract-dev tesseract-ocr-eng
 
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Run clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets --features migrate -- -D warnings
 
       - name: Run tests
-        run: cargo test --locked --all-features -- --test-threads 1
+        run: cargo test --locked
+
+      - name: Run vendored limiter tests
+        run: cargo test --locked --manifest-path vendor/twilight-http-ratelimiting/Cargo.toml
 
       - name: Audit dependencies
         uses: actions-rust-lang/audit@v1

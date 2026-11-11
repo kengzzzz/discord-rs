@@ -1,79 +1,80 @@
 [package]
 name = "discord-bot"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.99.1"
 license = "MIT"
+publish = false
 
 [dependencies]
-rustls = { version = "0.23.46", default-features = false, features = ["ring"] }
 anyhow = "1.0.104"
-deadpool-redis = "0.23.1"
-mongodb = { version = "3.9.1", default-features = false, features = [
-    "bson-3",
-    "compat-3-3-0",
-    "rustls-tls",
-    "dns-resolver",
-] }
-once_cell = "1.21.4"
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+base64 = "0.23.1"
+futures = "0.3.34"
+hex = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+jiff = { version = "0.2.40", features = ["tzdb-bundle-always"] }
+libc = "0.2.191"
+metrics = "0.24.6"
+mongodb = { version = "3.10.0", default-features = false, features = ["bson-3", "compat-3-3-0", "rustls-tls", "dns-resolver"], optional = true }
+ocrs = { version = "=0.13.1", default-features = false, features = ["onnx"] }
+rten = { version = "=0.26.0", default-features = false, features = ["onnx_format"] }
+rten-imageproc = "=0.26.0"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls-no-provider", "stream", "gzip", "http2", "charset", "query"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tokio = { version = "1.53.3", features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "signal",
-] }
-tracing = "0.1.44"
-tracing-subscriber = "0.3.23"
-twilight-cache-inmemory = "0.17.1"
-twilight-gateway = "0.17.1"
-twilight-http = "0.17.1"
-twilight-interactions = "0.17.1"
-twilight-model = "0.17.1"
-twilight-util = { version = "0.17.0", features = ["builder"] }
-reqwest = { version = "0.13.5", features = ["json", "stream"] }
-fastrand = "2.5.0"
-futures = "0.3.34"
-chrono = { version = "0.4.45", features = ["std", "clock", "serde"] }
 sha2 = "0.11.1"
-hex = "0.4.3"
-image = { version = "0.25.10", default-features = false, features = [
-    "png",
-    "jpeg",
-    "webp",
-    "gif",
-    "bmp",
-    "tiff",
-] }
-tesseract = "0.15.2"
-axum = "0.8.9"
-tokio-util = "0.7.20"
-async-trait = "0.1.92"
-metrics = "0.24.6"
-metrics-exporter-prometheus = "0.18.3"
-mockall = "0.15.0"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "signal", "sync", "time", "fs", "process", "io-util"] }
+tokio-util = { version = "0.7.20", features = ["rt"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+twilight-cache-inmemory = { version = "0.18.0", features = ["permission-calculator"] }
+twilight-gateway = { version = "0.18.0", default-features = false, features = ["rustls-webpki-roots", "twilight-http", "zstd"] }
+twilight-http = { version = "0.18.0", default-features = false, features = ["rustls-webpki-roots", "decompression"] }
+twilight-interactions = "0.18.0"
+twilight-model = "0.18.0"
+twilight-util = { version = "0.18.0", features = ["builder"] }
 
 [dev-dependencies]
-criterion = { version = "0.8.2", features = ["real_blackbox"] }
+tokio = { version = "1.54.1", features = ["test-util", "net"] }
+twilight-validate = "0.18.0"
 
 [features]
-test-utils = []
+migrate = ["dep:mongodb"]
 
-[[bench]]
-name = "ascii_bench"
-path = "benches/ascii_bench.rs"
-harness = false
+[[bin]]
+name = "discord-bot"
+path = "src/main.rs"
+
+[[bin]]
+name = "healthcheck"
+path = "src/bin/healthcheck.rs"
+
+[[bin]]
+name = "migrate"
+path = "src/bin/migrate.rs"
+required-features = ["migrate"]
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
-panic = "abort"
+# Unwind so a panic in an image decoder or OCR inside `spawn_blocking` comes back as a JoinError
+# instead of aborting the whole bot (a crafted image could otherwise crash-loop it).
+panic = "unwind"
 
 [profile.dev]
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = 0
+
+# twilight-http-ratelimiting 0.18.0 never frees the queue it makes for each interaction token and
+# sweeps the rest only every 6 h; see vendor/twilight-http-ratelimiting/PATCH.md.
+[patch.crates-io]
+twilight-http-ratelimiting = { path = "vendor/twilight-http-ratelimiting" }
