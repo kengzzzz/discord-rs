@@ -1,36 +1,44 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
+    process::ExitCode,
+    time::Duration,
+};
 
-fn main() {
-    let address = "127.0.0.1:8080";
-    match TcpStream::connect(address) {
-        Ok(mut stream) => {
-            let request = "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-            if stream
-                .write_all(request.as_bytes())
-                .is_err()
-            {
-                std::process::exit(1);
+fn main() -> ExitCode {
+    // Falls back to HTTP_ADDR, so changing only that keeps the container healthy.
+    let parsed = |var| {
+        std::env::var(var)
+            .ok()?
+            .parse::<SocketAddr>()
+            .ok()
+    };
+    let addr: SocketAddr = parsed("HEALTHCHECK_ADDR")
+        .or_else(|| parsed("HTTP_ADDR"))
+        .map(|mut addr| {
+            if addr.ip().is_unspecified() {
+                addr.set_ip([127, 0, 0, 1].into());
             }
-
-            let mut buffer = String::new();
-            if stream
-                .read_to_string(&mut buffer)
-                .is_err()
-            {
-                std::process::exit(1);
-            }
-
-            if buffer.contains("HTTP/1.1 200 OK") {
-                std::process::exit(0);
-            } else {
-                eprintln!("Healthcheck failed: Not 200 OK");
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("Healthcheck connection failed: {}", e);
-            std::process::exit(1);
+            addr
+        })
+        .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 8080)));
+    match probe(addr) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(error) => {
+            eprintln!("healthcheck failed: {error}");
+            ExitCode::FAILURE
         }
     }
+}
+
+fn probe(addr: SocketAddr) -> std::io::Result<bool> {
+    let timeout = Duration::from_secs(3);
+    let mut stream = TcpStream::connect_timeout(&addr, timeout)?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    stream.write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    Ok(response.starts_with("HTTP/1.1 200"))
 }

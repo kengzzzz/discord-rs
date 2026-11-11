@@ -1,23 +1,10 @@
-use std::sync::Arc;
+use twilight_model::channel::message::Component;
 
-use chrono::{Duration, Utc};
-use twilight_model::channel::message::Embed;
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFooterBuilder};
+use super::worldstate::Circuit;
+use crate::discord::ui::{self, Card, color};
 
-use super::api::{self, CircuitData};
-use crate::{
-    configs::CACHE_PREFIX,
-    context::Context,
-    dbs::redis::{redis_get, redis_set_ex},
-};
+const WEEK_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
-const CACHE_TTL: i64 = 5 * 60;
-const COLOR: u32 = 0xF1C40F;
-const STATUS_UPCOMING: usize = 3;
-const SCHEDULE_NOTE: &str = "Upcoming weeks follow DE's Update 43 order";
-
-// DE's nine-week offering order, updated in Update 43:
-// https://www.warframe.com/en/patch-notes/pc/43-0-0
 const ROTATIONS: [[&str; 5]; 9] = [
     ["Braton", "Lato", "Skana", "Paris", "Kunai"],
     ["Boar", "Gammacor", "Angstrum", "Gorgon", "Anku"],
@@ -30,112 +17,120 @@ const ROTATIONS: [[&str; 5]; 9] = [
     ["Vectis", "Stug", "Ballistica", "Destreza", "Obex"],
 ];
 
-pub async fn circuit_data(ctx: &Arc<Context>) -> anyhow::Result<CircuitData> {
-    let now = Utc::now();
-    let key = format!("{CACHE_PREFIX}:wf:circuit");
-    if let Some(data) = redis_get::<CircuitData>(&ctx.redis, &key).await
-        && data.activation <= now
-        && now < data.expiry
-    {
-        return Ok(data);
-    }
-    let data = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        api::circuit(&ctx.reqwest, now),
-    )
-    .await??;
-    let ttl = (data.expiry - now)
-        .num_seconds()
-        .clamp(1, CACHE_TTL) as usize;
-    redis_set_ex(&ctx.redis, &key, &data, ttl).await;
-    Ok(data)
-}
-
-pub fn status_embed(data: &CircuitData) -> anyhow::Result<Embed> {
-    build_embed(
-        data,
-        STATUS_UPCOMING,
-        &format!("{SCHEDULE_NOTE} • Full schedule: /warframe circuit"),
-    )
-}
-
-pub fn schedule_embed(data: &CircuitData) -> anyhow::Result<Embed> {
-    build_embed(data, ROTATIONS.len() - 1, SCHEDULE_NOTE)
-}
-
-pub fn unavailable_embed() -> Embed {
-    EmbedBuilder::new()
-        .title("Circuit unavailable")
-        .description("The current Circuit rotation is temporarily unavailable.")
-        .color(0xE74C3C)
-        .build()
-}
-
-fn wiki_links(names: &[String]) -> String {
-    names
-        .iter()
-        .map(|name| {
-            format!(
-                "[{name}](https://wiki.warframe.com/w/{})",
-                name.replace(' ', "_")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn rotation_index(weapons: &[String]) -> Option<usize> {
-    // Match the live set instead of assuming an epoch that game updates can move.
-    ROTATIONS.iter().position(|rotation| {
-        weapons.len() == rotation.len()
-            && rotation.iter().all(|weapon| {
-                weapons
+pub fn rotation_index(incarnons: &[String]) -> Option<usize> {
+    ROTATIONS.iter().position(|set| {
+        incarnons.len() == set.len()
+            && set.iter().all(|weapon| {
+                incarnons
                     .iter()
                     .any(|live| live == weapon)
             })
     })
 }
 
-fn build_embed(data: &CircuitData, upcoming: usize, footer: &str) -> anyhow::Result<Embed> {
-    let mut description = format!(
-        "**Incarnons (Steel Path)**\n{}",
-        wiki_links(&data.weapons)
-    );
-    if !data.warframes.is_empty() {
-        description.push_str(&format!(
-            "\n**Warframes (Normal)**\n{}",
-            wiki_links(&data.warframes)
+pub fn upcoming(circuit: &Circuit, weeks: usize) -> Vec<(i64, &'static [&'static str; 5])> {
+    let Some(index) = rotation_index(&circuit.incarnons) else {
+        return Vec::new();
+    };
+    (1..=weeks.min(ROTATIONS.len() - 1))
+        .map(|offset| {
+            (
+                circuit.expiry + (offset as i64 - 1) * WEEK_MS,
+                &ROTATIONS[(index + offset) % ROTATIONS.len()],
+            )
+        })
+        .collect()
+}
+
+pub fn wiki_links<S: AsRef<str>>(names: &[S]) -> String {
+    names
+        .iter()
+        .map(|name| {
+            let name = name.as_ref();
+            format!(
+                "[{name}](https://wiki.warframe.com/w/{})",
+                name.replace(' ', "_")
+                    .replace('&', "%26")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+pub fn card(circuit: Option<&Circuit>) -> Vec<Component> {
+    let Some(circuit) = circuit else {
+        return ui::notice(
+            color::WARNING,
+            "The Circuit",
+            "ยังดึงข้อมูล Circuit ไม่ได้ ลองใหม่ภายหลัง",
+        );
+    };
+    let mut card = Card::new(color::BRAND)
+        .title("The Circuit")
+        .text(format!(
+            "**Incarnon (Steel Path)**\n{}",
+            wiki_links(&circuit.incarnons)
+        ));
+    if !circuit.warframes.is_empty() {
+        card = card.text(format!(
+            "**Warframe (Normal)**\n{}",
+            wiki_links(&circuit.warframes)
         ));
     }
-    match rotation_index(&data.weapons) {
-        Some(index) => {
-            description.push_str("\n\n**Next Incarnons**");
-            for offset in 1..=upcoming.min(ROTATIONS.len() - 1) {
-                let starts = (data.expiry + Duration::weeks(offset as i64 - 1)).timestamp();
-                let when =
-                    if offset == 1 { format!("<t:{starts}:R>") } else { format!("<t:{starts}:d>") };
-                description.push_str(&format!(
-                    "\n{when} · {}",
-                    ROTATIONS[(index + offset) % ROTATIONS.len()].join(", ")
-                ));
-            }
-        }
-        None => description.push_str(&format!(
-            "\n\n**Resets** <t:{}:R>\nUpcoming Incarnons are unknown for this set.",
-            data.expiry.timestamp()
-        )),
-    }
-
-    Ok(EmbedBuilder::new()
-        .title("Circuit Rotation")
-        .url("https://wiki.warframe.com/w/The_Circuit")
-        .color(COLOR)
-        .description(description)
-        .footer(EmbedFooterBuilder::new(footer))
-        .validate()?
-        .build())
+    card = card
+        .small(format!("รีเซ็ต {}", ui::ts(circuit.expiry, 'R')))
+        .divider();
+    let next = upcoming(circuit, ROTATIONS.len() - 1);
+    card = if next.is_empty() {
+        card.text("ยังไม่ทราบ Incarnon สัปดาห์ถัดไป")
+    } else {
+        let lines: Vec<String> = next
+            .iter()
+            .map(|(starts, set)| format!("{} · {}", ui::ts(*starts, 'd'), set.join(", ")))
+            .collect();
+        card.text(format!(
+            "**Incarnon สัปดาห์ถัดไป**\n{}",
+            lines.join("\n")
+        ))
+    };
+    vec![
+        card.small("ลำดับตาม Update 43 ของ DE")
+            .buttons([ui::link("https://wiki.warframe.com/w/The_Circuit", "Wiki")])
+            .build(),
+    ]
 }
 
 #[cfg(test)]
-#[path = "tests/circuit.rs"]
-mod tests;
+mod tests {
+    use super::*;
+
+    fn circuit(weapons: &[&str]) -> Circuit {
+        Circuit {
+            activation: 0,
+            expiry: 1_000,
+            incarnons: weapons
+                .iter()
+                .map(|w| (*w).to_owned())
+                .collect(),
+            warframes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn upcoming_rotation_follows_live_set_order_independent() {
+        let live = circuit(&["Hate", "Zylok", "Despair", "Sibear", "Dread"]);
+        assert_eq!(rotation_index(&live.incarnons), Some(6));
+        let next = upcoming(&live, 2);
+        assert_eq!(next[0], (1_000, &ROTATIONS[7]));
+        assert_eq!(next[1].0, 1_000 + WEEK_MS);
+        assert!(upcoming(&circuit(&["Unknown"]), 3).is_empty());
+    }
+
+    #[test]
+    fn wiki_links_escape_ampersand() {
+        assert_eq!(
+            wiki_links(&["Ack & Brunt"]),
+            "[Ack & Brunt](https://wiki.warframe.com/w/Ack_%26_Brunt)"
+        );
+    }
+}

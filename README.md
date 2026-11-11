@@ -1,84 +1,57 @@
 # discord-rs
 
-discord-rs is a Discord bot written in Rust.
+A Discord bot for moderation, AI chat and Warframe tools.
 
-It uses the Twilight ecosystem for Discord integration, Redis and MongoDB for
-storage, and Axum for lightweight HTTP endpoints. The codebase is
-organized around feature slices that register slash commands, handle
-interactions, and process Discord gateway events through a shared registry.
+[Terms of Service](TERMS.md) · [Privacy Policy](PRIVACY.md)
 
-## Quick start
+## Features
 
-To run the bot with local services:
+- Spam detection, scam-image detection with OCR, and quarantine
+- AI chat and translation of text and images into Thai, using Gemini
+- Role picker, `/intro` onboarding, message relay between servers, and a voice channel log
+- Warframe status card with world cycles, Steel Path, Circuit, Baro, Sortie and Nightwave
+- Role pings for weekly resets, Baro's arrival and Cetus night
+- `/warframe` commands for market prices, builds, Circuit and status
+- `/admin config` panel to set channels, roles and features for each server
 
-```bash
-docker compose up
+## Run locally
+
+```sh
+cp .env.example .env    # set DISCORD_TOKEN and GOOGLE_API_KEY
+mkdir -p models
+curl -fsSL -o models/text-detection.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx
+curl -fsSL -o models/text-recognition.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx
+set -a; . ./.env; set +a
+cargo run --release
 ```
 
-To run the bot with a local Rust toolchain:
-
-```bash
-cargo run
-```
-
-The main binary lives in `src/main.rs`. A separate healthcheck binary is
-available at `src/bin/healthcheck.rs` for container and deployment probes.
+Turn on the Server Members and Message Content intents in the Developer Portal. In each server, the bot needs Manage Roles, Manage Messages and Kick Members, and its role must be above the roles it assigns. It also needs to view and send messages in the channels you set up.
 
 ## Configuration
 
-Configuration is provided through environment variables. Start with
-`.env.example` and set the values needed for your environment.
+| Variable | Default | Purpose |
+|---|---|---|
+| `DISCORD_TOKEN` | required | Bot token |
+| `DATABASE_PATH` | `/data/bot.sqlite3` | SQLite file |
+| `GOOGLE_API_KEY` | unset | Gemini API key. AI is off without it. |
+| `AI_SEARCH_PROVIDER` / `AI_SEARCH_API_KEY` | unset | `exa` or `tavily` web search for AI answers |
+| `AI_DAILY_LIMIT` | `100` | AI requests per member per day |
+| `SCAM_DETECT_MODELS_DIR` | `/usr/share/ocrs` | Folder with the OCR models |
 
-Required variables:
-
-- `DISCORD_TOKEN`
-- `GOOGLE_API_KEY`
-- `AI_BASE_PROMPT`
-
-Common optional variables:
-
-- `APP_ENV`
-- `REDIS_URL`
-- `MONGO_URI`
-- `MONGO_DATABASE`
-- `MONGO_USERNAME`
-- `MONGO_PASSWORD`
+To read a secret from a file, set `<NAME>_FILE` to the file's path. `.env.example` and `src/config.rs` list every option.
 
 ## Development
 
-Useful commands:
-
-```bash
+```sh
 cargo fmt -- --check
-cargo check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-features -- --test-threads 1
+cargo clippy --all-targets --features migrate -- -D warnings
+cargo test
 ```
 
-The repository targets Rust 1.99.1 (edition 2024), pinned in `rust-toolchain.toml`.
+## Docker
 
-## Code layout
-
-Important directories:
-
-- `src/features/` exposes the current feature-facing modules and registry
-  surface used by the dispatcher.
-- `src/slices/` contains the concrete feature slice implementations that own
-  command registration and event handling for domains such as onboarding, AI,
-  moderation, community roles, admin config, and Warframe.
-- `src/dispatch.rs` routes interactions and gateway events into the shared
-  feature registry.
-- `src/bot/`, `src/context/`, `src/configs/`, `src/dbs/`, and
-  `src/observability/` contain shared runtime setup, configuration, storage,
-  and HTTP/metrics support.
-- `src/services/` contains reusable domain and infrastructure services used by
-  features and runtime code.
-- `src/platform/` contains test support and platform-specific helpers.
-- `src/commands/` and `src/events/` remain as compatibility or legacy modules
-  during the transition to slice-based feature handling.
-- `tests/` contains integration tests.
-- `benches/` contains benchmark code.
+The image runs as uid 1000 with a read-only root filesystem, so mount a writable `/data` directory owned by uid 1000. Give the container a 512 MiB memory limit. The health check is at `:8080/healthz` and Prometheus metrics are at `:8080/metrics`. Shutdown can take up to 27 s, so set `stop_grace_period: 30s` in Compose.
 
 ## License
 
-This project is available under the MIT License. See `LICENSE`.
+MIT, see `LICENSE`.
