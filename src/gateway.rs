@@ -393,6 +393,7 @@ async fn handle(app: Arc<App>, event: Event, previous_voice: Option<Id<ChannelMa
             if moderation::on_message(&app, &message).await {
                 return;
             }
+            onboarding::hint_intro(&app, &message);
             // Relay and AI can wait minutes, so they don't hold the event slot.
             if let Some(guild) = message.guild_id
                 && !relay::relay_kinds(&app, guild, message.channel_id).is_empty()

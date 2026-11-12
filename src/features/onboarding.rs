@@ -3,13 +3,16 @@ use std::sync::Arc;
 use twilight_http::request::AuditLogReason as _;
 use twilight_model::{
     application::interaction::{Interaction, modal::ModalInteractionData},
-    channel::message::{
-        Component, MessageFlags,
-        component::{TextInput, TextInputStyle},
+    channel::{
+        Message,
+        message::{
+            Component, MessageFlags, MessageType,
+            component::{ButtonStyle, TextInput, TextInputStyle},
+        },
     },
     id::{
         Id,
-        marker::{GuildMarker, MessageMarker, UserMarker},
+        marker::{GuildMarker, MessageMarker, RoleMarker, UserMarker},
     },
 };
 use twilight_util::builder::message::LabelBuilder;
@@ -216,16 +219,117 @@ async fn on_join(app: &Arc<App>, guild: Id<GuildMarker>, user_id: Id<UserMarker>
     let card = Card::new(color::BRAND)
         .section(
             format!(
-                "### ยินดีต้อนรับสู่ {}\nพิมพ์ `/intro` ใน <#{intro}> เพื่อรับสิทธิ์สมาชิก",
+                "### ยินดีต้อนรับสู่ {}\nกดปุ่ม **แนะนำตัว** ใน <#{intro}> เพื่อรับสิทธิ์สมาชิก",
                 app.guild_name(guild)
             ),
             app.guild_icon(guild).as_deref(),
         )
-        .small("ทุกคนจะเห็นข้อมูลที่กรอก")
-        .build();
+        .small("ทุกคนจะเห็นข้อมูลที่กรอก");
+    // Buttons don't work in DMs.
+    let dm = [card.clone().build()];
+    let posted = [card.buttons([intro_button()]).build()];
     let (app2, user) = (Arc::clone(app), user_id);
     app.spawn_outbound("welcome", async move {
-        discord::dm_or_channel(&app2, user, Some(intro), &[card], true).await;
+        discord::dm_or_post(&app2, user, Some(intro), &dm, &posted, true).await;
+    });
+}
+
+pub const INTRO_BUTTON: &str = "intro:open";
+
+fn intro_button() -> Component {
+    ui::button(ButtonStyle::Primary, INTRO_BUTTON, "แนะนำตัว")
+}
+
+const HINT_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+const MAX_HINTS: usize = 1024;
+
+type Hinted = std::collections::HashMap<(Id<GuildMarker>, Id<UserMarker>), std::time::Instant>;
+static HINTED: std::sync::LazyLock<std::sync::Mutex<Hinted>> =
+    std::sync::LazyLock::new(std::sync::Mutex::default);
+
+fn take_hint(guild: Id<GuildMarker>, user: Id<UserMarker>, now: std::time::Instant) -> bool {
+    let mut hinted = HINTED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    hinted.retain(|_, at| now.duration_since(*at) < HINT_COOLDOWN);
+    if hinted.len() >= MAX_HINTS || hinted.contains_key(&(guild, user)) {
+        return false;
+    }
+    hinted.insert((guild, user), now);
+    true
+}
+
+/// Guest first: the owner and old members may not have Member.
+fn needs_intro(
+    guest: Option<Id<RoleMarker>>,
+    member: Option<Id<RoleMarker>>,
+    roles: &[Id<RoleMarker>],
+) -> bool {
+    match (guest, member) {
+        (Some(guest), _) => roles.contains(&guest),
+        (None, Some(member)) => !roles.contains(&member),
+        (None, None) => false,
+    }
+}
+
+/// Replies to a plain intro post with the form button.
+pub fn hint_intro(app: &Arc<App>, message: &Message) {
+    let Some(guild) = message.guild_id else {
+        return;
+    };
+    if message.author.bot
+        || message
+            .author
+            .system
+            .unwrap_or_default()
+        || !matches!(
+            message.kind,
+            MessageType::Regular | MessageType::Reply
+        )
+    {
+        return;
+    }
+    let config = app.guild(guild);
+    if config.channel(ChannelKind::Introduction) != Some(message.channel_id) {
+        return;
+    }
+    let roles = message
+        .member
+        .as_ref()
+        .map_or(&[][..], |m| m.roles.as_slice());
+    if message.member.is_none()
+        || !needs_intro(
+            config.role_id(RoleKind::Guest),
+            config.role_id(RoleKind::Member),
+            roles,
+        )
+        // A scanned post may be deleted as a scam.
+        || app
+            .moderation
+            .scam
+            .should_scan(app, guild, message)
+        || !take_hint(guild, message.author.id, std::time::Instant::now())
+    {
+        return;
+    }
+    let card = Card::new(color::BRAND)
+        .text("กดปุ่ม **แนะนำตัว** แล้วกรอกฟอร์ม เพื่อรับสิทธิ์สมาชิก")
+        .small("ทุกคนจะเห็นข้อมูลที่กรอก")
+        .buttons([intro_button()])
+        .build();
+    let (app2, channel, id) = (Arc::clone(app), message.channel_id, message.id);
+    app.spawn_outbound("intro_hint", async move {
+        if let Err(error) = app2
+            .http
+            .create_message(channel)
+            .flags(MessageFlags::IS_COMPONENTS_V2)
+            .reply(id)
+            .fail_if_not_exists(true)
+            .components(&[card])
+            .await
+        {
+            tracing::warn!(channel = channel.get(), %error, "failed to send intro hint");
+        }
     });
 }
 
@@ -565,6 +669,7 @@ pub async fn submit_intro(
     }
     let card = card
         .small(format!("<@{}> · {}", user.id, ui::ts(now, 'R')))
+        .buttons([intro_button()])
         .build();
     let posted = app
         .http
@@ -715,6 +820,32 @@ mod tests {
         on_deleted(guild, &[Id::new(6), Id::new(7)]);
         assert!(!intro_card_up(guild, user));
         assert!(intro_while_here(guild, user));
+    }
+
+    #[test]
+    fn a_hint_goes_once_per_member_per_cooldown() {
+        let (guild, user, other) = (Id::new(9101), Id::new(9102), Id::new(9103));
+        let now = std::time::Instant::now();
+        assert!(take_hint(guild, user, now));
+        assert!(!take_hint(
+            guild,
+            user,
+            now + std::time::Duration::from_secs(60)
+        ));
+        assert!(take_hint(guild, other, now));
+        assert!(take_hint(guild, user, now + HINT_COOLDOWN));
+    }
+
+    #[test]
+    fn only_members_still_waiting_need_an_intro() {
+        let (guest, member, other) = (Id::new(1), Id::new(2), Id::new(3));
+        assert!(needs_intro(Some(guest), Some(member), &[guest]));
+        assert!(!needs_intro(Some(guest), Some(member), &[other]));
+        assert!(!needs_intro(Some(guest), Some(member), &[member]));
+        assert!(needs_intro(None, Some(member), &[other]));
+        assert!(!needs_intro(None, Some(member), &[member]));
+        assert!(needs_intro(Some(guest), None, &[guest]));
+        assert!(!needs_intro(None, None, &[]));
     }
 
     fn data(fields: &[(&str, &str)]) -> ModalInteractionData {

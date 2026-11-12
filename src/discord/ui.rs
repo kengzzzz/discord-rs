@@ -23,6 +23,7 @@ pub mod color {
 pub const TEXT_BLOCK_MAX: usize = 1900;
 pub const MESSAGE_TEXT_BUDGET: usize = 3800;
 
+#[derive(Clone)]
 pub struct Card {
     inner: ContainerBuilder,
     text_len: usize,

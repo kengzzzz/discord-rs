@@ -140,6 +140,8 @@ async fn route(app: &Arc<App>, interaction: &Interaction) -> anyhow::Result<()> 
                 quarantine::on_case_button(app, interaction, id).await
             } else if id.starts_with(ai::SHARE_PREFIX) {
                 ai::on_share(app, interaction, id).await
+            } else if id == onboarding::INTRO_BUTTON {
+                onboarding::open_intro(app, interaction).await
             } else {
                 Ok(())
             }

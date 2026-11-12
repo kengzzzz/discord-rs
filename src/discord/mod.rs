@@ -314,6 +314,26 @@ pub async fn dm_or_channel(
     components: &[Component],
     mention_in_fallback: bool,
 ) -> bool {
+    dm_or_post(
+        app,
+        user,
+        fallback,
+        components,
+        components,
+        mention_in_fallback,
+    )
+    .await
+}
+
+/// `dm` goes by DM; `components` goes to the channel if the DM fails.
+pub async fn dm_or_post(
+    app: &App,
+    user: Id<UserMarker>,
+    fallback: Option<Id<ChannelMarker>>,
+    dm: &[Component],
+    components: &[Component],
+    mention_in_fallback: bool,
+) -> bool {
     if let Ok(response) = app
         .http
         .create_private_channel(user)
@@ -323,7 +343,7 @@ pub async fn dm_or_channel(
             .http
             .create_message(channel.id)
             .flags(MessageFlags::IS_COMPONENTS_V2)
-            .components(components)
+            .components(dm)
             .await
             .is_ok()
     {
