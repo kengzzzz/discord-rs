@@ -224,7 +224,7 @@ async fn on_join(app: &Arc<App>, guild: Id<GuildMarker>, user_id: Id<UserMarker>
             ),
             app.guild_icon(guild).as_deref(),
         )
-        .small("ทุกคนจะเห็นข้อมูลที่กรอก");
+        .small(format!("ข้อมูลที่กรอกจะโพสต์ใน <#{intro}>"));
     // Buttons don't work in DMs.
     let dm = [card.clone().build()];
     let posted = [card.buttons([intro_button()]).build()];
@@ -314,7 +314,7 @@ pub fn hint_intro(app: &Arc<App>, message: &Message) {
     }
     let card = Card::new(color::BRAND)
         .text("กดปุ่ม **แนะนำตัว** แล้วกรอกฟอร์ม เพื่อรับสิทธิ์สมาชิก")
-        .small("ทุกคนจะเห็นข้อมูลที่กรอก")
+        .small("ข้อมูลที่กรอกจะโพสต์ในห้องนี้")
         .buttons([intro_button()])
         .build();
     let (app2, channel, id) = (Arc::clone(app), message.channel_id, message.id);

@@ -1,5 +1,4 @@
 const MINUTE: i64 = 60_000;
-const EARTH_HALF_S: i64 = 14_400;
 const CETUS_WINDOW: i64 = 9_000_000;
 const CETUS_NIGHT: i64 = 3_000_000;
 pub const BOUNTY_PERIOD: i64 = 8_998_875;
@@ -16,7 +15,6 @@ const WEEK_S: i64 = 604_800;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CycleKind {
-    Earth,
     Cetus,
     Vallis,
     Cambion,
@@ -35,19 +33,6 @@ pub struct Cycle {
 
 fn floor_min(ms: i64) -> i64 {
     ms - ms.rem_euclid(MINUTE)
-}
-
-pub fn earth(now: i64) -> Cycle {
-    let t = now.div_euclid(1000);
-    let day = t.rem_euclid(2 * EARTH_HALF_S) < EARTH_HALF_S;
-    let expiry = (t.div_euclid(EARTH_HALF_S) + 1) * EARTH_HALF_S * 1000;
-    Cycle {
-        kind: CycleKind::Earth,
-        state: if day { "day" } else { "night" },
-        activation: expiry - EARTH_HALF_S * 1000,
-        expiry,
-        boundary: expiry,
-    }
 }
 
 pub fn cetus(bounty_end: i64, now: i64) -> Cycle {
@@ -184,12 +169,6 @@ mod tests {
     const NOW: i64 = 1_794_107_820_000;
     const BOUNTY_END: i64 = 1_794_116_369_174;
     const H0400: i64 = 1_794_110_400_000;
-
-    #[test]
-    fn earth_matches_reference() {
-        let c = earth(NOW);
-        assert_eq!((c.state, c.expiry), ("day", H0400));
-    }
 
     #[test]
     fn cetus_cambion_zariman_match_reference() {

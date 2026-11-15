@@ -36,10 +36,8 @@ const STALE_AFTER_MS: i64 = 5 * 60 * 1000;
 
 fn cycle_line(cycle: &Cycle) -> String {
     let (name, state) = match (cycle.kind, cycle.state) {
-        (CycleKind::Earth, "day") => ("Earth", "กลางวัน"),
-        (CycleKind::Earth, _) => ("Earth", "กลางคืน"),
-        (CycleKind::Cetus, "day") => ("Cetus", "กลางวัน"),
-        (CycleKind::Cetus, _) => ("Cetus", "กลางคืน"),
+        (CycleKind::Cetus, "day") => ("Earth / Cetus", "กลางวัน"),
+        (CycleKind::Cetus, _) => ("Earth / Cetus", "กลางคืน"),
         (CycleKind::Vallis, "warm") => ("Orb Vallis", "อุ่น"),
         (CycleKind::Vallis, _) => ("Orb Vallis", "หนาว"),
         (CycleKind::Cambion, "fass") => ("Cambion Drift", "Fass"),
@@ -66,7 +64,7 @@ pub fn bounty_end(app: &App, snapshot: Option<&Snapshot>, now: i64) -> Option<i6
 }
 
 pub fn all_cycles(app: &App, snapshot: Option<&Snapshot>, now: i64) -> Vec<Cycle> {
-    let mut list = vec![cycles::earth(now)];
+    let mut list = Vec::with_capacity(5);
     if let Some(bounty) = bounty_end(app, snapshot, now) {
         let cetus = cycles::cetus(bounty, now);
         list.push(cetus);
@@ -511,6 +509,6 @@ mod tests {
         let later = NOW + 6 * 60 * 60 * 1000;
         let text = serde_json::to_string(&render(&app, None, later)).unwrap();
         assert!(text.contains("ข้อมูลอาจไม่อัปเดต"));
-        assert_eq!(all_cycles(&app, None, later).len(), 6);
+        assert_eq!(all_cycles(&app, None, later).len(), 5);
     }
 }
