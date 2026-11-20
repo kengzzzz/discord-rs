@@ -18,7 +18,7 @@ use crate::app::App;
 
 use self::worldstate::Snapshot;
 
-const POLL: Duration = Duration::from_secs(60);
+pub(crate) const POLL: Duration = Duration::from_secs(60);
 const MARKET_REFRESH: Duration = Duration::from_secs(60 * 60);
 const BUILDS_REFRESH: Duration = Duration::from_secs(12 * 60 * 60);
 const CATALOG_RETRY: Duration = Duration::from_secs(5 * 60);
@@ -93,7 +93,7 @@ pub fn log_failure(upstream: &'static str, error: &anyhow::Error) {
     if error.is::<Busy>() {
         metrics::counter!("upstream_busy_total", "upstream" => upstream).increment(1);
     } else {
-        tracing::warn!(upstream, %error, "upstream request failed");
+        tracing::warn!(upstream, error = %format_args!("{error:#}"), "upstream request failed");
     }
 }
 
@@ -157,7 +157,7 @@ pub fn start(app: &Arc<App>) {
                 }
                 Err(error) => {
                     if !fetch_failing {
-                        tracing::warn!(%error, "worldstate fetch failing; using last snapshot and formulas");
+                        tracing::warn!(error = %format_args!("{error:#}"), "worldstate fetch failing; using last snapshot and formulas");
                         fetch_failing = true;
                     }
                 }
@@ -223,7 +223,7 @@ pub fn start(app: &Arc<App>) {
                 Ok(()) => BUILDS_REFRESH,
                 Err(error) => {
                     let catalog = if market_due { "warframe.market" } else { "build" };
-                    tracing::warn!(catalog, %error, "catalog refresh failed");
+                    tracing::warn!(catalog, error = %format_args!("{error:#}"), "catalog refresh failed");
                     CATALOG_RETRY
                 }
             };

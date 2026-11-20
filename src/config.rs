@@ -92,8 +92,8 @@ impl AiConfig {
             translate_models: list_or(
                 "AI_TRANSLATE_MODELS",
                 &[
-                    "gemma-4-26b-a4b-it",
                     "gemini-3.5-flash-lite",
+                    "gemma-4-26b-a4b-it",
                     "gemini-3.1-flash-lite",
                     "gemma-4-31b-it",
                 ],
@@ -101,8 +101,8 @@ impl AiConfig {
             chat_models: list_or(
                 "AI_CHAT_MODELS",
                 &[
-                    "gemma-4-26b-a4b-it",
                     "gemini-3.5-flash-lite",
+                    "gemma-4-26b-a4b-it",
                     "gemini-3.8-flash",
                     "gemma-4-31b-it",
                 ],

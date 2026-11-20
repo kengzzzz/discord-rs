@@ -131,6 +131,9 @@ impl App {
             .user_agent(USER_AGENT)
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
+            // api.warframe.com closes idle connections after exactly 60 s, the worldstate poll
+            // interval, so reusing one races the server's close (hyper IncompleteMessage).
+            .pool_idle_timeout(crate::warframe::POLL / 2)
             .build()?;
 
         let cache = DefaultInMemoryCache::builder()
